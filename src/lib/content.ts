@@ -217,6 +217,12 @@ function updateClause(changed: RevisableField[], next: TextEdit) {
  *
  * `ownerId`, when given, goes into the WHERE clause rather than a check before
  * it, so a forged submission id updates zero rows instead of someone else's.
+ * The predicate is `writableBy`, matching `applyAbstractEdit` and every other
+ * writer on this screen. It used to be a bare `submissions.speakerId`, one file
+ * apart from its sibling, and the difference was invisible: `/speaker/content`
+ * admits a co-author at `myContent`, `loadOwned` and `setContentStatus`, so the
+ * co-author reached the form, pressed Save, matched zero rows and was redirected
+ * to `?saved=1`.
  *
  * Returns the fields that actually changed, so a caller can say "nothing to
  * save" instead of logging a revision for a form that was submitted untouched.
@@ -228,7 +234,7 @@ export async function applyTextEdit(opts: {
   next: TextEdit;
 }): Promise<RevisableField[]> {
   const scope = opts.ownerId
-    ? and(eq(submissions.id, opts.submissionId), eq(submissions.speakerId, opts.ownerId))
+    ? and(eq(submissions.id, opts.submissionId), writableBy(opts.ownerId))
     : eq(submissions.id, opts.submissionId);
 
   return db.transaction(async (tx) => {

@@ -55,6 +55,10 @@ const FLASH: Record<string, { tone: 'good' | 'warn' | 'accent'; text: string }> 
     text: 'Sent to the organizers. They will approve it or send it back with a note.',
   },
   pulled: { tone: 'accent', text: 'Pulled back out of review. Edit away and resubmit.' },
+  unpublished: {
+    tone: 'warn',
+    text: 'Saved, and taken off the public agenda. Editing approved content makes it a draft again, so submit it for review when you are happy with it.',
+  },
   empty: {
     tone: 'warn',
     text: 'Add slides, a recording or a resources note before submitting for review.',

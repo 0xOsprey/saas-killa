@@ -13,10 +13,15 @@ import { writableBy } from '@/lib/abstracts';
 import { deleteUpload, linkField, saveUpload, uploadHref } from '@/lib/uploads';
 
 /**
- * The speaker's own content surface. Every action scopes its WHERE clause to
- * the caller's speaker id, so a forged submission id touches zero rows rather
- * than someone else's talk, and every write goes through `applyTextEdit`, which
- * logs one `submission_revisions` row per field it changed.
+ * The speaker's own content surface. Every action scopes its WHERE clause with
+ * `writableBy`, so a forged submission id touches zero rows rather than someone
+ * else's talk, and every write goes through `applyTextEdit`, which logs one
+ * `submission_revisions` row per field it changed.
+ *
+ * `writableBy` and not a bare `submissions.speakerId`: this screen admits a
+ * credited co-author holding `can_edit`, and it has to admit them at the write
+ * as well as at the read. When only the reads used it, the co-author reached
+ * the form, pressed Save, updated zero rows and was redirected to `?saved=1`.
  */
 
 /**
@@ -160,7 +165,17 @@ function revalidate(submissionId: string): void {
   revalidatePath(`/agenda/${submissionId}`);
 }
 
-/** Save without asking for review. The row stays where it is. */
+/**
+ * Save without asking for review.
+ *
+ * Approved content is the exception, and the screen already promises it:
+ * "Editing it below moves it back to a draft you will need to resubmit."
+ * Approved means live on the public agenda, so leaving the status alone would
+ * rewrite a published slide or recording URL with material no organizer has
+ * seen. The demotion is conditional on the edit having changed something, which
+ * is what `applyTextEdit` returns: opening the form and pressing Save without
+ * typing should not unpublish a talk.
+ */
 export async function saveContentDraft(formData: FormData): Promise<void> {
   const user = await requireUser();
   const id = z.string().uuid().parse(formData.get('submissionId'));
@@ -171,7 +186,18 @@ export async function saveContentDraft(formData: FormData): Promise<void> {
   const refusal = await foldInSlidesUpload(formData, row, user.id, next);
   if (refusal) refuse(refusal);
 
-  await applyTextEdit({ submissionId: id, editorId: user.id, ownerId: user.id, next });
+  const changed = await applyTextEdit({
+    submissionId: id,
+    editorId: user.id,
+    ownerId: user.id,
+    next,
+  });
+
+  if (changed.length > 0 && row.contentStatus === 'approved') {
+    await setContentStatus(row, user.id, 'draft');
+    revalidate(id);
+    redirect('/speaker/content?unpublished=1');
+  }
 
   revalidate(id);
   redirect('/speaker/content?saved=1');
@@ -195,9 +221,15 @@ export async function submitContentForReview(formData: FormData): Promise<void> 
 
   await applyTextEdit({ submissionId: id, editorId: user.id, ownerId: user.id, next });
 
-  const after = { ...row, ...next };
-  const empty = CONTENT_FIELDS.every((field) => !after[field]);
-  if (empty) {
+  // Ask the database what is there, not the form plus what the row said before
+  // the write. `{ ...row, ...next }` is a projection of an update that may not
+  // have happened, and the failure it hid was silent: an edit that matched zero
+  // rows still looked non-empty here, so `content_status` flipped to `pending`
+  // on a submission whose content columns were all still null, and an organizer
+  // opened a review with nothing in it.
+  const saved = await loadOwned(id, user.id);
+  if (!saved) redirect('/speaker/content');
+  if (CONTENT_FIELDS.every((field) => !saved[field])) {
     revalidate(id);
     redirect('/speaker/content?empty=1');
   }
