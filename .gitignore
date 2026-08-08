@@ -1,0 +1,22 @@
+node_modules/
+.next/
+out/
+dist/
+*.tsbuildinfo
+.cache/
+
+# Secrets never enter the repo. Real values live in .env.local (dev) or the
+# host's env (prod). .env.example is the only committed env file.
+.env
+.env.*
+!.env.example
+
+# Development mail transport. Every message the app "sends" without a Resend
+# key lands here, so it holds live sign-in links and speaker addresses.
+.mail/
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/.playwright/

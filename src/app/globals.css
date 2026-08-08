@@ -1,0 +1,30 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-ink: #0f172a;
+  --color-muted: #64748b;
+  --color-line: #e2e8f0;
+  --color-accent: #4f46e5;
+  --color-accent-soft: #eef2ff;
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+html {
+  color-scheme: light;
+}
+
+body {
+  background: #f8fafc;
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+/* The schedule grid is the one screen that is desktop-only by design: a
+   room-by-time matrix has no honest small-screen form. Everything public is
+   responsive. */
+.schedule-grid {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 46rem;
+}
