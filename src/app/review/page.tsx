@@ -37,6 +37,17 @@ function defaultFor(row: ReviewerQueueRow, key: string): number {
   return row.myRubric?.[key] ?? row.myScore ?? 3;
 }
 
+/**
+ * Why a grade was not recorded. `submitReview` refuses on three conditions and
+ * used to do it with a bare `return`, so the page came back unchanged and the
+ * reviewer's four criteria and comment were gone with no explanation.
+ */
+const GRADE_REFUSALS: Record<string, string> = {
+  decided: 'That proposal has already been decided, so the grade was not recorded. A decided proposal is out of the committee’s hands.',
+  own: 'You cannot grade your own proposal, so nothing was recorded.',
+  no_round: 'No review round is open, so there was nowhere to file that grade. An organizer opens one from the call-for-papers screen.',
+};
+
 export default async function ReviewPage({
   searchParams,
 }: {
@@ -54,6 +65,7 @@ export default async function ReviewPage({
 
   const params = await searchParams;
   const tab = params.tab === 'done' ? 'done' : 'queue';
+  const refusal = typeof params.grade === 'string' ? GRADE_REFUSALS[params.grade] : undefined;
 
   const [event, round] = await Promise.all([getEvent(), activeRound()]);
 
@@ -135,6 +147,12 @@ export default async function ReviewPage({
           My reviews ({completed.length})
         </Link>
       </nav>
+
+      {refusal ? (
+        <Notice tone="bad">
+          <span data-testid="grade-refusal">{refusal}</span>
+        </Notice>
+      ) : null}
 
       <Notice tone="accent">
         Reviews are blind: speaker names and bios are not loaded on this page. Grade the proposal,

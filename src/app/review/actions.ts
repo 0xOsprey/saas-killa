@@ -2,6 +2,7 @@
 
 import { eq, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { db } from '@/db';
 import { reviews, submissions } from '@/db/schema';
@@ -15,6 +16,18 @@ const schema = z.object({
   submissionId: z.string().uuid(),
   comment: z.string().max(4000).optional(),
 });
+
+/**
+ * Send the reviewer back to the queue with a reason.
+ *
+ * Every refusal below used to be a bare `return`: no message, no redirect, no
+ * `revalidatePath`. The reviewer filled in four criteria and a comment, pressed
+ * Grade, and the page came back identical with the grade gone. `castCommitteeVote`
+ * in the award feature already does this properly, and this is the same shape.
+ */
+function refuse(reason: 'decided' | 'own' | 'no_round'): never {
+  redirect(`/review?grade=${reason}`);
+}
 
 /**
  * Record or replace this reviewer's grade. Upsert rather than insert, so a
@@ -42,16 +55,16 @@ export async function submitReview(formData: FormData): Promise<void> {
   const target = await db.query.submissions.findFirst({
     where: eq(submissions.id, input.submissionId),
   });
-  if (!target || target.status !== 'submitted') return;
+  if (!target || target.status !== 'submitted') refuse('decided');
 
   // A reviewer may not grade their own proposal.
-  if (target.speakerId === reviewer.id) return;
+  if (target.speakerId === reviewer.id) refuse('own');
 
   // A grade belongs to a round. With no round open there is nothing to file it
   // against, and silently writing it into the last closed one would reopen a
   // pass the committee has already reported on.
   const round = await activeRound();
-  if (!round) return;
+  if (!round) refuse('no_round');
 
   await db
     .insert(reviews)

@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, ne, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import {
   emailLog,
@@ -184,6 +184,16 @@ export async function assignedQueue(
  * The unassigned fallback: every open submission, which is how the queue
  * behaved before assignments existed. The seed ships no assignments, so a
  * committee that has not run the distributor still has a usable page.
+ *
+ * "Every open submission" stops short of the reviewer's own. `planAssignments`
+ * has always excluded a reviewer from their own proposal; this path did not, so
+ * a committee that had not run the distributor handed every reviewer who also
+ * submitted a card for their own abstract with a live Grade button on it. The
+ * exclusion is in the WHERE clause rather than a filter afterwards, so the
+ * `count(reviews.id)` ordering is computed over the rows actually offered.
+ *
+ * The predicate is `ne` and not `isDistinctFrom`, which is safe here because
+ * `submissions.speaker_id` is NOT NULL: there is no row this can silently drop.
  */
 export async function openSubmissionQueue(
   reviewerId: string,
@@ -206,7 +216,7 @@ export async function openSubmissionQueue(
       reviews,
       and(eq(reviews.submissionId, submissions.id), eq(reviews.roundId, roundId)),
     )
-    .where(eq(submissions.status, 'submitted'))
+    .where(and(eq(submissions.status, 'submitted'), ne(submissions.speakerId, reviewerId)))
     .groupBy(submissions.id, tracks.name)
     .orderBy(sql`count(${reviews.id}) asc`, asc(submissions.createdAt));
 }
