@@ -1,10 +1,11 @@
 'use server';
 
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { db } from '@/db';
-import { awardNominees, awards, submissions, voteChannelEnum } from '@/db/schema';
+import { awardNominees, awardVotes, awards, submissions, voteChannelEnum } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
 import {
   WINNER_EMAIL_KIND,
@@ -108,15 +109,65 @@ export async function editAward(formData: FormData): Promise<void> {
 }
 
 /**
- * Delete a category outright. Nominees and ballots go with it through the
- * foreign key's cascade; the organizer page states both counts on the confirm
- * so the size of that cascade is known before the press, not after.
+ * Retire a category without destroying what the committee did in it.
+ *
+ * This is the default way to get rid of an award, and `deleteAward` below is
+ * the exception rather than the other way round. `award_votes.award_id` and
+ * `award_nominees.award_id` both cascade, so a delete takes every ballot with
+ * it and there is no undo; the repository already holds the opposite principle
+ * for `form_questions.archived_at` and `evaluator_personas.active`, which exist
+ * so graded work survives a change of mind about its container.
+ */
+export async function archiveAward(formData: FormData): Promise<void> {
+  await requireRole('organizer');
+  const awardId = z.string().uuid().parse(formData.get('awardId'));
+  await db
+    .update(awards)
+    .set({ archivedAt: new Date() })
+    .where(and(eq(awards.id, awardId), isNull(awards.archivedAt)));
+  revalidateAwards();
+}
+
+/** Put an archived category back. The ballots were never touched. */
+export async function restoreAward(formData: FormData): Promise<void> {
+  await requireRole('organizer');
+  const awardId = z.string().uuid().parse(formData.get('awardId'));
+  await db.update(awards).set({ archivedAt: null }).where(eq(awards.id, awardId));
+  revalidateAwards();
+}
+
+/**
+ * Destroy a category outright, for the one case where nothing is lost: a
+ * category nobody has voted in. A mistyped name created two minutes ago should
+ * not have to live on in an archive forever.
+ *
+ * Two guards, and both are server-side because the button that reaches this is
+ * not the only thing that can POST to it. Without `confirm=yes` it round-trips
+ * through `?confirmAward=`, the same shape `deleteRoom` and `deleteTrack` use.
+ * With a single ballot cast it refuses outright and says why, because at that
+ * point the cascade is destroying somebody's judgement and archiving is the
+ * answer.
  */
 export async function deleteAward(formData: FormData): Promise<void> {
   await requireRole('organizer');
   const awardId = z.string().uuid().parse(formData.get('awardId'));
+
+  if (formData.get('confirm') !== 'yes') {
+    redirect(`/organizer/awards?confirmAward=${awardId}`);
+  }
+
+  const [ballot] = await db
+    .select({ awardId: awardVotes.awardId })
+    .from(awardVotes)
+    .where(eq(awardVotes.awardId, awardId))
+    .limit(1);
+  if (ballot) {
+    redirect(`/organizer/awards?award=has_ballots`);
+  }
+
   await db.delete(awards).where(eq(awards.id, awardId));
   revalidateAwards();
+  redirect('/organizer/awards');
 }
 
 const nomineeSchema = z.object({

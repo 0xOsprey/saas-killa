@@ -1,4 +1,4 @@
-import { asc, eq, inArray } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import { db } from '@/db';
 import { awardNominees, awardVotes, awards, emailLog, submissions, users } from '@/db/schema';
 import type { Award, VoteChannel } from '@/db/schema';
@@ -247,11 +247,27 @@ export const COMMUNITY_WINDOW_LABELS: Record<CommunityWindow, string> = {
  * Load awards with their nominees and every ballot cast. Three queries rather
  * than one join so a nominee with no ballots and an award with no nominees both
  * survive the round trip intact.
+ *
+ * Archived categories are excluded unless asked for. Archiving is how a
+ * category is retired without destroying its ballots, so a caller that forgets
+ * the filter republishes a result the organizer withdrew. Only the organizer
+ * console and the actions that restore or destroy a row pass `includeArchived`.
  */
-export async function awardDetails(awardId?: string): Promise<AwardDetail[]> {
+export async function awardDetails(
+  awardId?: string,
+  opts: { includeArchived?: boolean } = {},
+): Promise<AwardDetail[]> {
+  const live = opts.includeArchived ? undefined : isNull(awards.archivedAt);
   const rows = awardId
-    ? await db.select().from(awards).where(eq(awards.id, awardId))
-    : await db.select().from(awards).orderBy(asc(awards.createdAt));
+    ? await db
+        .select()
+        .from(awards)
+        .where(live ? and(eq(awards.id, awardId), live) : eq(awards.id, awardId))
+    : await db
+        .select()
+        .from(awards)
+        .where(live)
+        .orderBy(asc(awards.createdAt));
   if (rows.length === 0) return [];
 
   const ids = rows.map((row) => row.id);
@@ -289,8 +305,13 @@ export async function awardDetails(awardId?: string): Promise<AwardDetail[]> {
   }));
 }
 
+/**
+ * One award, archived or not. The callers are server actions deciding what to
+ * do with a row, and "it is archived" is an answer they need rather than a
+ * reason to be handed nothing: `restoreAward` only ever runs against one.
+ */
 export async function awardDetail(awardId: string): Promise<AwardDetail | null> {
-  const [only] = await awardDetails(awardId);
+  const [only] = await awardDetails(awardId, { includeArchived: true });
   return only ?? null;
 }
 
@@ -356,7 +377,10 @@ export async function winnersAwaitingNotification(eventName: string): Promise<Pe
     })
     .from(awards)
     .innerJoin(submissions, eq(submissions.id, awards.winnerSubmissionId))
-    .innerJoin(users, eq(users.id, submissions.speakerId));
+    .innerJoin(users, eq(users.id, submissions.speakerId))
+    // An archived category is retired. Mailing its winner would announce a
+    // result that no longer appears on the page the mail links to.
+    .where(isNull(awards.archivedAt));
 
   const logged = await db
     .select({ submissionId: emailLog.submissionId, subject: emailLog.subject })

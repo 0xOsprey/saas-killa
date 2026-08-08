@@ -26,6 +26,7 @@ import { instantToWallClock } from '@/lib/format';
 import { getEvent } from '@/lib/queries';
 import { AwardTally } from '../../awards/AwardTally';
 import {
+  archiveAward,
   clearWinner,
   closeVoting,
   createAward,
@@ -35,6 +36,7 @@ import {
   notifyWinners,
   overrideWinner,
   reopenVoting,
+  restoreAward,
   setFinalist,
   withdrawNomination,
 } from './actions';
@@ -60,15 +62,20 @@ function toggleHref(current: Set<string>, awardId: string): string {
 export default async function OrganizerAwardsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ finalists?: string | string[] }>;
+  searchParams: Promise<{ finalists?: string | string[]; confirmAward?: string; award?: string }>;
 }) {
-  const [params, event, details, accepted] = await Promise.all([
+  const [params, event, everyAward, accepted] = await Promise.all([
     searchParams,
     getEvent(),
-    awardDetails(),
+    // The console is the one surface that sees archived categories, because it
+    // is the only place they can be restored from.
+    awardDetails(undefined, { includeArchived: true }),
     nominatableSubmissions(),
   ]);
+  const details = everyAward.filter((d) => d.award.archivedAt === null);
+  const archived = everyAward.filter((d) => d.award.archivedAt !== null);
   const finalistsOnly = finalistSet(params.finalists);
+  const toDelete = everyAward.find((d) => d.award.id === params.confirmAward);
   // What the button will actually do, not how many winners exist: a second
   // press after a send has nothing to send, and it should say so.
   const unmailed = (await winnersAwaitingNotification(event.name)).length;
@@ -99,6 +106,45 @@ export default async function OrganizerAwardsPage({
         above, so a result can be reviewed, overridden or retracted before a word leaves the
         building.
       </Notice>
+
+      {params.award === 'has_ballots' ? (
+        <Notice tone="bad">
+          {/* The testid goes on a child. `Notice` takes `tone` and `children`
+              and nothing else, and a hyphenated JSX attribute on a component is
+              the one kind TypeScript does not check, so putting it on the
+              `Notice` itself compiles and renders nothing. */}
+          <span data-testid="award-has-ballots">
+            That category has ballots in it, so it was not deleted. Archive it instead: it leaves
+            every list and the committee&apos;s judging survives.
+          </span>
+        </Notice>
+      ) : null}
+
+      {toDelete ? (
+        <Notice tone="bad">
+          <div className="space-y-2" data-testid="confirm-delete-award">
+            <p>
+              Deleting {toDelete.award.name} destroys {toDelete.nominees.length} nominee
+              {toDelete.nominees.length === 1 ? '' : 's'} and cannot be undone.{' '}
+              {toDelete.ballots.length === 0
+                ? 'No ballots have been cast in it, so nothing anyone judged is lost.'
+                : `${toDelete.ballots.length} ballot(s) have been cast in it, so this will be refused. Archive it instead.`}
+            </p>
+            <div className="flex items-center gap-3">
+              <form action={deleteAward}>
+                <input type="hidden" name="awardId" value={toDelete.award.id} />
+                <input type="hidden" name="confirm" value="yes" />
+                <Button type="submit" variant="danger" data-testid="confirm-delete-award-submit">
+                  Delete {toDelete.award.name}
+                </Button>
+              </form>
+              <Link href="/organizer/awards" className="text-sm text-muted underline">
+                Keep it
+              </Link>
+            </div>
+          </div>
+        </Notice>
+      ) : null}
 
       {details.length === 0 ? <Empty>No award categories yet.</Empty> : null}
 
@@ -394,26 +440,88 @@ export default async function OrganizerAwardsPage({
 
             <details className="border-t border-line pt-3">
               <summary className="cursor-pointer text-sm font-medium text-red-700">
-                Delete this category
+                Retire this category
               </summary>
               <div className="mt-3 space-y-2">
                 <p className="text-sm text-ink">
-                  Deleting {award.name} destroys {detail.nominees.length} nominee
+                  Archiving {award.name} takes it off the public page, the ballot and this list,
+                  and keeps its {detail.nominees.length} nominee
                   {detail.nominees.length === 1 ? '' : 's'} and {detail.ballots.length} ballot
                   {detail.ballots.length === 1 ? '' : 's'} ({committee.cast} committee,{' '}
-                  {community.cast} community). Nothing about the submissions themselves changes.
+                  {community.cast} community). It can be put back. Nothing about the submissions
+                  themselves changes either way.
                 </p>
-                <form action={deleteAward}>
-                  <input type="hidden" name="awardId" value={award.id} />
-                  <Button type="submit" variant="danger">
-                    Delete {award.name}
-                  </Button>
-                </form>
+                <div className="flex flex-wrap items-center gap-3">
+                  <form action={archiveAward}>
+                    <input type="hidden" name="awardId" value={award.id} />
+                    <Button type="submit" variant="danger" data-testid="archive-award-submit">
+                      Archive {award.name}
+                    </Button>
+                  </form>
+                  {detail.ballots.length === 0 ? (
+                    <form action={deleteAward}>
+                      <input type="hidden" name="awardId" value={award.id} />
+                      <button
+                        type="submit"
+                        className="text-sm text-muted underline hover:text-ink"
+                        data-testid="delete-award-start"
+                      >
+                        Delete it instead
+                      </button>
+                    </form>
+                  ) : (
+                    // Not a disabled button: an organizer who wants the row gone
+                    // needs to know the ballots are why they cannot have it, not
+                    // wonder whether the page is broken.
+                    <span className="text-xs text-muted">
+                      Deleting outright is off while ballots exist.
+                    </span>
+                  )}
+                </div>
               </div>
             </details>
           </Card>
         );
       })}
+
+      {archived.length > 0 ? (
+        <Card className="space-y-3" data-testid="archived-awards">
+          <div>
+            <h2 className="text-sm font-semibold text-ink">Archived</h2>
+            <p className="mt-0.5 text-xs text-muted">
+              Off every list and out of the winner mail. The ballots are still there, so putting one
+              back restores the tally with it.
+            </p>
+          </div>
+          <ul className="space-y-1.5">
+            {archived.map((detail) => (
+              <li
+                key={detail.award.id}
+                className="flex flex-wrap items-center gap-2 rounded-md border border-line px-3 py-2 text-sm"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="font-medium text-ink">{detail.award.name}</span>{' '}
+                  <span className="text-xs text-muted">
+                    {detail.nominees.length} nominee{detail.nominees.length === 1 ? '' : 's'} ·{' '}
+                    {detail.ballots.length} ballot{detail.ballots.length === 1 ? '' : 's'} kept
+                  </span>
+                </span>
+                <form action={restoreAward}>
+                  <input type="hidden" name="awardId" value={detail.award.id} />
+                  <Button
+                    type="submit"
+                    variant="secondary"
+                    className="px-2 py-1 text-xs"
+                    data-testid="restore-award-submit"
+                  >
+                    Restore
+                  </Button>
+                </form>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
 
       <Card className="max-w-xl space-y-3">
         <h2 className="text-sm font-semibold text-ink">New award category</h2>

@@ -387,6 +387,16 @@ export const awards = pgTable('awards', {
     .default([]),
   /** Set when an organizer overrides the tally by hand, with their reason. */
   winnerOverrideReason: text('winner_override_reason'),
+  /**
+   * Retired from every list without destroying the ballots underneath.
+   *
+   * `award_votes.award_id` and `award_nominees.award_id` both cascade, so a
+   * plain delete takes every ballot the committee cast with it and there is no
+   * undo. This is the same escape `form_questions.archived_at` and
+   * `evaluator_personas.active` give for the same reason: work the committee
+   * already did survives the organizer changing their mind about the container.
+   */
+  archivedAt: timestamp('archived_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
