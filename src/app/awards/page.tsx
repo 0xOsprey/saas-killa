@@ -24,19 +24,30 @@ const VOTE_MESSAGES: Record<string, { tone: 'good' | 'bad'; text: string }> = {
  * The public results page. Before this existed a winner was only discoverable
  * by opening the one submission's detail page and noticing a badge, which is no
  * way to publish a result.
+ *
+ * Gated on the agenda being published, exactly as `/agenda`, `/speakers` and
+ * `/posters` are. Nominees are restricted to accepted submissions and each one
+ * is rendered with its speaker's name, so an ungated page is a list of who got
+ * in, published before the organizers chose to announce it.
  */
 export default async function AwardsPage({
   searchParams,
 }: {
   searchParams: Promise<{ vote?: string }>;
 }) {
-  const [{ vote }, event, details, me] = await Promise.all([
-    searchParams,
-    getEvent(),
-    awardDetails(),
-    currentUser(),
-  ]);
+  const [{ vote }, event, me] = await Promise.all([searchParams, getEvent(), currentUser()]);
+  const isOrganizer = me?.roles.includes('organizer') ?? false;
 
+  if (!event.agendaPublished && !isOrganizer) {
+    return (
+      <div className="space-y-4">
+        <PageHeader title="Awards" description={event.name} />
+        <Notice>Nominees and results open when the programme is published.</Notice>
+      </div>
+    );
+  }
+
+  const details = await awardDetails();
   const notice = vote ? VOTE_MESSAGES[vote] : undefined;
   const anyOpenToVote = details.some((d) => communityWindow(d.award) === 'open');
 
