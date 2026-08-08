@@ -67,7 +67,11 @@ test('a proposal travels from the CFP to the published agenda', async ({ page })
   // the reviewer screen must not carry the speaker's name at all.
   await expect(page.locator('body')).not.toContainText(SPEAKER_NAME);
 
-  await card.locator('[data-testid^="score-"]').selectOption('5');
+  // A grade is now four criterion scores, not one. The stored `reviews.score` is
+  // their weighted mean, so every criterion has to be 5 for the card to report 5.
+  for (const criterion of ['clarity', 'originality', 'relevance', 'credibility']) {
+    await card.locator(`[data-testid^="score-${criterion}-"]`).selectOption('5');
+  }
   await card.locator('[data-testid^="grade-"]').click();
   await expect(card.locator('[data-testid^="my-score-"]')).toContainText('you scored 5');
 
