@@ -1,6 +1,8 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Resend } from 'resend';
+import { db } from '@/db';
+import { emailLog } from '@/db/schema';
 import { env } from './env';
 
 export type Mail = {
@@ -37,6 +39,27 @@ export async function sendMail(mail: Mail): Promise<{ delivered: boolean; path?:
   });
   if (error) throw new Error(`resend failed: ${error.message}`);
   return { delivered: true };
+}
+
+/**
+ * Send, then write the receipt. Every caller outside the sign-in path should
+ * use this rather than `sendMail`, because an organizer asking "did that go
+ * out" is asking about `email_log`, and a row only exists if a send happened.
+ * `kind` is a stable slug the reminder actions dedupe on, e.g. 'task_reminder'.
+ */
+export async function sendAndLog(
+  mail: Mail,
+  meta: { userId: string; kind: string; submissionId?: string },
+): Promise<{ delivered: boolean; path?: string }> {
+  const result = await sendMail(mail);
+  await db.insert(emailLog).values({
+    userId: meta.userId,
+    submissionId: meta.submissionId ?? null,
+    kind: meta.kind,
+    subject: mail.subject,
+    delivered: result.delivered,
+  });
+  return result;
 }
 
 export function magicLinkMail(to: string, token: string, eventName: string): Mail {
