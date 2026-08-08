@@ -58,6 +58,22 @@ export async function ensureFirstRound(): Promise<ReviewRound> {
   return created!;
 }
 
+/**
+ * The round immediately before this one in the running order.
+ *
+ * Both the shortlist panel and the action behind it need this, and they had
+ * each worked it out for themselves: the panel took the second-to-last round,
+ * the action took the one before the active one. Those agree in every
+ * arrangement the UI can currently produce, which is exactly why the
+ * disagreement would have surfaced as a panel listing candidates from one round
+ * and a button carrying reviewers forward from another.
+ */
+export async function previousRound(roundId: string): Promise<ReviewRound | null> {
+  const rounds = await allRounds();
+  const index = rounds.findIndex((row) => row.id === roundId);
+  return index > 0 ? rounds[index - 1]! : null;
+}
+
 export type RoundSummary = ReviewRound & {
   open: boolean;
   assignments: number;

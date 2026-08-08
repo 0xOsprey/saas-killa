@@ -8,7 +8,7 @@ import {
   submissionCoverage,
 } from '@/lib/grading';
 import { cfpIsOpen, getEvent } from '@/lib/queries';
-import { activeRound, carryCandidates, roundSummaries } from '@/lib/rounds';
+import { activeRound, carryCandidates, previousRound, roundSummaries } from '@/lib/rounds';
 import {
   addAssignment,
   autoDistribute,
@@ -53,13 +53,19 @@ export default async function OrganizerCfpPage({
   // Every number below is per-round. Without an open round there is nothing to
   // count, so the page renders the round panel alone rather than four empty
   // tables that look like a committee who has done nothing.
+  // The shortlist is ranked by how the round before the open one scored, so it
+  // is empty when the open round is the first. `previousRound` is the same
+  // resolver `shortlistIntoRound` uses, which is what keeps the list on screen
+  // and the rows the button carries forward drawn from one round.
+  const previous = round ? await previousRound(round.id) : null;
+
   const [completion, coverage, roster, outstanding, shortlist] = round
     ? await Promise.all([
         reviewerCompletion(round.id),
         submissionCoverage(round.id),
         assignmentRoster(round.id),
         reviewersWithOutstanding(round.id),
-        rounds.length > 1 ? carryCandidates(rounds[rounds.length - 2]!.id) : Promise.resolve([]),
+        previous ? carryCandidates(previous.id) : Promise.resolve([]),
       ])
     : [[], [], [], [], []];
 

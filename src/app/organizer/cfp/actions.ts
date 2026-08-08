@@ -26,7 +26,7 @@ import {
   type ReminderTarget,
 } from '@/lib/grading';
 import { getEvent } from '@/lib/queries';
-import { activeRound, allRounds, carryForward } from '@/lib/rounds';
+import { activeRound, allRounds, carryForward, previousRound } from '@/lib/rounds';
 
 function revalidateCfp(): void {
   revalidatePath('/organizer/cfp');
@@ -297,9 +297,7 @@ export async function shortlistIntoRound(formData: FormData): Promise<void> {
   const round = await activeRound();
   if (!round) back({ error: 'no-round' });
 
-  const rounds = await allRounds();
-  const index = rounds.findIndex((row) => row.id === round.id);
-  const previous = index > 0 ? rounds[index - 1] : undefined;
+  const previous = await previousRound(round.id);
   if (!previous) back({ error: 'no-previous-round' });
 
   const submissionIds = formData
