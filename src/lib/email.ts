@@ -5,10 +5,22 @@ import { db } from '@/db';
 import { emailLog } from '@/db/schema';
 import { env } from './env';
 
+/**
+ * A file that rides along with the message. Text only, because the one thing
+ * this app attaches is an iCalendar body, and keeping `content` a string means
+ * the development receipt in `.mail/` is readable rather than a base64 wall.
+ */
+export type Attachment = {
+  filename: string;
+  contentType: string;
+  content: string;
+};
+
 export type Mail = {
   to: string;
   subject: string;
   text: string;
+  attachments?: Attachment[];
 };
 
 /**
@@ -25,7 +37,19 @@ export async function sendMail(mail: Mail): Promise<{ delivered: boolean; path?:
     const dir = join(process.cwd(), '.mail');
     mkdirSync(dir, { recursive: true });
     const path = join(dir, `${Date.now()}-${mail.to.replace(/[^a-z0-9]/gi, '_')}.txt`);
-    writeFileSync(path, `To: ${mail.to}\nSubject: ${mail.subject}\n\n${mail.text}\n`, 'utf8');
+    // Attachments are written into the receipt in full rather than named. An
+    // .ics whose DTSTART is wrong is a wrong invitation, and a receipt that only
+    // said "1 attachment" would let that ship.
+    const parts = [`To: ${mail.to}`, `Subject: ${mail.subject}`, '', mail.text, ''];
+    for (const file of mail.attachments ?? []) {
+      parts.push(
+        `--- attachment: ${file.filename} (${file.contentType}) ---`,
+        file.content,
+        `--- end attachment: ${file.filename} ---`,
+        '',
+      );
+    }
+    writeFileSync(path, parts.join('\n'), 'utf8');
     console.log(`[mail:dev] ${mail.to} — ${mail.subject}\n${mail.text}\n`);
     return { delivered: false, path };
   }
@@ -36,9 +60,33 @@ export async function sendMail(mail: Mail): Promise<{ delivered: boolean; path?:
     to: mail.to,
     subject: mail.subject,
     text: mail.text,
+    // Resend takes attachment bytes as a Buffer or a base64 string; a plain
+    // string would be read as a URL to fetch from.
+    attachments: mail.attachments?.map((file) => ({
+      filename: file.filename,
+      content: Buffer.from(file.content, 'utf8'),
+      contentType: file.contentType,
+    })),
   });
   if (error) throw new Error(`resend failed: ${error.message}`);
   return { delivered: true };
+}
+
+/**
+ * An iCalendar body as a mail attachment.
+ *
+ * The `method=` parameter is read back out of the body rather than passed in.
+ * A client trusts the header over the payload, so the two disagreeing means a
+ * cancellation delivered as an invitation, and deriving it is the only way the
+ * two cannot drift.
+ */
+export function calendarAttachment(ics: string, filename = 'invite.ics'): Attachment {
+  const method = /^METHOD:(\w+)/m.exec(ics)?.[1] ?? 'PUBLISH';
+  return {
+    filename,
+    contentType: `text/calendar; charset=utf-8; method=${method}`,
+    content: ics,
+  };
 }
 
 /**
@@ -62,6 +110,22 @@ export async function sendAndLog(
   return result;
 }
 
+/**
+ * `MAIL_FROM` split into the name and address an ORGANIZER line needs.
+ *
+ * The env value is one RFC 5322 string, `Name <addr>` or a bare address, and a
+ * calendar invitation wants the two apart. Parsed here so the calendar code
+ * never has to know the env layout, and so the address a speaker's client shows
+ * as the organizer is the same one the mail actually came from.
+ */
+export function mailFromParty(): { name: string | null; email: string } {
+  const raw = env().MAIL_FROM.trim();
+  const match = /^(.*?)\s*<([^>]+)>$/.exec(raw);
+  if (!match) return { name: null, email: raw };
+  const name = match[1]!.replace(/^"|"$/g, '').trim();
+  return { name: name === '' ? null : name, email: match[2]!.trim() };
+}
+
 export function magicLinkMail(to: string, token: string, eventName: string): Mail {
   const url = `${env().APP_URL}/auth/verify?token=${encodeURIComponent(token)}`;
   return {
@@ -78,17 +142,102 @@ export function magicLinkMail(to: string, token: string, eventName: string): Mai
   };
 }
 
-export function acceptanceMail(to: string, title: string, eventName: string): Mail {
+/** A placement in words: what the speaker reads when a calendar file is not enough. */
+export type MailPlacement = { when: string; room: string };
+
+/**
+ * The acceptance.
+ *
+ * A talk already placed on the grid at decision time carries its invitation
+ * here, so an accepted speaker does not have to wait for a second email to know
+ * when they are on. A talk not yet scheduled gets the same prose it always did,
+ * and the invitation follows from `notifySchedule` once there is a time to send.
+ */
+export function acceptanceMail(
+  to: string,
+  title: string,
+  eventName: string,
+  placement?: MailPlacement,
+): Mail {
+  const text = placement
+    ? [
+        `Good news — "${title}" has been accepted for ${eventName}.`,
+        '',
+        `You are on at ${placement.when}, in ${placement.room}.`,
+        'The attached calendar invitation has the same details; adding it means a',
+        'later change to your time or room updates the entry you already have.',
+        '',
+        `Manage your submission: ${env().APP_URL}/speaker`,
+      ]
+    : [
+        `Good news — "${title}" has been accepted for ${eventName}.`,
+        '',
+        `Your talk's time and room appear on the agenda once scheduling is done: ${env().APP_URL}/agenda`,
+        'We will email you a calendar invitation as soon as it has a slot.',
+        '',
+        `Manage your submission: ${env().APP_URL}/speaker`,
+      ];
+  return { to, subject: `Accepted: "${title}" at ${eventName}`, text: text.join('\n') };
+}
+
+/**
+ * The first "you are on at" mail, the "your time has changed" mail, and the
+ * "you are off the grid" mail.
+ *
+ * One template with three openings rather than three templates, because the
+ * body below the first line is the same information every time and the three
+ * drifted apart the moment they were separate. `previous` is stated in full on
+ * a move: a speaker who only reads the new time cannot tell whether the mail is
+ * about a change or a duplicate of the one they already have.
+ */
+export function scheduleNoticeMail(opts: {
+  to: string;
+  title: string;
+  eventName: string;
+  placement: MailPlacement | null;
+  previous: MailPlacement | null;
+}): Mail {
+  const { title, eventName, placement, previous } = opts;
+
+  if (!placement) {
+    return {
+      to: opts.to,
+      subject: `"${title}" has come off the ${eventName} schedule`,
+      text: [
+        `"${title}" no longer has a time at ${eventName}.`,
+        previous ? `It was down for ${previous.when}, in ${previous.room}.` : '',
+        '',
+        'Your acceptance stands. This is a scheduling change, not a decision, and',
+        'we will email a new invitation once it is back on the grid.',
+        '',
+        'The attached file cancels the calendar entry we sent you.',
+        '',
+        `Your submissions: ${env().APP_URL}/speaker`,
+      ]
+        .filter((line, index, all) => line !== '' || all[index - 1] !== '')
+        .join('\n'),
+    };
+  }
+
+  const moved = previous !== null;
   return {
-    to,
-    subject: `Accepted: "${title}" at ${eventName}`,
+    to: opts.to,
+    subject: moved
+      ? `Time change: "${title}" at ${eventName}`
+      : `You are scheduled: "${title}" at ${eventName}`,
     text: [
-      `Good news — "${title}" has been accepted for ${eventName}.`,
+      moved
+        ? `"${title}" has moved. It is now at ${placement.when}, in ${placement.room}.`
+        : `"${title}" is on the ${eventName} schedule at ${placement.when}, in ${placement.room}.`,
+      moved ? `It was previously ${previous.when}, in ${previous.room}.` : '',
       '',
-      `Your talk's time and room appear on the agenda once scheduling is done: ${env().APP_URL}/agenda`,
+      'The attached calendar invitation carries the new details. Adding it replaces',
+      'the entry you already have rather than making a second one.',
       '',
-      `Manage your submission: ${env().APP_URL}/speaker`,
-    ].join('\n'),
+      `The full agenda: ${env().APP_URL}/agenda`,
+    ]
+      .filter((line, index, all) => line !== '' || all[index - 1] !== '')
+      .join('\n'),
   };
 }
 
@@ -126,6 +275,33 @@ export function submissionReceivedMail(to: string, title: string, eventName: str
       'see your name beside it. You will hear from us once the decisions are made.',
       '',
       `Your submissions: ${env().APP_URL}/speaker`,
+    ].join('\n'),
+  };
+}
+
+/**
+ * The organizer's heads-up that a proposal has landed.
+ *
+ * Sent per organizer rather than to a shared address, because there is no
+ * shared address in this app — the recipient list is whoever holds the
+ * organizer role. The speaker's name is in it: this is the one mail in the
+ * system that is not blind, and it is not, because it goes to the person
+ * running the event rather than to anyone grading.
+ */
+export function submissionAlertMail(opts: {
+  to: string;
+  title: string;
+  speakerName: string;
+  format: string;
+  eventName: string;
+}): Mail {
+  return {
+    to: opts.to,
+    subject: `New submission: "${opts.title}"`,
+    text: [
+      `${opts.speakerName} has submitted "${opts.title}" (${opts.format}) to ${opts.eventName}.`,
+      '',
+      `Review queue: ${env().APP_URL}/organizer/submissions`,
     ].join('\n'),
   };
 }

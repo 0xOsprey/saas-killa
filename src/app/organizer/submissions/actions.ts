@@ -6,7 +6,17 @@ import { z } from 'zod';
 import { db } from '@/db';
 import { contentStatusEnum, submissionStatusEnum, submissions, users } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
-import { acceptanceMail, rejectionMail, sendAndLog, sendMail } from '@/lib/email';
+import {
+  acceptanceMail,
+  calendarAttachment,
+  mailFromParty,
+  rejectionMail,
+  sendAndLog,
+  sendMail,
+} from '@/lib/email';
+import { dayLabel, timeOfDay } from '@/lib/format';
+import { sendScheduleNotices } from '@/lib/schedule-notices';
+import { inviteFor, placements } from '@/lib/speaker-calendar';
 import { evaluatePending, evaluatorConfigured } from '@/lib/ai-evaluator';
 import {
   LOCKABLE_FIELDS,
@@ -59,6 +69,11 @@ export async function setDecision(formData: FormData): Promise<void> {
  * The timestamp is written per row immediately after that row's send, not in
  * one update at the end: a failure halfway through then leaves the already-sent
  * speakers marked, and a retry resumes rather than restarting.
+ *
+ * An acceptance for a talk that already has a slot carries the calendar
+ * invitation, and records the placement in `scheduleNoticeKey` as it goes.
+ * Without that write, `notifySchedule` would read the talk as newly placed and
+ * send a second invitation minutes later for a time nothing had changed about.
  */
 export async function notifyDecided(): Promise<void> {
   await requireRole('organizer');
@@ -80,18 +95,63 @@ export async function notifyDecided(): Promise<void> {
       ),
     );
 
+  const accepted = rows.filter((row) => row.status === 'accepted').map((row) => row.id);
+  const placed = new Map(
+    (accepted.length > 0 ? await placements(accepted) : []).map((row) => [row.submissionId, row]),
+  );
+  const organizer = mailFromParty();
+
   for (const row of rows) {
-    const mail =
-      row.status === 'accepted'
-        ? acceptanceMail(row.email, row.title, event.name)
-        : rejectionMail(row.email, row.title, event.name);
+    const placement = placed.get(row.id);
+    const slot = row.status === 'accepted' ? (placement?.slot ?? null) : null;
+    const sequence = (placement?.noticeSeq ?? 0) + 1;
+
+    let mail;
+    if (row.status !== 'accepted') {
+      mail = rejectionMail(row.email, row.title, event.name);
+    } else if (slot && placement) {
+      const ics = inviteFor(placement, { eventName: event.name, organizer, sequence });
+      mail = {
+        ...acceptanceMail(row.email, row.title, event.name, {
+          when: `${dayLabel(slot.startsAt, event.timezone)}, ${timeOfDay(slot.startsAt, event.timezone)}–${timeOfDay(slot.endsAt, event.timezone)}`,
+          room: slot.roomName,
+        }),
+        ...(ics ? { attachments: [calendarAttachment(ics)] } : {}),
+      };
+    } else {
+      mail = acceptanceMail(row.email, row.title, event.name);
+    }
+
     await sendMail(mail);
     await db
       .update(submissions)
-      .set({ decisionEmailedAt: new Date() })
+      .set({
+        decisionEmailedAt: new Date(),
+        ...(placement && slot
+          ? { scheduleNoticeKey: placement.key, scheduleNoticeSeq: sequence }
+          : {}),
+      })
       .where(eq(submissions.id, row.id));
   }
 
+  revalidatePath('/organizer/submissions');
+  revalidatePath('/speaker');
+}
+
+/**
+ * Mail every speaker whose time or room has changed since they were last told,
+ * with an updated calendar invitation. The button lives on the schedule screen,
+ * which is where an organizer has just finished moving things.
+ */
+export async function notifySchedule(): Promise<void> {
+  await requireRole('organizer');
+  const event = await getEvent();
+  await sendScheduleNotices({
+    eventName: event.name,
+    timezone: event.timezone,
+    organizer: mailFromParty(),
+  });
+  revalidatePath('/organizer/schedule');
   revalidatePath('/organizer/submissions');
   revalidatePath('/speaker');
 }

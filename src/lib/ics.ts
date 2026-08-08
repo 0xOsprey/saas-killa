@@ -147,17 +147,50 @@ export function toVevents(entries: AgendaSlot[], includeBlocks: boolean): Vevent
   );
 }
 
-export function buildCalendar(
-  entries: AgendaSlot[],
-  options: { calendarName: string; includeBlocks?: boolean; now?: Date },
-): string {
+export type CalendarParty = { name: string | null; email: string };
+
+/**
+ * `PUBLISH` is a calendar you subscribe to; `REQUEST` is an invitation; `CANCEL`
+ * withdraws one. The three ics routes publish, and the mail a speaker gets when
+ * their talk is scheduled or moved requests, because a published file lands in a
+ * client as "a file you opened" and an invitation lands as an entry with a time
+ * on it. That difference is the whole of what "calendar invite" means to the
+ * person receiving one.
+ */
+export type CalendarMethod = 'PUBLISH' | 'REQUEST' | 'CANCEL';
+
+export type CalendarOptions = {
+  calendarName: string;
+  includeBlocks?: boolean;
+  now?: Date;
+  method?: CalendarMethod;
+  /**
+   * RFC 5545 revision counter. A client applies a re-sent VEVENT with a UID it
+   * already holds only when the SEQUENCE has gone up, so a schedule change that
+   * reuses 0 is silently ignored and the speaker keeps the old time.
+   */
+  sequence?: number;
+  organizer?: CalendarParty;
+  attendee?: CalendarParty;
+};
+
+function partyLine(property: 'ORGANIZER' | 'ATTENDEE', party: CalendarParty): string {
+  const name = party.name ? `;CN=${icsEscape(party.name)}` : '';
+  // An ATTENDEE with no RSVP is informational; the speaker is being told, not
+  // asked, because acceptance already happened in this app rather than in mail.
+  const role = property === 'ATTENDEE' ? ';PARTSTAT=ACCEPTED' : '';
+  return `${property}${name}${role}:mailto:${party.email}`;
+}
+
+export function buildCalendar(entries: AgendaSlot[], options: CalendarOptions): string {
   const stamp = icsUtc(options.now ?? new Date());
+  const method = options.method ?? 'PUBLISH';
   const lines: string[] = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
     `PRODID:${PRODID}`,
     'CALSCALE:GREGORIAN',
-    'METHOD:PUBLISH',
+    `METHOD:${method}`,
     `X-WR-CALNAME:${icsEscape(options.calendarName)}`,
   ];
 
@@ -169,9 +202,16 @@ export function buildCalendar(
       `DTSTART:${icsUtc(event.startsAt)}`,
       `DTEND:${icsUtc(event.endsAt)}`,
       `SUMMARY:${icsEscape(event.summary)}`,
+      `SEQUENCE:${options.sequence ?? 0}`,
     );
+    if (options.organizer) lines.push(partyLine('ORGANIZER', options.organizer));
+    if (options.attendee) lines.push(partyLine('ATTENDEE', options.attendee));
     if (event.location) lines.push(`LOCATION:${icsEscape(event.location)}`);
     if (event.description) lines.push(`DESCRIPTION:${icsEscape(event.description)}`);
+    // A CANCEL that does not also say STATUS:CANCELLED leaves the entry sitting
+    // in the calendar on several clients, which is the failure the mail exists
+    // to prevent: a speaker turning up for a talk that was moved off the grid.
+    if (method === 'CANCEL') lines.push('STATUS:CANCELLED');
     lines.push('END:VEVENT');
   }
 

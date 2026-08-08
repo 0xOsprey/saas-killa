@@ -1,7 +1,7 @@
 import { currentUser } from '@/lib/auth';
 import { agendaSlots, parseAgendaFilters, type AgendaSearchParams } from '@/lib/agenda-filters';
 import { getEvent } from '@/lib/queries';
-import { buildCalendar, calendarResponse } from '../ics';
+import { buildCalendar, calendarResponse } from '@/lib/ics';
 
 /**
  * The current filter selection as a calendar. It reads the same query string

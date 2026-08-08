@@ -11,6 +11,9 @@ import {
   toScheduleEntries,
   type ScheduleView,
 } from '@/lib/schedule-views';
+import { pendingNotices } from '@/lib/schedule-notices';
+import { placements } from '@/lib/speaker-calendar';
+import { notifySchedule } from '../submissions/actions';
 import { addBreakBand, addTimeBand, clearBreakBand, deleteTimeBand, setAgendaPublished } from './actions';
 import { slotLabels, timeBandImpact } from './queries';
 import { ScheduleFallback } from './ScheduleFallback';
@@ -106,6 +109,11 @@ export default async function SchedulePage({
   const pendingBand = pendingDelete ? bands.find((band) => band.key === pendingDelete) : undefined;
   const impact = pendingBand ? await timeBandImpact(new Date(pendingBand.key)) : null;
 
+  // Speakers whose placement differs from the one they were last emailed. The
+  // count is on the button rather than in a notice, because "how many people am
+  // I about to email" is the question an organizer has as they press it.
+  const pending = pendingNotices(await placements());
+
   return (
     <div className="space-y-5">
       <PageHeader
@@ -116,6 +124,22 @@ export default async function SchedulePage({
             <LinkButton href="/organizer/rooms" variant="secondary">
               Rooms &amp; tracks
             </LinkButton>
+            {/*
+              Sending is a separate press from moving, for the same reason
+              deciding is separate from `notifyDecided`: an organizer drags a
+              talk four times while building the grid, and a speaker should get
+              one mail about where it ended up rather than four.
+            */}
+            <form action={notifySchedule}>
+              <Button
+                type="submit"
+                variant="secondary"
+                disabled={pending.length === 0}
+                data-testid="notify-schedule"
+              >
+                Email {pending.length} schedule change(s)
+              </Button>
+            </form>
             <form action={setAgendaPublished}>
               <input type="hidden" name="published" value={event.agendaPublished ? 'false' : 'true'} />
               <Button

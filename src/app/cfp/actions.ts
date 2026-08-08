@@ -3,9 +3,16 @@
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { db } from '@/db';
-import { audienceLevelEnum, submissionFormatEnum, submissions, users } from '@/db/schema';
+import { audienceLevelEnum, submissionFormatEnum, submissions, userRoles, users } from '@/db/schema';
 import { currentUser, issueMagicLink, startSession, upsertUserByEmail } from '@/lib/auth';
-import { magicLinkMail, sendAndLog, sendMail, submissionReceivedMail } from '@/lib/email';
+import {
+  magicLinkMail,
+  sendAndLog,
+  sendMail,
+  submissionAlertMail,
+  submissionReceivedMail,
+} from '@/lib/email';
+import { FORMAT_LABELS } from '@/lib/format';
 import { activeQuestions, saveAnswers } from '@/lib/question-queries';
 import { questionIdFromField, validateAnswers, type AnswerMap } from '@/lib/questions';
 import { cfpIsOpen, getEvent } from '@/lib/queries';
@@ -51,6 +58,42 @@ function parseKeywords(value: FormDataEntryValue | null): string[] {
     if (out.length === MAX_KEYWORDS) break;
   }
   return out;
+}
+
+/**
+ * Tell the organizers a proposal has landed.
+ *
+ * Failures are swallowed. The submitter has already been written to the
+ * database and already has their receipt, and a mail server refusing the
+ * organizer's copy is not a reason to show them an error about a proposal that
+ * was in fact accepted.
+ */
+async function alertOrganizers(opts: {
+  title: string;
+  speakerName: string;
+  format: string;
+  eventName: string;
+  submissionId: string;
+}): Promise<void> {
+  try {
+    // Roles live in `user_roles`, not on `users`: one person can hold both
+    // organizer and reviewer, and this mail is for the first of those.
+    const organizers = await db
+      .select({ id: users.id, email: users.email })
+      .from(users)
+      .innerJoin(userRoles, eq(userRoles.userId, users.id))
+      .where(eq(userRoles.role, 'organizer'));
+
+    for (const organizer of organizers) {
+      await sendAndLog(submissionAlertMail({ ...opts, to: organizer.email }), {
+        userId: organizer.id,
+        kind: 'submission_alert',
+        submissionId: opts.submissionId,
+      });
+    }
+  } catch (error) {
+    console.error('[cfp] organizer alert failed', error);
+  }
 }
 
 export async function submitProposal(_prev: CfpState, formData: FormData): Promise<CfpState> {
@@ -136,13 +179,21 @@ export async function submitProposal(_prev: CfpState, formData: FormData): Promi
     await startSession(speaker.id);
   }
 
-  // A returning speaker gets a receipt. Only the first-time path sends anything
-  // otherwise, and that mail is a sign-in link rather than a confirmation, so a
-  // second proposal used to leave with no acknowledgement at all.
-  if (signedIn && created) {
+  // Every submitter gets a receipt, first-timer included. The sign-in link
+  // above is not one: it says "here is your account" and never mentions the
+  // proposal, so a first-time speaker used to be the only person who could not
+  // prove the form had taken anything.
+  if (created) {
     await sendAndLog(submissionReceivedMail(speaker.email, input.title, event.name), {
       userId: speaker.id,
       kind: 'submission_received',
+      submissionId: created.id,
+    });
+    await alertOrganizers({
+      title: input.title,
+      speakerName: input.name,
+      format: FORMAT_LABELS[input.format],
+      eventName: event.name,
       submissionId: created.id,
     });
   }

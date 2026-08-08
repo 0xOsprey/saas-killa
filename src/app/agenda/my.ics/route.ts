@@ -1,7 +1,7 @@
 import { currentUser } from '@/lib/auth';
 import { EMPTY_FILTERS, agendaSlots } from '@/lib/agenda-filters';
 import { getEvent } from '@/lib/queries';
-import { buildCalendar, calendarResponse } from '../ics';
+import { buildCalendar, calendarResponse } from '@/lib/ics';
 
 /**
  * The signed-in attendee's starred talks.

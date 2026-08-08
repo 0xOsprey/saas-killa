@@ -230,6 +230,25 @@ export const submissions = pgTable(
      * while deciding and nothing leaves the building until they press send.
      */
     decisionEmailedAt: timestamp('decision_emailed_at', { withTimezone: true }),
+    /**
+     * The placement the last schedule email described: `<startsAt>|<roomId>`,
+     * or the literal `unscheduled`. Null means no schedule email has ever gone
+     * out for this submission.
+     *
+     * This is the idempotency key for `notifySchedule`, in the same shape as
+     * `decisionEmailedAt` above, and it has to hold the placement rather than a
+     * timestamp: an organizer moves a talk twice and moves it back, and a
+     * timestamp would send a "your time has changed" mail describing the time
+     * the speaker already has.
+     */
+    scheduleNoticeKey: text('schedule_notice_key'),
+    /**
+     * RFC 5545 SEQUENCE of the last invitation sent. Incremented per notice,
+     * because a calendar client ignores a re-sent VEVENT whose sequence has not
+     * gone up, and the speaker would keep the superseded time with no sign
+     * anything was wrong.
+     */
+    scheduleNoticeSeq: integer('schedule_notice_seq').notNull().default(0),
     /** Speaker's own confirmation that they will attend, after acceptance. */
     speakerConfirmedAt: timestamp('speaker_confirmed_at', { withTimezone: true }),
     /** ePoster artwork. Only meaningful when format is 'poster'. */
