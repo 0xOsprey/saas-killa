@@ -40,6 +40,10 @@ export type OnboardingOverview = {
   accepted: number;
   /** Of those, how many owe nothing. */
   clear: number;
+  /** Of those, how many have answered on every accepted talk they hold. */
+  confirmed: number;
+  /** The rest: at least one accepted talk they have not confirmed. */
+  unconfirmed: number;
   /**
    * Everyone with an open task, accepted or not.
    *
@@ -112,6 +116,14 @@ export async function onboardingOverview(now = new Date()): Promise<OnboardingOv
             where t.user_id = ${submissions.speakerId} and t.completed_at is null
           )
         )::int`,
+        // Anyone with an accepted talk they have not answered on yet. Counted
+        // this way round on purpose: the roster's own `unconfirmed` filter is
+        // `accepted > confirmed`, so a speaker with two accepted talks who
+        // confirmed one is unconfirmed there, and a tile that called them
+        // confirmed would disagree with the list it links to.
+        unconfirmed: sql<number>`count(distinct ${submissions.speakerId}) filter (
+          where ${submissions.speakerConfirmedAt} is null
+        )::int`,
       })
       .from(submissions)
       .where(eq(submissions.status, 'accepted')),
@@ -149,11 +161,13 @@ export async function onboardingOverview(now = new Date()): Promise<OnboardingOv
       .where(gt(speakerTasks.completedAt, new Date(now.getTime() - WEEK_MS))),
   ]);
 
-  const population = people[0] ?? { accepted: 0, withOpenTask: 0 };
+  const population = people[0] ?? { accepted: 0, withOpenTask: 0, unconfirmed: 0 };
 
   return {
     accepted: population.accepted,
     clear: Math.max(population.accepted - population.withOpenTask, 0),
+    confirmed: Math.max(population.accepted - population.unconfirmed, 0),
+    unconfirmed: population.unconfirmed,
     outstandingPeople: totals[0]?.outstandingPeople ?? 0,
     overduePeople: totals[0]?.overduePeople ?? 0,
     outstandingTasks: totals[0]?.outstanding ?? 0,

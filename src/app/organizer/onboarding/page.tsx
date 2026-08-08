@@ -103,6 +103,46 @@ export default async function OnboardingDashboard() {
         />
       </div>
 
+      {/*
+        Confirmation is a different question from tasks and is kept visually
+        apart from the tiles for that reason. A speaker can owe nothing and
+        still not have said whether they are coming, and that person is the one
+        an organizer most needs to see: every other number on this screen counts
+        them as fine.
+      */}
+      <Card>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="font-medium">Confirmed to attend</h2>
+          <p className="text-sm text-muted" data-testid="confirmation-mix">
+            {view.confirmed} of {view.accepted} accepted speaker(s)
+          </p>
+        </div>
+        <div
+          className="mt-3 flex h-2 overflow-hidden rounded-full bg-slate-100"
+          role="img"
+          aria-label={`${view.confirmed} confirmed, ${view.unconfirmed} not confirmed`}
+        >
+          <div
+            className="bg-emerald-500"
+            style={{ width: `${view.accepted ? (view.confirmed / view.accepted) * 100 : 0}%` }}
+          />
+        </div>
+        {view.unconfirmed > 0 ? (
+          <p className="mt-3 text-sm">
+            <Link
+              href="/organizer/speakers?filter=unconfirmed"
+              className="text-accent hover:underline"
+              data-testid="unconfirmed-link"
+            >
+              {view.unconfirmed} speaker(s) have not confirmed
+            </Link>{' '}
+            <span className="text-muted">— chase these before the programme goes out.</span>
+          </p>
+        ) : (
+          <p className="mt-3 text-sm text-muted">Everyone accepted has confirmed.</p>
+        )}
+      </Card>
+
       {view.undated > 0 ? (
         <Notice>
           <span data-testid="undated-notice">
