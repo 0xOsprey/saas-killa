@@ -110,8 +110,8 @@ test('a host page on another origin renders the gallery and the itinerary', asyn
   await page.goto('/organizer/schedule');
 
   // A named break is the cheapest real itinerary entry: it needs no accepted
-  // talk moved out of the pool, and it exercises the collapse — the fixture has
-  // four rooms, so a break arrives as four rows and must render as one line.
+  // talk moved out of the pool, and it exercises the collapse — a break is one
+  // slot per room, so it arrives as three rows and must render as one line.
   await page.getByTestId('block-label').fill(BREAK_LABEL);
   await page.getByTestId('add-block').click();
   await page.getByTestId('toggle-publish').click();

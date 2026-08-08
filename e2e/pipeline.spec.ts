@@ -116,8 +116,8 @@ test('a proposal travels from the CFP to the published agenda', async ({ page })
   await expect(poolItem).toHaveCount(1);
   await poolItem.click();
 
-  // Click-to-place rather than drag: HTML5 drag events are not reliably
-  // synthesisable, and both paths call the same server action.
+  // Click-to-place rather than drag. Both call the same server action, and this
+  // file is about the pipeline; the drag itself is driven in `schedule.spec.ts`.
   const emptySlot = page.locator('[data-testid^="slot-"]').filter({ hasText: 'empty' }).first();
   await emptySlot.click();
 

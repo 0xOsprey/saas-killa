@@ -1,11 +1,21 @@
 import Link from 'next/link';
-import { Button, Card, Field, Input, LinkButton, Notice, PageHeader, Select } from '@/components/ui';
+import { Button, Card, Field, Input, LinkButton, Notice, PageHeader, Select, cn } from '@/components/ui';
 import { availabilityConflicts, capacityWarnings, speakerConflicts } from '@/lib/conflicts';
-import { dayLabel, instantToWallClock, timeOfDay } from '@/lib/format';
+import { dayKey, dayLabel, instantToWallClock, timeOfDay } from '@/lib/format';
 import { agenda, allRooms, getEvent, unscheduledAccepted } from '@/lib/queries';
+import {
+  SCHEDULE_VIEWS,
+  isBuildingView,
+  isFilled,
+  isScheduleView,
+  toScheduleEntries,
+  type ScheduleView,
+} from '@/lib/schedule-views';
 import { addBreakBand, addTimeBand, clearBreakBand, deleteTimeBand, setAgendaPublished } from './actions';
 import { slotLabels, timeBandImpact } from './queries';
+import { ScheduleFallback } from './ScheduleFallback';
 import { ScheduleGrid, type Band, type Cell } from './ScheduleGrid';
+import { ScheduleViews } from './ScheduleViews';
 
 export default async function SchedulePage({
   searchParams,
@@ -30,21 +40,44 @@ export default async function SchedulePage({
     tooSmall.map((row) => [row.slotId, { bookmarks: row.bookmarks, capacity: row.capacity }]),
   );
 
+  const view: ScheduleView = isScheduleView(params.view) ? params.view : 'grid';
+
+  // One flat, timezone-resolved row per slot. The grid still builds its own
+  // bands below from the same `agenda()` rows; this is what the reading views
+  // and the fallback form group, so all six views agree about what is placed.
+  const flat = toScheduleEntries(entries, labels, event.timezone, {
+    conflicted: conflictedSlots,
+    unavailable: new Set(unavailableSlots.keys()),
+    overCapacity: new Set(overCapacitySlots.keys()),
+  });
+
+  // Days in schedule order, deduped. `Map` rather than `Set` because the tab
+  // needs the label and the query string needs the key.
+  const days = [...new Map(flat.map((row) => [row.dayKey, row.dayLabel])).entries()];
+  const requestedDay = typeof params.day === 'string' ? params.day : null;
+  const selectedDay =
+    view === 'day'
+      ? (days.find(([key]) => key === requestedDay)?.[0] ?? days[0]?.[0] ?? null)
+      : null;
+
   // Fold the flat slot list into time bands. Slots are already ordered by start
   // then room position, so a band closes as soon as the start time changes.
   const bands: Band[] = [];
   let current: { startsAt: Date; cells: Cell[] } | null = null;
 
+  function closeBand(open: { startsAt: Date; cells: Cell[] }) {
+    bands.push({
+      key: open.startsAt.toISOString(),
+      dayKey: dayKey(open.startsAt, event.timezone),
+      dayLabel: dayLabel(open.startsAt, event.timezone),
+      timeLabel: timeOfDay(open.startsAt, event.timezone),
+      cells: open.cells,
+    });
+  }
+
   for (const entry of entries) {
     if (!current || current.startsAt.getTime() !== entry.startsAt.getTime()) {
-      if (current) {
-        bands.push({
-          key: current.startsAt.toISOString(),
-          dayLabel: dayLabel(current.startsAt, event.timezone),
-          timeLabel: timeOfDay(current.startsAt, event.timezone),
-          cells: current.cells,
-        });
-      }
+      if (current) closeBand(current);
       current = { startsAt: entry.startsAt, cells: [] };
     }
     current.cells.push({
@@ -62,14 +95,9 @@ export default async function SchedulePage({
       overCapacity: overCapacitySlots.get(entry.slotId) ?? null,
     });
   }
-  if (current) {
-    bands.push({
-      key: current.startsAt.toISOString(),
-      dayLabel: dayLabel(current.startsAt, event.timezone),
-      timeLabel: timeOfDay(current.startsAt, event.timezone),
-      cells: current.cells,
-    });
-  }
+  if (current) closeBand(current);
+
+  const shownBands = selectedDay ? bands.filter((band) => band.dayKey === selectedDay) : bands;
 
   // Deleting a band is destructive and silent — the slots go and every talk in
   // them is unplaced — so the delete button routes here first and the action
@@ -101,6 +129,47 @@ export default async function SchedulePage({
           </div>
         }
       />
+
+      <nav
+        className="flex flex-wrap gap-1 rounded-lg border border-line bg-white p-1 text-sm"
+        data-testid="schedule-views"
+      >
+        {Object.entries(SCHEDULE_VIEWS).map(([key, label]) => (
+          <Link
+            key={key}
+            href={key === 'grid' ? '/organizer/schedule' : `/organizer/schedule?view=${key}`}
+            data-testid={`view-${key}`}
+            aria-current={view === key ? 'page' : undefined}
+            className={cn(
+              'rounded-md px-3 py-1.5',
+              view === key ? 'bg-accent-soft font-medium text-accent' : 'text-muted hover:bg-slate-100 hover:text-ink',
+            )}
+          >
+            {label}
+          </Link>
+        ))}
+      </nav>
+
+      {view === 'day' && days.length > 0 ? (
+        <div className="flex flex-wrap gap-2 text-sm" data-testid="schedule-day-tabs">
+          {days.map(([key, label]) => (
+            <Link
+              key={key}
+              href={`/organizer/schedule?view=day&day=${key}`}
+              data-testid={`day-${key}`}
+              aria-current={selectedDay === key ? 'page' : undefined}
+              className={cn(
+                'rounded-full border px-3 py-1',
+                selectedDay === key
+                  ? 'border-accent bg-accent-soft text-accent'
+                  : 'border-line text-muted hover:text-ink',
+              )}
+            >
+              {label}
+            </Link>
+          ))}
+        </div>
+      ) : null}
 
       {pendingBand && impact ? (
         <Notice tone="bad">
@@ -159,7 +228,9 @@ export default async function SchedulePage({
         </Notice>
       ) : null}
 
-      {rooms.length === 0 ? (
+      {!isBuildingView(view) ? (
+        <ScheduleViews view={view} entries={flat.filter(isFilled)} />
+      ) : rooms.length === 0 ? (
         <Notice>
           No rooms yet.{' '}
           <Link href="/organizer/rooms" className="underline">
@@ -170,92 +241,109 @@ export default async function SchedulePage({
       ) : bands.length === 0 ? (
         <Notice>Add a time band below to start building the grid.</Notice>
       ) : (
-        <ScheduleGrid
-          rooms={rooms.map((r) => ({ id: r.id, name: r.name, capacity: r.capacity }))}
-          bands={bands}
-          pool={pool.map((p) => ({
-            id: p.id,
-            title: p.title,
-            speakerName: p.speakerName,
-            trackColour: p.trackColour,
-          }))}
-        />
+        <>
+          <ScheduleGrid
+            rooms={rooms.map((r) => ({ id: r.id, name: r.name, capacity: r.capacity }))}
+            bands={shownBands}
+            pool={pool.map((p) => ({
+              id: p.id,
+              title: p.title,
+              speakerName: p.speakerName,
+              trackColour: p.trackColour,
+            }))}
+          />
+          <ScheduleFallback
+            talks={[
+              ...pool.map((p) => ({ id: p.id, title: p.title, speakerName: p.speakerName })),
+              ...flat
+                .filter((row) => row.submissionId !== null)
+                .map((row) => ({
+                  id: row.submissionId!,
+                  title: row.title ?? 'Untitled',
+                  speakerName: row.speakerName,
+                })),
+            ]}
+            slots={flat}
+          />
+        </>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card className="space-y-3">
-          <h2 className="text-sm font-semibold text-ink">Add a time band</h2>
-          <p className="text-xs text-muted">
-            Creates one slot in every room at this time. Enter the time in {event.timezone}.
-          </p>
-          <form action={addTimeBand} className="flex flex-wrap items-end gap-3">
-            <Field label="Starts">
-              <Input
-                type="datetime-local"
-                name="startsAt"
-                required
-                data-testid="band-start"
-                defaultValue={instantToWallClock(event.startsOn, event.timezone)}
-              />
-            </Field>
-            <Field label="Length">
-              <Select name="minutes" defaultValue="45" className="w-32">
-                {[10, 25, 45, 60, 90].map((m) => (
-                  <option key={m} value={m}>
-                    {m} min
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Button type="submit" variant="secondary" data-testid="add-band">
-              Add band
-            </Button>
-          </form>
-        </Card>
+      {isBuildingView(view) ? (
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Card className="space-y-3">
+            <h2 className="text-sm font-semibold text-ink">Add a time band</h2>
+            <p className="text-xs text-muted">
+              Creates one slot in every room at this time. Enter the time in {event.timezone}.
+            </p>
+            <form action={addTimeBand} className="flex flex-wrap items-end gap-3">
+              <Field label="Starts">
+                <Input
+                  type="datetime-local"
+                  name="startsAt"
+                  required
+                  data-testid="band-start"
+                  defaultValue={instantToWallClock(event.startsOn, event.timezone)}
+                />
+              </Field>
+              <Field label="Length">
+                <Select name="minutes" defaultValue="45" className="w-32">
+                  {[10, 25, 45, 60, 90].map((m) => (
+                    <option key={m} value={m}>
+                      {m} min
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Button type="submit" variant="secondary" data-testid="add-band">
+                Add band
+              </Button>
+            </form>
+          </Card>
 
-        <Card className="space-y-3">
-          <h2 className="text-sm font-semibold text-ink">Add a break</h2>
-          <p className="text-xs text-muted">
-            A named block across the whole venue — lunch, registration, coffee. It shows on the
-            public agenda and holds the time until you drop a talk on it.
-          </p>
-          <form action={addBreakBand} className="flex flex-wrap items-end gap-3">
-            <Field label="Name">
-              <Input
-                name="label"
-                required
-                maxLength={80}
-                placeholder="Lunch"
-                className="w-40"
-                data-testid="block-label"
-              />
-            </Field>
-            <Field label="Starts">
-              <Input
-                type="datetime-local"
-                name="startsAt"
-                required
-                data-testid="block-start"
-                defaultValue={instantToWallClock(event.startsOn, event.timezone)}
-              />
-            </Field>
-            <Field label="Length">
-              <Select name="minutes" defaultValue="60" className="w-32">
-                {[10, 15, 30, 45, 60, 90].map((m) => (
-                  <option key={m} value={m}>
-                    {m} min
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Button type="submit" variant="secondary" data-testid="add-block">
-              Add break
-            </Button>
-          </form>
-        </Card>
-      </div>
+          <Card className="space-y-3">
+            <h2 className="text-sm font-semibold text-ink">Add a break</h2>
+            <p className="text-xs text-muted">
+              A named block across the whole venue — lunch, registration, coffee. It shows on the
+              public agenda and holds the time until you drop a talk on it.
+            </p>
+            <form action={addBreakBand} className="flex flex-wrap items-end gap-3">
+              <Field label="Name">
+                <Input
+                  name="label"
+                  required
+                  maxLength={80}
+                  placeholder="Lunch"
+                  className="w-40"
+                  data-testid="block-label"
+                />
+              </Field>
+              <Field label="Starts">
+                <Input
+                  type="datetime-local"
+                  name="startsAt"
+                  required
+                  data-testid="block-start"
+                  defaultValue={instantToWallClock(event.startsOn, event.timezone)}
+                />
+              </Field>
+              <Field label="Length">
+                <Select name="minutes" defaultValue="60" className="w-32">
+                  {[10, 15, 30, 45, 60, 90].map((m) => (
+                    <option key={m} value={m}>
+                      {m} min
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Button type="submit" variant="secondary" data-testid="add-block">
+                Add break
+              </Button>
+            </form>
+          </Card>
+        </div>
+      ) : null}
 
-      {bands.length > 0 ? (
+      {isBuildingView(view) && bands.length > 0 ? (
         <details className="text-sm">
           <summary className="cursor-pointer text-muted">Remove a time band or break</summary>
           <div className="mt-2 flex flex-wrap gap-2">

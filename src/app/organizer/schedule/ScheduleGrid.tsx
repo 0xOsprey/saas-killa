@@ -39,17 +39,28 @@ export type Cell = {
 
 export type Band = {
   key: string;
+  dayKey: string;
   dayLabel: string;
   timeLabel: string;
   cells: Cell[];
 };
 
 /**
- * Placement works two ways on purpose. Dragging is what an organizer reaches
- * for with a mouse; click-to-select then click-to-place is the same operation
- * without a pointer, and it is the path the end-to-end test drives, because
- * HTML5 drag events are not reliably synthesisable in a browser automation
- * harness. Both call the same server action.
+ * Placement works three ways on purpose, and all three call the same server
+ * action:
+ *
+ *   - Drag. From the unscheduled pool onto a box, and from one box to another,
+ *     which is how a schedule is actually rearranged: the common gesture is
+ *     moving a talk that is already placed, not placing a new one.
+ *   - Click to pick up, click to drop. The same operation without a pointer
+ *     gesture, reachable from the keyboard because every box takes focus and
+ *     answers Enter and Space.
+ *   - A plain form, in `ScheduleFallback`, which is what works with scripting
+ *     off. This component is an enhancement over that, not the only door.
+ *
+ * `role="button"` goes on empty boxes only. A filled box holds its own remove
+ * control, and a button inside a button is a thing screen readers cannot
+ * describe; the box stays focusable and labelled instead.
  *
  * Every warning a cell can carry is reported, never enforced. An organizer
  * mid-rearrangement passes through invalid states as a matter of course, and a
@@ -65,6 +76,7 @@ export function ScheduleGrid({
   pool: PoolItem[];
 }) {
   const [held, setHeld] = useState<string | null>(null);
+  const [over, setOver] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   function place(slotId: string, submissionId: string) {
@@ -98,7 +110,7 @@ export function ScheduleGrid({
         <p className="text-xs text-muted">
           {held
             ? 'Now click a slot to place it.'
-            : 'Click a talk to pick it up, or drag it onto the grid.'}
+            : 'Click a talk to pick it up, or drag it onto the grid. A placed talk drags from one slot to another.'}
         </p>
         {pool.length === 0 ? (
           <p className="rounded-md border border-dashed border-line p-4 text-xs text-muted">
@@ -158,21 +170,51 @@ export function ScheduleGrid({
                 {band.cells.map((cell) => (
                   <div
                     key={cell.slotId}
-                    onDragOver={(e) => e.preventDefault()}
+                    // A placed talk is draggable out of its box, which is what
+                    // makes this a schedule you rearrange rather than one you
+                    // fill once.
+                    draggable={cell.submissionId !== null}
+                    onDragStart={(e) => {
+                      if (cell.submissionId) e.dataTransfer.setData('text/plain', cell.submissionId);
+                    }}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      if (over !== cell.slotId) setOver(cell.slotId);
+                    }}
+                    onDragLeave={() => setOver((current) => (current === cell.slotId ? null : current))}
                     onDrop={(e) => {
                       e.preventDefault();
+                      setOver(null);
                       const id = e.dataTransfer.getData('text/plain');
                       // A drop onto a labelled block is a placement too; the
-                      // action clears the label as part of the same write.
-                      if (id) place(cell.slotId, id);
+                      // action clears the label as part of the same write. A
+                      // drop onto the box it came from is a no-op worth skipping.
+                      if (id && id !== cell.submissionId) place(cell.slotId, id);
                     }}
                     onClick={() => {
                       if (held) place(cell.slotId, held);
                       else if (cell.submissionId) setHeld(cell.submissionId);
                     }}
+                    onKeyDown={(e) => {
+                      if (e.key !== 'Enter' && e.key !== ' ') return;
+                      if (e.target !== e.currentTarget) return;
+                      e.preventDefault();
+                      if (held) place(cell.slotId, held);
+                      else if (cell.submissionId) setHeld(cell.submissionId);
+                    }}
+                    tabIndex={0}
+                    role={cell.submissionId === null && cell.label === null ? 'button' : undefined}
+                    aria-label={
+                      cell.submissionId
+                        ? `${cell.title}. Press Enter to pick it up.`
+                        : held
+                          ? 'Empty slot. Press Enter to place the talk you picked up.'
+                          : 'Empty slot.'
+                    }
                     data-testid={`slot-${cell.slotId}`}
                     className={cn(
                       'min-h-16 cursor-pointer rounded-md border p-2 text-xs transition-colors',
+                      'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
                       cell.submissionId
                         ? 'border-line bg-white'
                         : cell.label
@@ -181,6 +223,7 @@ export function ScheduleGrid({
                       cell.conflicted && 'border-red-300 bg-red-50',
                       cell.unavailable !== null && 'border-amber-300 bg-amber-50',
                       held === cell.submissionId && 'ring-2 ring-accent/40',
+                      over === cell.slotId && 'border-accent bg-accent-soft ring-2 ring-accent/40',
                     )}
                     style={
                       cell.trackColour ? { borderLeft: `3px solid ${cell.trackColour}` } : undefined
