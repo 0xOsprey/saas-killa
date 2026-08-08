@@ -1,11 +1,17 @@
 import { LinkButton, Notice, PageHeader } from '@/components/ui';
 import { currentUser } from '@/lib/auth';
 import { dayLabel } from '@/lib/format';
+import { activeQuestions } from '@/lib/question-queries';
 import { allTracks, cfpIsOpen, getEvent } from '@/lib/queries';
 import { CfpForm } from './CfpForm';
 
 export default async function CfpPage() {
-  const [event, tracks, user] = await Promise.all([getEvent(), allTracks(), currentUser()]);
+  const [event, tracks, user, questions] = await Promise.all([
+    getEvent(),
+    allTracks(),
+    currentUser(),
+    activeQuestions(),
+  ]);
 
   if (!cfpIsOpen(event)) {
     return (
@@ -28,6 +34,7 @@ export default async function CfpPage() {
         description={`Open until ${dayLabel(event.cfpClosesAt, event.timezone)}. Reviewers grade abstracts without seeing who wrote them.`}
       />
       <CfpForm
+        questions={questions}
         tracks={tracks}
         knownEmail={user?.email ?? null}
         knownName={user?.name ?? null}

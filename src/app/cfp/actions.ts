@@ -5,7 +5,9 @@ import { z } from 'zod';
 import { db } from '@/db';
 import { audienceLevelEnum, submissionFormatEnum, submissions, users } from '@/db/schema';
 import { currentUser, issueMagicLink, startSession, upsertUserByEmail } from '@/lib/auth';
-import { magicLinkMail, sendMail } from '@/lib/email';
+import { magicLinkMail, sendAndLog, sendMail, submissionReceivedMail } from '@/lib/email';
+import { activeQuestions, saveAnswers } from '@/lib/question-queries';
+import { questionIdFromField, validateAnswers, type AnswerMap } from '@/lib/questions';
 import { cfpIsOpen, getEvent } from '@/lib/queries';
 import { eq } from 'drizzle-orm';
 
@@ -82,6 +84,26 @@ export async function submitProposal(_prev: CfpState, formData: FormData): Promi
     return { error: 'A poster submission needs a link to the poster artwork.' };
   }
 
+  // The organizer's questions are checked before anything is written. Answers
+  // to hidden questions are dropped by `validateAnswers` rather than rejected,
+  // so a speaker who opens a branch, fills it in and closes it again is not
+  // held to an answer the form is no longer asking for.
+  const questions = await activeQuestions();
+  const posted: AnswerMap = {};
+  for (const [field, value] of formData.entries()) {
+    const questionId = questionIdFromField(field);
+    if (questionId && typeof value === 'string') posted[questionId] = value;
+  }
+
+  const checked = validateAnswers(
+    questions,
+    { format: input.format, trackId: input.trackId },
+    posted,
+  );
+  if (!checked.ok) {
+    return { error: checked.errors[0]!.message };
+  }
+
   const speaker = signedIn ?? (await upsertUserByEmail(input.email, input.name));
 
   // Keep the speaker profile current from the newest submission. This is the
@@ -91,16 +113,20 @@ export async function submitProposal(_prev: CfpState, formData: FormData): Promi
     .set({ name: input.name, bio: input.bio ?? speaker.bio })
     .where(eq(users.id, speaker.id));
 
-  await db.insert(submissions).values({
-    speakerId: speaker.id,
-    trackId: input.trackId,
-    title: input.title,
-    abstract: input.abstract,
-    format: input.format,
-    audienceLevel: input.audienceLevel,
-    posterUrl: input.posterUrl,
-    keywords: parseKeywords(formData.get('keywords')),
-  });
+  const [created] = await db
+    .insert(submissions)
+    .values({
+      speakerId: speaker.id,
+      trackId: input.trackId,
+      title: input.title,
+      abstract: input.abstract,
+      format: input.format,
+      audienceLevel: input.audienceLevel,
+      posterUrl: input.posterUrl,
+      keywords: parseKeywords(formData.get('keywords')),
+    })
+    .returning({ id: submissions.id });
+  if (created) await saveAnswers(created.id, checked.answers);
 
   // A first-time submitter has no session. Email them a link so the submission
   // is not stranded behind an account they never created.
@@ -108,6 +134,17 @@ export async function submitProposal(_prev: CfpState, formData: FormData): Promi
     const token = await issueMagicLink(speaker.id);
     await sendMail(magicLinkMail(speaker.email, token, event.name));
     await startSession(speaker.id);
+  }
+
+  // A returning speaker gets a receipt. Only the first-time path sends anything
+  // otherwise, and that mail is a sign-in link rather than a confirmation, so a
+  // second proposal used to leave with no acknowledgement at all.
+  if (signedIn && created) {
+    await sendAndLog(submissionReceivedMail(speaker.email, input.title, event.name), {
+      userId: speaker.id,
+      kind: 'submission_received',
+      submissionId: created.id,
+    });
   }
 
   redirect('/speaker?submitted=1');

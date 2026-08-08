@@ -4,21 +4,29 @@ import { useActionState, useState } from 'react';
 import { Button, Card, Field, Input, Notice, Select, Textarea } from '@/components/ui';
 import type { AudienceLevel, SubmissionFormat, Track } from '@/db/schema';
 import { FORMAT_LABELS, LEVEL_LABELS } from '@/lib/format';
+import type { QuestionShape } from '@/lib/questions';
+import { CustomQuestions } from './CustomQuestions';
 import { submitProposal, type CfpState } from './actions';
 
 export function CfpForm({
   tracks,
+  questions,
   knownEmail,
   knownName,
   knownBio,
 }: {
   tracks: Track[];
+  questions: QuestionShape[];
   knownEmail: string | null;
   knownName: string | null;
   knownBio: string | null;
 }) {
   const [state, action, pending] = useActionState<CfpState, FormData>(submitProposal, {});
+  // Format and track are held here rather than read off the DOM because the
+  // organizer's questions narrow on both, so changing either has to re-render
+  // the question list below.
   const [format, setFormat] = useState<SubmissionFormat>('talk_25');
+  const [trackId, setTrackId] = useState<string>('');
 
   return (
     <form action={action} className="space-y-6">
@@ -84,7 +92,12 @@ export function CfpForm({
             </Select>
           </Field>
           <Field label="Track">
-            <Select name="trackId" defaultValue="" data-testid="cfp-track">
+            <Select
+              name="trackId"
+              value={trackId}
+              onChange={(e) => setTrackId(e.target.value)}
+              data-testid="cfp-track"
+            >
               <option value="">No preference</option>
               {tracks.map((track) => (
                 <option key={track.id} value={track.id}>
@@ -116,6 +129,17 @@ export function CfpForm({
           </Field>
         ) : null}
       </Card>
+
+      {questions.length > 0 ? (
+        <Card className="space-y-4">
+          <h2 className="text-sm font-semibold text-ink">A few more things</h2>
+          <CustomQuestions
+            questions={questions}
+            format={format}
+            trackId={trackId === '' ? null : trackId}
+          />
+        </Card>
+      ) : null}
 
       <Button type="submit" disabled={pending} data-testid="cfp-submit">
         {pending ? 'Submitting…' : 'Submit proposal'}

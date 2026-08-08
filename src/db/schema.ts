@@ -28,6 +28,9 @@ import {
  *   task          something a speaker owes, with a deadline
  *   bookmark      an attendee starring a submission
  *   persona       a configured AI evaluator, backed by a bot user row
+ *   round         one pass of committee review; assignments and reviews belong to one
+ *   question      an organizer-defined field on the submission form
+ *   answer        one submission's response to one question
  *
  * "session" alone is deliberately never used for conference content, because it
  * would collide with the login session. Accepted submissions placed in a slot
@@ -73,6 +76,20 @@ export const contentStatusEnum = pgEnum('content_status', ['draft', 'pending', '
  * judge who also votes as an attendee does not double-weight one submission.
  */
 export const voteChannelEnum = pgEnum('vote_channel', ['committee', 'community']);
+
+/**
+ * The shapes an organizer-defined question can take. Deliberately short: every
+ * one of these renders to a native input with no client-side widget, because a
+ * form the organizer configures is only useful if it cannot be configured into
+ * something that fails to submit.
+ */
+export const questionKindEnum = pgEnum('question_kind', [
+  'short_text',
+  'long_text',
+  'select',
+  'checkbox',
+  'url',
+]);
 
 /** What a speaker still owes: each row in speaker_tasks is one of these. */
 export const speakerTaskKindEnum = pgEnum('speaker_task_kind', [
@@ -255,11 +272,20 @@ export const reviews = pgTable(
     model: text('model'),
     /** Which evaluator persona produced an AI grade. Null for human grades. */
     personaId: uuid('persona_id'),
+    /** Which pass of review this grade belongs to. */
+    roundId: uuid('round_id')
+      .notNull()
+      .references(() => reviewRounds.id, { onDelete: 'cascade' }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    // One review per reviewer per submission; re-scoring updates the row.
-    uniqueIndex('reviews_submission_reviewer_idx').on(t.submissionId, t.reviewerId),
+    // One review per reviewer per submission per round; re-scoring inside a
+    // round updates the row, and a later round adds one beside it.
+    uniqueIndex('reviews_round_submission_reviewer_idx').on(
+      t.roundId,
+      t.submissionId,
+      t.reviewerId,
+    ),
     index('reviews_source_idx').on(t.source),
   ],
 );
@@ -378,6 +404,9 @@ export const awardVotes = pgTable(
 export const reviewAssignments = pgTable(
   'review_assignments',
   {
+    roundId: uuid('round_id')
+      .notNull()
+      .references(() => reviewRounds.id, { onDelete: 'cascade' }),
     submissionId: uuid('submission_id')
       .notNull()
       .references(() => submissions.id, { onDelete: 'cascade' }),
@@ -388,7 +417,9 @@ export const reviewAssignments = pgTable(
     assignedAt: timestamp('assigned_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    primaryKey({ columns: [t.submissionId, t.reviewerId] }),
+    // The round is in the key. Without it a shortlist round could not re-ask the
+    // same reviewer about the same submission, which is the whole point of one.
+    primaryKey({ columns: [t.roundId, t.submissionId, t.reviewerId] }),
     index('review_assignments_reviewer_idx').on(t.reviewerId),
   ],
 );
@@ -434,6 +465,13 @@ export const submissionAuthors = pgTable(
     affiliation: text('affiliation'),
     /** False for a credited co-author who will not be in the room. */
     isPresenter: boolean('is_presenter').notNull().default(true),
+    /**
+     * Whether this author may act on the submission, not merely be named on it.
+     * Off by default: crediting somebody is the common case, and handing them
+     * write access to a proposal should be a thing the filer chose. The owner's
+     * own access never reads this column, so nobody can lock themselves out.
+     */
+    canEdit: boolean('can_edit').notNull().default(false),
   },
   (t) => [
     primaryKey({ columns: [t.submissionId, t.userId] }),
@@ -541,7 +579,95 @@ export const speakerAvailability = pgTable(
   (t) => [index('speaker_availability_user_idx').on(t.userId)],
 );
 
+/**
+ * One pass of committee review. Every assignment and every review belongs to
+ * exactly one, so "round two" is a real container rather than a second grade on
+ * the same row: the same reviewer can be asked for a fresh opinion on the same
+ * submission after a shortlist, and the two grades coexist instead of one
+ * overwriting the other.
+ *
+ * A round is never deleted. Closing it is what stops new grades arriving, and
+ * an organizer comparing rounds needs the closed one to still be there.
+ */
+export const reviewRounds = pgTable('review_rounds', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull(),
+  /** Ascending. Round one sorts first; the highest open position is the active one. */
+  position: integer('position').notNull().default(0),
+  opensAt: timestamp('opens_at', { withTimezone: true }),
+  dueAt: timestamp('due_at', { withTimezone: true }),
+  /** Set when an organizer closes the round. No grade may be filed after this. */
+  closedAt: timestamp('closed_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * A question an organizer added to the submission form.
+ *
+ * Visibility is two independent filters plus one dependency. `formats` and
+ * `trackIds` narrow which proposals see the question at all; empty means every
+ * one, which is the common case and therefore the default. `showIfQuestionId`
+ * with `showIfValue` is the conditional branch: the question appears only once
+ * the named earlier question holds that answer.
+ *
+ * Questions are archived rather than deleted, because an answer whose question
+ * no longer exists is unreadable and the answers are what a committee graded.
+ */
+export const formQuestions = pgTable(
+  'form_questions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    prompt: text('prompt').notNull(),
+    helpText: text('help_text'),
+    kind: questionKindEnum('kind').notNull().default('short_text'),
+    required: boolean('required').notNull().default(false),
+    position: integer('position').notNull().default(0),
+    /** Choices for a 'select'. Ignored by every other kind. */
+    options: jsonb('options').$type<string[]>().notNull().default([]),
+    /** Formats this question applies to. Empty means all of them. */
+    formats: jsonb('formats').$type<string[]>().notNull().default([]),
+    /** Tracks this question applies to. Empty means all of them. */
+    trackIds: jsonb('track_ids').$type<string[]>().notNull().default([]),
+    /** Show only when the question named here holds `showIfValue`. */
+    showIfQuestionId: uuid('show_if_question_id'),
+    showIfValue: text('show_if_value'),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('form_questions_position_idx').on(t.position)],
+);
+
+/**
+ * One submission's answer to one question, stored as text whatever the kind.
+ *
+ * Text for every kind is a deliberate trade. A typed column per kind would let
+ * Postgres validate, but the question's kind is itself editable, so the column
+ * a value lives in would have to move when an organizer changes a select to a
+ * short text. Validation happens once, at the form boundary, against the kind
+ * the question has now.
+ */
+export const submissionAnswers = pgTable(
+  'submission_answers',
+  {
+    submissionId: uuid('submission_id')
+      .notNull()
+      .references(() => submissions.id, { onDelete: 'cascade' }),
+    questionId: uuid('question_id')
+      .notNull()
+      .references(() => formQuestions.id, { onDelete: 'cascade' }),
+    value: text('value').notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.submissionId, t.questionId] }),
+    index('submission_answers_question_idx').on(t.questionId),
+  ],
+);
+
 export type User = typeof users.$inferSelect;
+export type ReviewRound = typeof reviewRounds.$inferSelect;
+export type FormQuestion = typeof formQuestions.$inferSelect;
+export type SubmissionAnswer = typeof submissionAnswers.$inferSelect;
+export type QuestionKind = (typeof questionKindEnum.enumValues)[number];
 export type Submission = typeof submissions.$inferSelect;
 export type Review = typeof reviews.$inferSelect;
 export type Slot = typeof slots.$inferSelect;

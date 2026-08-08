@@ -7,11 +7,13 @@ import { requireUser } from '@/lib/auth';
 import {
   addAuthorByEmail,
   applyAbstractEdit,
+  canWriteSubmission,
   currentValues,
   fieldLabel,
   isFieldLocked,
   parseKeywords,
   removeAuthor,
+  setAuthorAccess,
   submissionForEdit,
   type AbstractActionState,
   type EditableField,
@@ -82,8 +84,12 @@ export async function saveMyAbstract(
   const id = z.string().uuid().safeParse(formData.get('submissionId'));
   if (!id.success) return { error: 'Unknown submission.' };
 
-  const [event, submission] = await Promise.all([getEvent(), submissionForEdit(id.data)]);
-  if (!submission || submission.speakerId !== user.id) return { error: 'Unknown submission.' };
+  const [event, submission, mine] = await Promise.all([
+    getEvent(),
+    submissionForEdit(id.data),
+    canWriteSubmission(id.data, user.id),
+  ]);
+  if (!submission || !mine) return { error: 'Unknown submission.' };
 
   if (!cfpIsOpen(event)) {
     return {
@@ -171,6 +177,7 @@ export async function addMyAuthor(
     name: parsed.data.name,
     affiliation: parsed.data.affiliation,
     isPresenter: formData.get('isPresenter') !== null,
+    canEdit: formData.get('canEdit') !== null,
   });
   if (result.error) return { error: result.error };
 
@@ -202,4 +209,43 @@ export async function removeMyAuthor(
 
   revalidateSubmission(parsed.data.submissionId);
   return { notice: 'Co-author removed.' };
+}
+
+/**
+ * Hand a co-author write access, or take it back. Only the filer may: the form
+ * this posts from is rendered for them alone, and `setAuthorAccess` compares
+ * `ownerId` against `speakerId` rather than going through `writableBy`, so a
+ * co-author who forged the post gets 'Submission not found.' rather than the
+ * ability to grant access onward.
+ */
+export async function setMyAuthorAccess(
+  _prev: AbstractActionState,
+  formData: FormData,
+): Promise<AbstractActionState> {
+  const user = await requireUser();
+
+  const parsed = z
+    .object({ submissionId: z.string().uuid(), userId: z.string().uuid() })
+    .safeParse({
+      submissionId: formData.get('submissionId'),
+      userId: formData.get('userId'),
+    });
+  if (!parsed.success) return { error: 'Unknown author.' };
+
+  const canEdit = formData.get('canEdit') !== null && formData.get('canEdit') !== '';
+  const result = await setAuthorAccess({
+    submissionId: parsed.data.submissionId,
+    ownerId: user.id,
+    editorId: user.id,
+    userId: parsed.data.userId,
+    canEdit,
+  });
+  if (result.error) return { error: result.error };
+
+  revalidateSubmission(parsed.data.submissionId);
+  return {
+    notice: canEdit
+      ? 'They can now edit this proposal.'
+      : 'They are still credited, but can no longer edit this proposal.',
+  };
 }

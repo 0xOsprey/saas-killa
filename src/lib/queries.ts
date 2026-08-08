@@ -2,6 +2,7 @@ import { and, asc, eq, ne, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { events, reviews, rooms, slots, submissions, tracks, users } from '@/db/schema';
 import type { AudienceLevel, Event, SubmissionFormat, SubmissionStatus } from '@/db/schema';
+import { writableBy } from './abstracts';
 
 export async function getEvent(): Promise<Event> {
   const found = await db.query.events.findFirst({ orderBy: asc(events.createdAt) });
@@ -179,6 +180,12 @@ export async function unscheduledAccepted() {
     .orderBy(asc(submissions.title));
 }
 
+/**
+ * Everything this person may act on: what they filed, plus anything a filer
+ * granted them write access to. `isOwner` distinguishes the two, because the
+ * things only a filer may do (withdraw, confirm attendance, hand out access)
+ * are hidden from a co-author rather than offered and then refused.
+ */
 export async function mySubmissions(speakerId: string) {
   return db
     .select({
@@ -197,12 +204,13 @@ export async function mySubmissions(speakerId: string) {
       recordingUrl: submissions.recordingUrl,
       resourcesNote: submissions.resourcesNote,
       posterUrl: submissions.posterUrl,
+      isOwner: sql<boolean>`${submissions.speakerId} = ${speakerId}`,
     })
     .from(submissions)
     .leftJoin(tracks, eq(tracks.id, submissions.trackId))
     .leftJoin(slots, eq(slots.submissionId, submissions.id))
     .leftJoin(rooms, eq(rooms.id, slots.roomId))
-    .where(eq(submissions.speakerId, speakerId))
+    .where(writableBy(speakerId))
     .orderBy(asc(submissions.createdAt));
 }
 

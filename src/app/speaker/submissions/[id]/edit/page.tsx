@@ -4,6 +4,7 @@ import { Badge, Card, LinkButton, Notice, PageHeader } from '@/components/ui';
 import {
   EDITABLE_FIELDS,
   authorsForDisplay,
+  canWriteSubmission,
   currentValues,
   fieldLabel,
   isFieldLocked,
@@ -15,7 +16,7 @@ import { cfpIsOpen, getEvent } from '@/lib/queries';
 import { AbstractEditor } from '@/app/organizer/abstracts/AbstractEditor';
 import { AbstractFields } from '@/app/organizer/abstracts/AbstractFields';
 import { AuthorEditor } from '@/app/organizer/abstracts/AuthorEditor';
-import { addMyAuthor, removeMyAuthor, saveMyAbstract } from '../../actions';
+import { addMyAuthor, removeMyAuthor, saveMyAbstract, setMyAuthorAccess } from '../../actions';
 
 export default async function EditSubmissionPage({
   params,
@@ -31,8 +32,10 @@ export default async function EditSubmissionPage({
 
   const submission = await submissionForEdit(parsed.data);
   // Someone else's submission is not "forbidden", it is not theirs to know about.
-  if (!submission || submission.speakerId !== user.id) notFound();
+  // A co-author the filer granted access to is not someone else.
+  if (!submission || !(await canWriteSubmission(submission.id, user.id))) notFound();
 
+  const isFiler = submission.speakerId === user.id;
   const [event, authors] = await Promise.all([getEvent(), authorsForDisplay(submission.id)]);
   const open = cfpIsOpen(event);
   const locked = EDITABLE_FIELDS.filter((field) =>
@@ -96,9 +99,13 @@ export default async function EditSubmissionPage({
       <Card className="space-y-4">
         <h2 className="text-sm font-semibold text-ink">Co-authors</h2>
         <p className="text-xs text-muted">
-          Everyone credited on the billing, in order. You filed this, so you stay on it. Co-authors
-          can be added after the call for papers closes — a colleague joining the panel is normal
-          long after the text is fixed.
+          Everyone credited on the billing, in order. Co-authors can be added after the call for
+          papers closes — a colleague joining the panel is normal long after the text is fixed.
+        </p>
+        <p className="text-xs text-muted">
+          {isFiler
+            ? 'Crediting somebody does not let them change the proposal. Letting them edit is a separate button, so a name on the billing is never accidentally a second pair of hands on the text.'
+            : 'You are a co-author here. The speaker who filed this manages the billing and who may edit.'}
         </p>
         <AuthorEditor
           submissionId={submission.id}
@@ -106,6 +113,7 @@ export default async function EditSubmissionPage({
           authors={authors}
           addAction={addMyAuthor}
           removeAction={removeMyAuthor}
+          accessAction={isFiler ? setMyAuthorAccess : undefined}
         />
       </Card>
     </div>

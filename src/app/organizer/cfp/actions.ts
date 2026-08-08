@@ -1,11 +1,18 @@
 'use server';
 
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { db } from '@/db';
-import { events, reviewAssignments, submissions, userRoles, users } from '@/db/schema';
+import {
+  events,
+  reviewAssignments,
+  reviewRounds,
+  submissions,
+  userRoles,
+  users,
+} from '@/db/schema';
 import { requireRole } from '@/lib/auth';
 import { sendAndLog, type Mail } from '@/lib/email';
 import { env } from '@/lib/env';
@@ -19,6 +26,7 @@ import {
   type ReminderTarget,
 } from '@/lib/grading';
 import { getEvent } from '@/lib/queries';
+import { activeRound, allRounds, carryForward } from '@/lib/rounds';
 
 function revalidateCfp(): void {
   revalidatePath('/organizer/cfp');
@@ -99,10 +107,11 @@ const distributeSchema = z.object({
 });
 
 /**
- * Spread the open submissions across the committee. Inserts are
- * `onConflictDoNothing` on the (submission, reviewer) primary key, so running
- * it twice tops the coverage up instead of erroring, and an existing pair keeps
- * the deadline it was given rather than silently inheriting this batch's.
+ * Spread the open submissions across the committee, inside the round that is
+ * open now. Inserts are `onConflictDoNothing` on the (round, submission,
+ * reviewer) primary key, so running it twice tops the coverage up instead of
+ * erroring, and an existing pair keeps the deadline it was given rather than
+ * silently inheriting this batch's.
  */
 export async function autoDistribute(formData: FormData): Promise<void> {
   await requireRole('organizer');
@@ -116,8 +125,11 @@ export async function autoDistribute(formData: FormData): Promise<void> {
   });
   if (!parsed.success) back({ error: 'distribute' });
 
+  const round = await activeRound();
+  if (!round) back({ error: 'no-round' });
+
   const dueAt = parsed.data.dueAt ? wallClockToInstant(parsed.data.dueAt, event.timezone) : null;
-  const inputs = await distributionInputs();
+  const inputs = await distributionInputs(round.id);
   if (inputs.reviewers.length === 0) back({ error: 'no-reviewers' });
 
   const { planned, short } = planAssignments({
@@ -131,7 +143,7 @@ export async function autoDistribute(formData: FormData): Promise<void> {
   if (planned.length > 0) {
     await db
       .insert(reviewAssignments)
-      .values(planned.map((row) => ({ ...row, dueAt })))
+      .values(planned.map((row) => ({ ...row, roundId: round.id, dueAt })))
       .onConflictDoNothing();
   }
 
@@ -182,9 +194,13 @@ export async function addAssignment(formData: FormData): Promise<void> {
   if (!target || target.status !== 'submitted') back({ error: 'decided' });
   if (target.speakerId === parsed.data.reviewerId) back({ error: 'self-review' });
 
+  const round = await activeRound();
+  if (!round) back({ error: 'no-round' });
+
   await db
     .insert(reviewAssignments)
     .values({
+      roundId: round.id,
       submissionId: parsed.data.submissionId,
       reviewerId: parsed.data.reviewerId,
       dueAt: parsed.data.dueAt ? wallClockToInstant(parsed.data.dueAt, event.timezone) : null,
@@ -202,10 +218,17 @@ export async function removeAssignment(formData: FormData): Promise<void> {
     reviewerId: formData.get('reviewerId'),
   });
 
+  // Scoped to the open round. Unassigning somebody now must not erase the fact
+  // that they were assigned in round one, which is part of how that round's
+  // completion rate was calculated.
+  const round = await activeRound();
+  if (!round) back({ error: 'no-round' });
+
   await db
     .delete(reviewAssignments)
     .where(
       and(
+        eq(reviewAssignments.roundId, round.id),
         eq(reviewAssignments.submissionId, input.submissionId),
         eq(reviewAssignments.reviewerId, input.reviewerId),
       ),
@@ -213,6 +236,88 @@ export async function removeAssignment(formData: FormData): Promise<void> {
 
   revalidateCfp();
   back({ removed: 1 });
+}
+
+const roundSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  dueAt: wallClock.nullable(),
+});
+
+/**
+ * Open the next pass of review. The new round always sorts after every existing
+ * one, so "the active round" stays unambiguous without asking the organizer to
+ * pick a number.
+ */
+export async function openRound(formData: FormData): Promise<void> {
+  await requireRole('organizer');
+  const event = await getEvent();
+
+  const parsed = roundSchema.safeParse({
+    name: formData.get('name'),
+    dueAt: optional(formData.get('dueAt')),
+  });
+  if (!parsed.success) back({ error: 'round-name' });
+
+  const existing = await allRounds();
+  const position = existing.reduce((max, round) => Math.max(max, round.position), -1) + 1;
+
+  await db.insert(reviewRounds).values({
+    name: parsed.data.name,
+    position,
+    opensAt: new Date(),
+    dueAt: parsed.data.dueAt ? wallClockToInstant(parsed.data.dueAt, event.timezone) : null,
+  });
+
+  revalidateCfp();
+  back({ saved: 'round-opened' });
+}
+
+/** Stop new grades landing in a round. Never deletes it; the scores are the record. */
+export async function closeRound(formData: FormData): Promise<void> {
+  await requireRole('organizer');
+  const id = z.string().uuid().parse(formData.get('roundId'));
+
+  await db
+    .update(reviewRounds)
+    .set({ closedAt: new Date() })
+    .where(and(eq(reviewRounds.id, id), isNull(reviewRounds.closedAt)));
+
+  revalidateCfp();
+  back({ saved: 'round-closed' });
+}
+
+/**
+ * Shortlist into the open round: carry the named submissions, and the reviewers
+ * who already read them, forward from the round before it.
+ */
+export async function shortlistIntoRound(formData: FormData): Promise<void> {
+  await requireRole('organizer');
+  const event = await getEvent();
+
+  const round = await activeRound();
+  if (!round) back({ error: 'no-round' });
+
+  const rounds = await allRounds();
+  const index = rounds.findIndex((row) => row.id === round.id);
+  const previous = index > 0 ? rounds[index - 1] : undefined;
+  if (!previous) back({ error: 'no-previous-round' });
+
+  const submissionIds = formData
+    .getAll('submissionId')
+    .filter((value): value is string => typeof value === 'string')
+    .filter((value) => z.string().uuid().safeParse(value).success);
+  if (submissionIds.length === 0) back({ error: 'nothing-shortlisted' });
+
+  const dueAtRaw = optional(formData.get('dueAt'));
+  const carried = await carryForward({
+    fromRoundId: previous.id,
+    toRoundId: round.id,
+    submissionIds,
+    dueAt: dueAtRaw ? wallClockToInstant(dueAtRaw, event.timezone) : null,
+  });
+
+  revalidateCfp();
+  back({ assigned: carried, short: 0 });
 }
 
 function reminderMail(target: ReminderTarget, eventName: string): Mail {
@@ -245,7 +350,10 @@ export async function remindReviewers(): Promise<void> {
   await requireRole('organizer');
   const event = await getEvent();
 
-  const targets = await reviewersWithOutstanding();
+  const round = await activeRound();
+  if (!round) back({ error: 'no-round' });
+
+  const targets = await reviewersWithOutstanding(round.id);
   const recentlyReminded = await recentlyRemindedIds();
 
   let sent = 0;

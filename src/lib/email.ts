@@ -106,3 +106,26 @@ export function rejectionMail(to: string, title: string, eventName: string): Mai
     ].join('\n'),
   };
 }
+
+/**
+ * The receipt for a proposal that has landed.
+ *
+ * A first-time submitter gets a sign-in link instead, because their more urgent
+ * problem is reaching an account they did not knowingly create. A speaker who is
+ * already signed in has no such problem and used to receive nothing at all,
+ * which reads as a form that swallowed the submission.
+ */
+export function submissionReceivedMail(to: string, title: string, eventName: string): Mail {
+  return {
+    to,
+    subject: `Received: "${title}" for ${eventName}`,
+    text: [
+      `We have "${title}" down for ${eventName}. Nothing else is needed from you yet.`,
+      '',
+      'The programme committee reads proposals blind, so nobody grading it will',
+      'see your name beside it. You will hear from us once the decisions are made.',
+      '',
+      `Your submissions: ${env().APP_URL}/speaker`,
+    ].join('\n'),
+  };
+}

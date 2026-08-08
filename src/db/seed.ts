@@ -1,4 +1,4 @@
-import { sql } from 'drizzle-orm';
+import { inArray, sql } from 'drizzle-orm';
 import { db } from './index';
 import {
   awardNominees,
@@ -6,8 +6,11 @@ import {
   bookmarks,
   evaluatorPersonas,
   events,
+  formQuestions,
   reviewAssignments,
+  reviewRounds,
   reviews,
+  submissionAnswers,
   rooms,
   speakerAvailability,
   speakerTasks,
@@ -178,10 +181,11 @@ async function main() {
     await db.execute(sql`
       truncate table
         award_votes, award_nominees, awards, bookmarks, review_assignments,
-        submission_revisions, submission_authors, speaker_tasks,
-        speaker_availability, email_log, evaluator_personas, reviews, slots,
-        submissions, auth_sessions, magic_link_tokens, user_roles, users,
-        rooms, tracks, events
+        submission_answers, form_questions, submission_revisions,
+        submission_authors, speaker_tasks, speaker_availability, email_log,
+        evaluator_personas, reviews, review_rounds, slots, submissions,
+        auth_sessions, magic_link_tokens, user_roles, users, rooms, tracks,
+        events
       restart identity cascade
     `);
     console.log('✓ tables truncated');
@@ -302,6 +306,29 @@ async function main() {
 
   const submissionRows = await db.insert(submissions).values(proposals).returning();
 
+  // Two rounds, the first closed. A single round would render every per-round
+  // number identically to the all-time number, and the one bug rounds can have
+  // is a query that forgot to scope itself.
+  const [roundOne, roundTwo] = await db
+    .insert(reviewRounds)
+    .values([
+      {
+        name: 'Round 1',
+        position: 0,
+        opensAt: new Date(now.getTime() - 30 * day),
+        dueAt: new Date(now.getTime() - 8 * day),
+        closedAt: new Date(now.getTime() - 7 * day),
+      },
+      {
+        name: 'Round 2 (shortlist)',
+        position: 1,
+        opensAt: new Date(now.getTime() - 6 * day),
+        dueAt: new Date(now.getTime() + 7 * day),
+      },
+    ])
+    .returning();
+  if (!roundOne || !roundTwo) throw new Error('failed to insert the review rounds');
+
   // Grade about two thirds of the pool so the organizer screen opens on a real
   // spread rather than a wall of "no grades".
   const graded = submissionRows.slice(0, Math.floor(submissionRows.length * 0.65));
@@ -309,6 +336,7 @@ async function main() {
     reviewerRows
       .filter(() => random() > 0.25)
       .map((reviewer) => ({
+        roundId: roundOne.id,
         submissionId: submission.id,
         reviewerId: reviewer.id,
         score: 1 + Math.floor(random() * 5),
@@ -332,12 +360,26 @@ async function main() {
     return [reviewerRows[i % reviewerRows.length]!, reviewerRows[(i + 1) % reviewerRows.length]!]
       .filter((reviewer, index, list) => list.indexOf(reviewer) === index)
       .map((reviewer) => ({
+        roundId: roundTwo.id,
         submissionId: submission.id,
         reviewerId: reviewer.id,
         dueAt,
       }));
   });
   await db.insert(reviewAssignments).values(assignmentValues).onConflictDoNothing();
+
+  // Round one's assignments, all completed. Without them the closed round shows
+  // a 0% completion rate beside grades that plainly exist, which is the exact
+  // discrepancy a round-scoping bug produces.
+  const roundOneAssignments = graded.flatMap((submission) =>
+    reviewerRows.map((reviewer) => ({
+      roundId: roundOne.id,
+      submissionId: submission.id,
+      reviewerId: reviewer.id,
+      dueAt: new Date(now.getTime() - 8 * day),
+    })),
+  );
+  await db.insert(reviewAssignments).values(roundOneAssignments).onConflictDoNothing();
 
   // The v1 evaluator, as a persona row. The address matches the constant the
   // evaluator adopts on first use, so the app finds this row instead of minting
@@ -391,6 +433,7 @@ async function main() {
       (rubric.clarity + rubric.originality + rubric.relevance + rubric.credibility) / 4,
     );
     return {
+      roundId: roundOne.id,
       submissionId: submission.id,
       reviewerId: evaluatorBot.id,
       score,
@@ -412,13 +455,20 @@ async function main() {
       const co = speakerRows[(i * 3 + 5) % speakerRows.length]!;
       if (co.id === submission.speakerId) return [];
       return [
-        { submissionId: submission.id, userId: submission.speakerId, position: 0 },
+        // The filer's own row, materialised at position 0. `canEdit` is set for
+        // the same reason `ensureFilerIsAuthorZero` sets it: nothing reads it on
+        // the filer's path, and a false here would read as though they had been
+        // locked out of their own proposal.
+        { submissionId: submission.id, userId: submission.speakerId, position: 0, canEdit: true },
         {
           submissionId: submission.id,
           userId: co.id,
           position: 1,
           affiliation: ['Northwind Labs', 'Acme Systems', 'Contoso Research'][i % 3]!,
           isPresenter: i % 3 !== 2,
+          // Half the co-authors can act, half are credited only. Both paths are
+          // reachable, which is what makes the difference testable.
+          canEdit: i % 2 === 0,
         },
       ];
     });
@@ -527,6 +577,92 @@ async function main() {
     await db.insert(awardNominees).values(nomineeValues).onConflictDoNothing();
   }
 
+  // A configured form, exercising every kind and both narrowing rules, with one
+  // branch two levels deep. A single flat text question would let a broken
+  // visibility pass through unnoticed.
+  const questionRows = await db
+    .insert(formQuestions)
+    .values([
+      {
+        prompt: 'Have you given this talk before?',
+        helpText: 'A talk that has run elsewhere is welcome. We just like to know.',
+        kind: 'checkbox' as const,
+        position: 0,
+      },
+      {
+        prompt: 'Where, and roughly when?',
+        kind: 'short_text' as const,
+        required: true,
+        position: 1,
+      },
+      {
+        prompt: 'Link to a recording, if there is one',
+        kind: 'url' as const,
+        position: 2,
+      },
+      {
+        prompt: 'What will the audience be able to do afterwards?',
+        helpText: 'Two or three sentences. Concrete beats aspirational.',
+        kind: 'long_text' as const,
+        required: true,
+        position: 3,
+      },
+      {
+        prompt: 'How much of the room needs to be at a keyboard?',
+        kind: 'select' as const,
+        options: ['Nobody', 'Some of them', 'Everybody'],
+        required: true,
+        position: 4,
+        formats: ['workshop_90'],
+      },
+      {
+        prompt: 'Which ethics board approved this work?',
+        kind: 'short_text' as const,
+        position: 5,
+        trackIds: [trackRows.find((t) => t.name === 'Research')!.id],
+      },
+    ])
+    .returning();
+
+  const [askedBefore, askedWhere, askedRecording] = questionRows;
+  // The two follow-ups hang off the first, so a proposal that answers "no"
+  // renders neither. Set here rather than at insert because a question's parent
+  // is another question's id, which does not exist until the insert returns.
+  await db
+    .update(formQuestions)
+    .set({ showIfQuestionId: askedBefore!.id, showIfValue: 'yes' })
+    .where(inArray(formQuestions.id, [askedWhere!.id, askedRecording!.id]));
+
+  const answerValues = submissionRows.flatMap((submission, i) => {
+    const rows: { submissionId: string; questionId: string; value: string }[] = [
+      {
+        submissionId: submission.id,
+        questionId: questionRows[3]!.id,
+        value:
+          'Run the audit on a job they are afraid of, name its real consumers, and delete one of them.',
+      },
+    ];
+    // A third have given it before, and those are the only ones with the branch
+    // answered. The rest leave it empty, which is the state the form produces.
+    if (i % 3 === 0) {
+      rows.push({ submissionId: submission.id, questionId: askedBefore!.id, value: 'yes' });
+      rows.push({
+        submissionId: submission.id,
+        questionId: askedWhere!.id,
+        value: `${['SREcon', 'PyCon', 'a company all-hands'][i % 3]}, about a year ago`,
+      });
+    }
+    if (submission.format === 'workshop_90') {
+      rows.push({
+        submissionId: submission.id,
+        questionId: questionRows[4]!.id,
+        value: ['Nobody', 'Some of them', 'Everybody'][i % 3]!,
+      });
+    }
+    return rows;
+  });
+  await db.insert(submissionAnswers).values(answerValues).onConflictDoNothing();
+
   console.log(
     [
       `✓ event: ${event.name}`,
@@ -536,6 +672,7 @@ async function main() {
       `✓ ${reviewValues.length} human reviews, ${aiValues.length} AI reviews, ${assignmentValues.length} assignments`,
       `✓ ${taskValues.length} speaker tasks, ${bookmarkValues.length} bookmarks, ${authorValues.length} author rows`,
       `✓ ${awardRows.length} awards, ${nomineeValues.length} nominees`,
+      `✓ 2 review rounds (round 1 closed), ${questionRows.length} form questions, ${answerValues.length} answers`,
       `✓ organizer: ${organizerEmail}`,
       '',
       'Sign in at /login with the organizer address. With RESEND_API_KEY unset the',

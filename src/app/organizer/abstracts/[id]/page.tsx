@@ -10,6 +10,8 @@ import {
   submissionForEdit,
 } from '@/lib/abstracts';
 import { FORMAT_LABELS, LEVEL_LABELS, STATUS_LABELS } from '@/lib/format';
+import { answeredQuestions } from '@/lib/question-queries';
+import { AnswerList } from '@/components/AnswerList';
 import { AbstractEditor } from '../AbstractEditor';
 import { AuthorEditor } from '../AuthorEditor';
 import { addAuthorAction, removeAuthorAction, saveAbstract } from '../actions';
@@ -26,7 +28,10 @@ export default async function OrganizerAbstractPage({
   const submission = await submissionForEdit(parsed.data);
   if (!submission) notFound();
 
-  const authors = await authorsForDisplay(submission.id);
+  const [authors, answers] = await Promise.all([
+    authorsForDisplay(submission.id),
+    answeredQuestions(submission.id),
+  ]);
   const locked = EDITABLE_FIELDS.filter((field) =>
     isFieldLocked(submission.lockedFields, field),
   );
@@ -76,6 +81,18 @@ export default async function OrganizerAbstractPage({
           action={saveAbstract}
         />
       </Card>
+
+      {answers.length > 0 ? (
+        <Card className="space-y-3">
+          <h2 className="text-sm font-semibold text-ink">Form answers</h2>
+          <p className="text-xs text-muted">
+            What the speaker answered to the questions on the submission form. A question the
+            organizers have since retired still shows here, because it is what was asked at the
+            time and what the committee graded.
+          </p>
+          <AnswerList answers={answers} />
+        </Card>
+      ) : null}
 
       <Card className="space-y-4">
         <h2 className="text-sm font-semibold text-ink">Authors</h2>

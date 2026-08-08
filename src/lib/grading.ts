@@ -1,6 +1,15 @@
 import { and, asc, eq, gt, sql } from 'drizzle-orm';
 import { db } from '@/db';
-import { emailLog, reviewAssignments, reviews, submissions, tracks, userRoles, users } from '@/db/schema';
+import {
+  emailLog,
+  reviewAssignments,
+  reviewRounds,
+  reviews,
+  submissions,
+  tracks,
+  userRoles,
+  users,
+} from '@/db/schema';
 import type { AudienceLevel, SubmissionFormat, SubmissionStatus } from '@/db/schema';
 
 /**
@@ -9,6 +18,13 @@ import type { AudienceLevel, SubmissionFormat, SubmissionStatus } from '@/db/sch
  * every reviewer-facing select below joins `review_assignments` to
  * `submissions` and stops there. None of them reaches `users` through
  * `submissions.speakerId`.
+ *
+ * Almost every function here takes a `roundId`. That is not a convenience
+ * parameter: coverage, completion and "what do I still owe" are all questions
+ * about one pass of review, and answering them across every round at once would
+ * report a reviewer who finished round one as still owing work in round two.
+ * The one exception is `myCompletedReviews`, which is a reviewer's own history
+ * and spans rounds on purpose.
  */
 
 /** How long a reviewer is left alone after a reminder. */
@@ -41,7 +57,7 @@ export type ReviewerCompletionRow = {
  * rejected: the reviewer was asked and never answered, and hiding that would
  * flatter the completion rate.
  */
-export async function reviewerCompletion(): Promise<ReviewerCompletionRow[]> {
+export async function reviewerCompletion(roundId: string): Promise<ReviewerCompletionRow[]> {
   return db
     .select({
       reviewerId: users.id,
@@ -68,13 +84,17 @@ export async function reviewerCompletion(): Promise<ReviewerCompletionRow[]> {
     })
     .from(users)
     .innerJoin(userRoles, and(eq(userRoles.userId, users.id), eq(userRoles.role, 'reviewer')))
-    .leftJoin(reviewAssignments, eq(reviewAssignments.reviewerId, users.id))
+    .leftJoin(
+      reviewAssignments,
+      and(eq(reviewAssignments.reviewerId, users.id), eq(reviewAssignments.roundId, roundId)),
+    )
     .leftJoin(submissions, eq(submissions.id, reviewAssignments.submissionId))
     .leftJoin(
       reviews,
       and(
         eq(reviews.submissionId, reviewAssignments.submissionId),
         eq(reviews.reviewerId, users.id),
+        eq(reviews.roundId, roundId),
       ),
     )
     .where(eq(users.isBot, false))
@@ -100,8 +120,9 @@ export type ReviewerQueueRow = {
  * `max(...) filter (where reviewer = me)` reads this reviewer's own grade out of
  * the same aggregate that counts everyone's, so the page needs one query rather
  * than one plus a lookup. `array_agg(...)[1]` is the same trick for the two
- * columns no aggregate exists for; the unique index on (submission, reviewer)
- * guarantees there is at most one element to take.
+ * columns no aggregate exists for; the unique index on (round, submission,
+ * reviewer) guarantees there is at most one element to take, which is why the
+ * joins that use this must already be narrowed to one round.
  */
 const MY_GRADE = (reviewerId: string) => ({
   reviewCount: sql<number>`count(${reviews.id})::int`,
@@ -122,7 +143,10 @@ const MY_GRADE = (reviewerId: string) => ({
  * not actionable — `submitReview` refuses it — so leaving it in the queue would
  * show a card whose form cannot do anything.
  */
-export async function assignedQueue(reviewerId: string): Promise<ReviewerQueueRow[]> {
+export async function assignedQueue(
+  reviewerId: string,
+  roundId: string,
+): Promise<ReviewerQueueRow[]> {
   return db
     .select({
       id: submissions.id,
@@ -137,9 +161,16 @@ export async function assignedQueue(reviewerId: string): Promise<ReviewerQueueRo
     .from(reviewAssignments)
     .innerJoin(submissions, eq(submissions.id, reviewAssignments.submissionId))
     .leftJoin(tracks, eq(tracks.id, submissions.trackId))
-    .leftJoin(reviews, eq(reviews.submissionId, submissions.id))
+    .leftJoin(
+      reviews,
+      and(eq(reviews.submissionId, submissions.id), eq(reviews.roundId, roundId)),
+    )
     .where(
-      and(eq(reviewAssignments.reviewerId, reviewerId), eq(submissions.status, 'submitted')),
+      and(
+        eq(reviewAssignments.reviewerId, reviewerId),
+        eq(reviewAssignments.roundId, roundId),
+        eq(submissions.status, 'submitted'),
+      ),
     )
     .groupBy(submissions.id, tracks.name, reviewAssignments.dueAt)
     .orderBy(
@@ -154,7 +185,10 @@ export async function assignedQueue(reviewerId: string): Promise<ReviewerQueueRo
  * behaved before assignments existed. The seed ships no assignments, so a
  * committee that has not run the distributor still has a usable page.
  */
-export async function openSubmissionQueue(reviewerId: string): Promise<ReviewerQueueRow[]> {
+export async function openSubmissionQueue(
+  reviewerId: string,
+  roundId: string,
+): Promise<ReviewerQueueRow[]> {
   return db
     .select({
       id: submissions.id,
@@ -168,17 +202,22 @@ export async function openSubmissionQueue(reviewerId: string): Promise<ReviewerQ
     })
     .from(submissions)
     .leftJoin(tracks, eq(tracks.id, submissions.trackId))
-    .leftJoin(reviews, eq(reviews.submissionId, submissions.id))
+    .leftJoin(
+      reviews,
+      and(eq(reviews.submissionId, submissions.id), eq(reviews.roundId, roundId)),
+    )
     .where(eq(submissions.status, 'submitted'))
     .groupBy(submissions.id, tracks.name)
     .orderBy(sql`count(${reviews.id}) asc`, asc(submissions.createdAt));
 }
 
-export async function assignmentCount(reviewerId: string): Promise<number> {
+export async function assignmentCount(reviewerId: string, roundId: string): Promise<number> {
   const [row] = await db
     .select({ total: sql<number>`count(*)::int` })
     .from(reviewAssignments)
-    .where(eq(reviewAssignments.reviewerId, reviewerId));
+    .where(
+      and(eq(reviewAssignments.reviewerId, reviewerId), eq(reviewAssignments.roundId, roundId)),
+    );
   return row?.total ?? 0;
 }
 
@@ -193,13 +232,18 @@ export type CompletedReviewRow = {
   rubric: Record<string, number> | null;
   comment: string | null;
   gradedAt: Date;
+  roundId: string;
+  roundName: string;
 };
 
 /**
- * Everything this reviewer has graded, at any status. The queue can only show
- * open submissions, so without this a reviewer loses sight of their own work
- * the moment an organizer decides. Still no speaker column: a reviewer's own
- * history is not a hole in blind review.
+ * Everything this reviewer has graded, at any status and in any round. The queue
+ * can only show open submissions in the open round, so without this a reviewer
+ * loses sight of their own work the moment an organizer decides or a round
+ * closes. The round name rides along because the same title can appear twice,
+ * once per pass, and two rows with one score each is only readable if each says
+ * which pass it was. Still no speaker column: a reviewer's own history is not a
+ * hole in blind review.
  */
 export async function myCompletedReviews(reviewerId: string): Promise<CompletedReviewRow[]> {
   return db
@@ -214,9 +258,12 @@ export async function myCompletedReviews(reviewerId: string): Promise<CompletedR
       rubric: reviews.rubric,
       comment: reviews.comment,
       gradedAt: reviews.createdAt,
+      roundId: reviewRounds.id,
+      roundName: reviewRounds.name,
     })
     .from(reviews)
     .innerJoin(submissions, eq(submissions.id, reviews.submissionId))
+    .innerJoin(reviewRounds, eq(reviewRounds.id, reviews.roundId))
     .leftJoin(tracks, eq(tracks.id, submissions.trackId))
     .where(eq(reviews.reviewerId, reviewerId))
     .orderBy(sql`${reviews.createdAt} desc`);
@@ -231,7 +278,7 @@ export type CoverageRow = {
 };
 
 /** Assignment coverage per open submission, thinnest first — the gaps read top-down. */
-export async function submissionCoverage(): Promise<CoverageRow[]> {
+export async function submissionCoverage(roundId: string): Promise<CoverageRow[]> {
   return db
     .select({
       submissionId: submissions.id,
@@ -242,8 +289,17 @@ export async function submissionCoverage(): Promise<CoverageRow[]> {
     })
     .from(submissions)
     .leftJoin(tracks, eq(tracks.id, submissions.trackId))
-    .leftJoin(reviewAssignments, eq(reviewAssignments.submissionId, submissions.id))
-    .leftJoin(reviews, eq(reviews.submissionId, submissions.id))
+    .leftJoin(
+      reviewAssignments,
+      and(
+        eq(reviewAssignments.submissionId, submissions.id),
+        eq(reviewAssignments.roundId, roundId),
+      ),
+    )
+    .leftJoin(
+      reviews,
+      and(eq(reviews.submissionId, submissions.id), eq(reviews.roundId, roundId)),
+    )
     .where(eq(submissions.status, 'submitted'))
     .groupBy(submissions.id, tracks.name)
     .orderBy(sql`count(distinct ${reviewAssignments.reviewerId}) asc`, asc(submissions.title));
@@ -263,7 +319,7 @@ export type AssignmentRow = {
  * the organizer's screen, where knowing who is holding what is the entire
  * point; the join is to the reviewer, never to the speaker.
  */
-export async function assignmentRoster(): Promise<AssignmentRow[]> {
+export async function assignmentRoster(roundId: string): Promise<AssignmentRow[]> {
   return db
     .select({
       submissionId: reviewAssignments.submissionId,
@@ -281,9 +337,10 @@ export async function assignmentRoster(): Promise<AssignmentRow[]> {
       and(
         eq(reviews.submissionId, reviewAssignments.submissionId),
         eq(reviews.reviewerId, reviewAssignments.reviewerId),
+        eq(reviews.roundId, roundId),
       ),
     )
-    .where(eq(submissions.status, 'submitted'))
+    .where(and(eq(reviewAssignments.roundId, roundId), eq(submissions.status, 'submitted')))
     .orderBy(asc(users.name), asc(users.email));
 }
 
@@ -295,9 +352,9 @@ export type ReminderTarget = {
   overdue: number;
 };
 
-/** Reviewers who still owe a grade on an open submission. */
-export async function reviewersWithOutstanding(): Promise<ReminderTarget[]> {
-  const rows = await reviewerCompletion();
+/** Reviewers who still owe a grade on an open submission, in this round. */
+export async function reviewersWithOutstanding(roundId: string): Promise<ReminderTarget[]> {
+  const rows = await reviewerCompletion(roundId);
   return rows
     .filter((row) => row.outstanding > 0)
     .map(({ reviewerId, name, email, outstanding, overdue }) => ({
@@ -433,7 +490,7 @@ export function planAssignments(opts: {
  * out: an evaluator persona grades on its own schedule through the AI runner,
  * and a reminder mail addressed to one goes nowhere a human will read it.
  */
-export async function distributionInputs(): Promise<{
+export async function distributionInputs(roundId: string): Promise<{
   submissions: PlannerSubmission[];
   reviewers: PlannerReviewer[];
 }> {
@@ -455,7 +512,7 @@ export async function distributionInputs(): Promise<{
       })
       .from(reviewAssignments)
       .innerJoin(submissions, eq(submissions.id, reviewAssignments.submissionId))
-      .where(eq(submissions.status, 'submitted')),
+      .where(and(eq(reviewAssignments.roundId, roundId), eq(submissions.status, 'submitted'))),
     db
       .select({ id: users.id })
       .from(users)

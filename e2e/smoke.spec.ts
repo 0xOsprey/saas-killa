@@ -100,6 +100,7 @@ test('the organizer console renders every tab', async ({ page }) => {
   for (const path of [
     '/organizer',
     '/organizer/cfp',
+    '/organizer/cfp/questions',
     '/organizer/submissions',
     '/organizer/abstracts',
     '/organizer/abstracts/book',

@@ -18,6 +18,8 @@ const ABSTRACT =
   'turned out to depend on a side effect nobody documented, and the four-month path to deleting it. ' +
   'You will leave with a method for auditing a job you are afraid to turn off.';
 
+const TAKEAWAY = `Audit one job they are afraid of and delete a consumer of it ${RUN}`;
+
 const ORGANIZER_EMAIL = 'organizer@example.com';
 
 async function signOut(page: Page) {
@@ -46,6 +48,12 @@ test('a proposal travels from the CFP to the published agenda', async ({ page })
   await page.getByTestId('cfp-title').fill(TITLE);
   await page.getByTestId('cfp-abstract').fill(ABSTRACT);
   await page.getByTestId('cfp-format').selectOption('talk_45');
+  // The form carries the organizer's own questions now, and one of them is
+  // required. A submission that skips it never reaches the queue.
+  await page
+    .getByTestId('custom-questions')
+    .getByLabel('What will the audience be able to do afterwards? *')
+    .fill(TAKEAWAY);
   await page.getByTestId('cfp-submit').click();
 
   await expect(page.getByTestId('submitted-confirmation')).toBeVisible();
@@ -66,6 +74,10 @@ test('a proposal travels from the CFP to the published agenda', async ({ page })
   // Blind review is the property under test here, not the wording on the page:
   // the reviewer screen must not carry the speaker's name at all.
   await expect(page.locator('body')).not.toContainText(SPEAKER_NAME);
+
+  // The answers travel with the proposal. A committee that grades on a question
+  // the organizer added has to be able to read what was answered.
+  await expect(card.getByTestId('answers')).toContainText(TAKEAWAY);
 
   // A grade is now four criterion scores, not one. The stored `reviews.score` is
   // their weighted mean, so every criterion has to be 5 for the card to report 5.
@@ -147,6 +159,10 @@ test('an undecided proposal is not reachable from the public agenda', async ({ p
   await page.getByTestId('cfp-title').fill(title);
   await page.getByTestId('cfp-abstract').fill(ABSTRACT);
   await page.getByTestId('cfp-format').selectOption('talk_25');
+  await page
+    .getByTestId('custom-questions')
+    .getByLabel('What will the audience be able to do afterwards? *')
+    .fill('Name the consumers of a job they cannot switch off.');
   await page.getByTestId('cfp-submit').click();
   await expect(page.getByTestId('submitted-confirmation')).toBeVisible();
 

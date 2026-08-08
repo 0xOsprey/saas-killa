@@ -150,7 +150,7 @@ export default async function SpeakerPage({
         const accepted = row.status === 'accepted';
         const rowTasks = bySubmission.get(row.id) ?? [];
         return (
-          <Card key={row.id} className="space-y-4">
+          <Card key={row.id} className="space-y-4" data-testid={`submission-card-${row.id}`}>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h2 className="font-medium text-ink">{row.title}</h2>
@@ -179,7 +179,14 @@ export default async function SpeakerPage({
               </ul>
             ) : null}
 
-            {accepted && !row.speakerConfirmedAt ? (
+            {row.isOwner ? null : (
+              <p className="text-xs text-muted" data-testid={`coauthor-${row.id}`}>
+                You are a co-author here. You can edit the proposal; withdrawing it and confirming
+                attendance stay with the speaker who filed it.
+              </p>
+            )}
+
+            {row.isOwner && accepted && !row.speakerConfirmedAt ? (
               <form action={confirmAttendance} className="flex items-center gap-3">
                 <input type="hidden" name="submissionId" value={row.id} />
                 <Button type="submit" data-testid={`confirm-${row.id}`}>
@@ -191,7 +198,7 @@ export default async function SpeakerPage({
               </form>
             ) : null}
 
-            {accepted && row.speakerConfirmedAt ? (
+            {row.isOwner && accepted && row.speakerConfirmedAt ? (
               <Notice tone="good">Attendance confirmed. Thank you.</Notice>
             ) : null}
 
@@ -235,7 +242,7 @@ export default async function SpeakerPage({
                 </LinkButton>
               ) : null}
 
-              {row.status !== 'withdrawn' ? (
+              {row.isOwner && row.status !== 'withdrawn' ? (
                 <form action={withdrawSubmission}>
                   <input type="hidden" name="submissionId" value={row.id} />
                   <Button type="submit" variant="ghost" className="text-xs">

@@ -374,10 +374,11 @@ function failureReason(error: unknown): string {
  */
 export async function runPersona(
   persona: EvaluatorPersona,
-  options: { eventName: string; limit?: number; replace?: boolean },
+  options: { eventName: string; roundId: string; limit?: number; replace?: boolean },
 ): Promise<PersonaRunResult> {
   const limit = Math.max(1, Math.floor(options.limit ?? DEFAULT_BATCH));
   const replace = options.replace ?? false;
+  const { roundId } = options;
 
   const candidates = await db
     .select({
@@ -393,7 +394,14 @@ export async function runPersona(
     .leftJoin(tracks, eq(tracks.id, submissions.trackId))
     .leftJoin(
       reviews,
-      and(eq(reviews.submissionId, submissions.id), eq(reviews.reviewerId, persona.userId)),
+      and(
+        eq(reviews.submissionId, submissions.id),
+        eq(reviews.reviewerId, persona.userId),
+        // Scoped to the round being graded. A persona that read this proposal in
+        // round one has not read it in round two, and treating the earlier grade
+        // as "already done" would make a shortlist round a no-op.
+        eq(reviews.roundId, roundId),
+      ),
     )
     .where(eq(submissions.status, 'submitted'))
     .orderBy(asc(submissions.createdAt));
@@ -430,6 +438,7 @@ export async function runPersona(
       const written = await db
         .insert(reviews)
         .values({
+          roundId,
           submissionId: row.id,
           reviewerId: persona.userId,
           score: evaluation.score,
@@ -440,7 +449,7 @@ export async function runPersona(
           personaId: persona.id,
         })
         .onConflictDoUpdate({
-          target: [reviews.submissionId, reviews.reviewerId],
+          target: [reviews.roundId, reviews.submissionId, reviews.reviewerId],
           setWhere: and(eq(reviews.source, 'ai'), eq(reviews.personaId, persona.id)),
           set: {
             score: evaluation.score,
@@ -478,19 +487,20 @@ export async function runPersona(
 }
 
 /**
- * Run every active persona over what it has not already graded. Kept on its v1
- * signature because the submissions screen and the CLI both call it that way;
- * the return value now carries enough to report a run instead of only counting
- * it.
+ * Run every active persona over what it has not already graded, inside one
+ * round. The round is an explicit argument rather than looked up here, because
+ * the two callers reach it differently: a server action already holds the open
+ * round, and the CLI has to be told which one it is grading into.
  */
 export async function evaluatePending(
   eventName: string,
+  roundId: string,
   limit = DEFAULT_BATCH,
 ): Promise<RunResult> {
   const personas = await personasForRun();
   const runs: PersonaRunResult[] = [];
   for (const persona of personas) {
-    runs.push(await runPersona(persona, { eventName, limit }));
+    runs.push(await runPersona(persona, { eventName, roundId, limit }));
   }
   return summarise(runs);
 }

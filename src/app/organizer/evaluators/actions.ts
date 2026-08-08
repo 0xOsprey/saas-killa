@@ -17,6 +17,7 @@ import {
 } from '@/lib/ai-evaluator';
 import type { RunReport } from '@/lib/ai-evaluator';
 import { getEvent } from '@/lib/queries';
+import { activeRound } from '@/lib/rounds';
 import { RUBRIC_KEYS } from '@/lib/rubric';
 
 function revalidateEvaluators() {
@@ -170,8 +171,14 @@ export async function runPersonaEvaluation(_previous: RunReport | null, formData
   }
 
   const event = await getEvent();
+  const round = await activeRound();
+  if (!round) {
+    return emptyReport('No review round is open. Open one on the call-for-papers screen first.');
+  }
+
   const run = await runPersona(persona, {
     eventName: event.name,
+    roundId: round.id,
     limit: input.limit,
     replace: input.mode === 'replace',
   });

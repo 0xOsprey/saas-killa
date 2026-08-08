@@ -18,6 +18,7 @@ import {
   withLock,
 } from '@/lib/content';
 import { getEvent } from '@/lib/queries';
+import { activeRound } from '@/lib/rounds';
 import { contentReturnedMail } from './mail';
 
 const decisionSchema = z.object({
@@ -105,8 +106,10 @@ export async function notifyDecided(): Promise<void> {
 export async function gradePending(): Promise<void> {
   await requireRole('organizer');
   if (!evaluatorConfigured()) return;
+  const round = await activeRound();
+  if (!round) return;
   const event = await getEvent();
-  await evaluatePending(event.name);
+  await evaluatePending(event.name, round.id);
   revalidatePath('/organizer/submissions');
   revalidatePath('/review');
 }

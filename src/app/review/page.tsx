@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { db } from '@/db';
@@ -14,8 +14,11 @@ import {
   type ReviewerQueueRow,
 } from '@/lib/grading';
 import { getEvent } from '@/lib/queries';
+import { activeRound } from '@/lib/rounds';
 import { RUBRIC, RUBRIC_KEYS, RUBRIC_LABELS } from '@/lib/rubric';
 import { submitReview } from './actions';
+import { AnswerList } from '@/components/AnswerList';
+import { answersByQuestion } from '@/lib/question-queries';
 
 const STATUS_TONE = {
   submitted: 'neutral',
@@ -52,15 +55,28 @@ export default async function ReviewPage({
   const params = await searchParams;
   const tab = params.tab === 'done' ? 'done' : 'queue';
 
-  const [event, assignments] = await Promise.all([getEvent(), assignmentCount(user.id)]);
+  const [event, round] = await Promise.all([getEvent(), activeRound()]);
+
+  // Grading happens in a round. With none open there is nothing to grade into,
+  // and a queue that accepted scores would be filing them nowhere.
+  if (!round) {
+    return (
+      <Notice tone="warn">
+        No review round is open. An organizer opens one from the call-for-papers
+        screen, and grading resumes here the moment they do.
+      </Notice>
+    );
+  }
+
+  const assignments = await assignmentCount(user.id, round.id);
 
   // No assignments means the committee has not run the distributor yet. Falling
   // back to every open submission is what this page did before assignments
   // existed, and it is better than an empty screen that looks broken.
   const usingFallback = assignments === 0;
   const queue = usingFallback
-    ? await openSubmissionQueue(user.id)
-    : await assignedQueue(user.id);
+    ? await openSubmissionQueue(user.id, round.id)
+    : await assignedQueue(user.id, round.id);
 
   const completed = await myCompletedReviews(user.id);
 
@@ -75,8 +91,12 @@ export default async function ReviewPage({
       rubric: reviews.rubric,
     })
     .from(reviews)
-    .where(eq(reviews.source, 'ai'));
+    .where(and(eq(reviews.source, 'ai'), eq(reviews.roundId, round.id)));
   const aiBySubmission = new Map(aiNotes.map((n) => [n.submissionId, n]));
+
+  // The organizer-configured answers, in one query for the whole queue. Nothing
+  // in it joins `users`, so it does not open a hole in the blind read.
+  const answers = await answersByQuestion(queue.map((row) => row.id));
 
   const graded = queue.filter((row) => row.myScore !== null).length;
   const now = Date.now();
@@ -87,7 +107,7 @@ export default async function ReviewPage({
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Review queue"
+        title={`Review queue · ${round.name}`}
         description={`${graded} of ${queue.length} graded${overdue > 0 ? ` · ${overdue} past due` : ''}.`}
       />
 
@@ -168,6 +188,8 @@ export default async function ReviewPage({
 
                 <p className="whitespace-pre-wrap text-sm text-ink">{row.abstract}</p>
 
+                <AnswerList answers={answers.get(row.id) ?? []} />
+
                 {ai ? (
                   <details className="rounded-md border border-line bg-slate-50 p-3">
                     <summary className="cursor-pointer text-xs font-medium text-muted">
@@ -228,13 +250,19 @@ export default async function ReviewPage({
 
           {completed.map((row) => (
             <Card
-              key={row.submissionId}
+              key={`${row.roundId}-${row.submissionId}`}
               className="space-y-2"
               data-testid={`completed-${row.submissionId}`}
+              data-round={row.roundId}
             >
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <h2 className="font-medium text-ink">{row.title}</h2>
                 <div className="flex items-center gap-2">
+                  {/* This list spans rounds, so which one a grade belongs to is part
+                      of what it says. The same proposal read twice is two rows. */}
+                  <Badge data-testid={`round-badge-${row.roundId}-${row.submissionId}`}>
+                    {row.roundName}
+                  </Badge>
                   <Badge tone="good">you scored {row.score}</Badge>
                   <Badge tone={STATUS_TONE[row.status]}>{STATUS_LABELS[row.status]}</Badge>
                 </div>

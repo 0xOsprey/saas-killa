@@ -5,6 +5,7 @@ import {
   summarise,
 } from '@/lib/ai-evaluator';
 import type { PersonaRunResult } from '@/lib/ai-evaluator';
+import { activeRound } from '@/lib/rounds';
 import { getEvent } from '@/lib/queries';
 
 const USAGE = `Usage: pnpm evaluate [--persona <name>] [--limit <n>] [--replace]
@@ -64,12 +65,27 @@ async function main() {
     process.exit(1);
   }
 
+  // The CLI grades into whichever round is open, the same one the review queue
+  // is filing human grades into. Refusing outright beats guessing: writing into
+  // a closed round would add scores to a pass already reported on.
+  const round = await activeRound();
+  if (!round) {
+    console.error('No review round is open. Open one at /organizer/cfp first.');
+    process.exit(1);
+  }
+  console.log(`→ grading into ${round.name}`);
+
   const runs: PersonaRunResult[] = [];
   for (const persona of personas) {
     console.log(
       `→ ${persona.name}: ${replace ? 'replacing its own grades' : 'grading new work'}, up to ${limit}`,
     );
-    const run = await runPersona(persona, { eventName: event.name, limit, replace });
+    const run = await runPersona(persona, {
+      eventName: event.name,
+      roundId: round.id,
+      limit,
+      replace,
+    });
     runs.push(run);
     console.log(
       `  graded ${run.graded}, skipped ${run.skipped}, failed ${run.failed}` +

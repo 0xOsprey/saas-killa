@@ -2,6 +2,7 @@ import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { rooms, slots, submissionRevisions, submissions, tracks, users } from '@/db/schema';
 import type { ContentStatus, SubmissionFormat, SubmissionStatus } from '@/db/schema';
+import { writableBy } from './abstracts';
 
 /**
  * Content Management: the moderation gate over speaker-supplied content, the
@@ -478,6 +479,6 @@ export async function myContent(speakerId: string): Promise<SpeakerContentRow[]>
     .leftJoin(tracks, eq(tracks.id, submissions.trackId))
     .leftJoin(slots, eq(slots.submissionId, submissions.id))
     .leftJoin(rooms, eq(rooms.id, slots.roomId))
-    .where(and(eq(submissions.speakerId, speakerId), eq(submissions.status, 'accepted')))
+    .where(and(writableBy(speakerId), eq(submissions.status, 'accepted')))
     .orderBy(asc(submissions.title));
 }

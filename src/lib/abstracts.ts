@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, ilike, inArray, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, exists, ilike, inArray, or, sql, type SQL } from 'drizzle-orm';
 import { db } from '@/db';
 import {
   reviews,
@@ -158,6 +158,45 @@ export function currentValues(row: EditableSubmission): AbstractEdit {
  * `ownerId`, when given, goes into the WHERE clause rather than a check before
  * it, so a forged submission id updates zero rows instead of someone else's.
  */
+/**
+ * Who may write to a submission: the speaker who filed it, or a credited
+ * co-author the filer granted access to.
+ *
+ * One predicate, correlated on `submissions.id`, so it drops into any query
+ * already selecting from `submissions`. Every writer below composes this into
+ * its WHERE clause rather than checking afterwards, which is what makes a forged
+ * submission id update zero rows instead of somebody else's talk. The filer's
+ * own access does not read `can_edit`, so nobody can lock themselves out of
+ * their own proposal.
+ */
+export function writableBy(userId: string): SQL {
+  return or(
+    eq(submissions.speakerId, userId),
+    exists(
+      db
+        .select({ one: sql`1` })
+        .from(submissionAuthors)
+        .where(
+          and(
+            eq(submissionAuthors.submissionId, submissions.id),
+            eq(submissionAuthors.userId, userId),
+            eq(submissionAuthors.canEdit, true),
+          ),
+        ),
+    ),
+  )!;
+}
+
+/** Whether this person may act on this submission, for a page deciding what to render. */
+export async function canWriteSubmission(submissionId: string, userId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: submissions.id })
+    .from(submissions)
+    .where(and(eq(submissions.id, submissionId), writableBy(userId)))
+    .limit(1);
+  return row !== undefined;
+}
+
 export async function applyAbstractEdit(opts: {
   submissionId: string;
   editorId: string;
@@ -165,7 +204,7 @@ export async function applyAbstractEdit(opts: {
   next: AbstractEdit;
 }): Promise<EditableField[]> {
   const scope = opts.ownerId
-    ? and(eq(submissions.id, opts.submissionId), eq(submissions.speakerId, opts.ownerId))
+    ? and(eq(submissions.id, opts.submissionId), writableBy(opts.ownerId))
     : eq(submissions.id, opts.submissionId);
 
   return db.transaction(async (tx) => {
@@ -212,6 +251,7 @@ export type AuthorRow = {
   position: number;
   affiliation: string | null;
   isPresenter: boolean;
+  canEdit: boolean;
 };
 
 async function authorRows(submissionIds: string[]): Promise<(AuthorRow & { submissionId: string })[]> {
@@ -225,6 +265,7 @@ async function authorRows(submissionIds: string[]): Promise<(AuthorRow & { submi
       position: submissionAuthors.position,
       affiliation: submissionAuthors.affiliation,
       isPresenter: submissionAuthors.isPresenter,
+      canEdit: submissionAuthors.canEdit,
     })
     .from(submissionAuthors)
     .innerJoin(users, eq(users.id, submissionAuthors.userId))
@@ -266,6 +307,8 @@ export function withSpeakerFallback(
       position: 0,
       affiliation: null,
       isPresenter: true,
+      // The filer always may. The column is about everyone else.
+      canEdit: true,
     },
   ];
 }
@@ -318,7 +361,7 @@ async function logAuthorChange(
 async function ensureFilerIsAuthorZero(submissionId: string, speakerId: string): Promise<void> {
   await db
     .insert(submissionAuthors)
-    .values({ submissionId, userId: speakerId, position: 0 })
+    .values({ submissionId, userId: speakerId, position: 0, canEdit: true })
     .onConflictDoNothing();
 }
 
@@ -336,7 +379,7 @@ async function ownedSubmission(
     .from(submissions)
     .where(
       ownerId
-        ? and(eq(submissions.id, submissionId), eq(submissions.speakerId, ownerId))
+        ? and(eq(submissions.id, submissionId), writableBy(ownerId))
         : eq(submissions.id, submissionId),
     )
     .limit(1);
@@ -351,6 +394,7 @@ export async function addAuthorByEmail(opts: {
   name: string | null;
   affiliation: string | null;
   isPresenter: boolean;
+  canEdit?: boolean;
 }): Promise<{ error?: string }> {
   const owned = await ownedSubmission(opts.submissionId, opts.ownerId);
   if (!owned) return { error: 'Submission not found.' };
@@ -375,12 +419,17 @@ export async function addAuthorByEmail(opts: {
       position: seat?.next ?? 1,
       affiliation: opts.affiliation,
       isPresenter: opts.isPresenter,
+      canEdit: opts.canEdit ?? false,
     })
     // Re-adding someone already credited edits their affiliation rather than
     // failing; their position is theirs and is not reshuffled by a re-add.
     .onConflictDoUpdate({
       target: [submissionAuthors.submissionId, submissionAuthors.userId],
-      set: { affiliation: opts.affiliation, isPresenter: opts.isPresenter },
+      set: {
+        affiliation: opts.affiliation,
+        isPresenter: opts.isPresenter,
+        canEdit: opts.canEdit ?? false,
+      },
     });
 
   await logAuthorChange(
@@ -419,6 +468,54 @@ export async function removeAuthor(opts: {
     before,
     authorSummary(await authorsFor(opts.submissionId)),
   );
+  return {};
+}
+
+/**
+ * Hand a credited co-author write access, or take it back.
+ *
+ * Only the filer may call this, which is why `ownerId` is compared to
+ * `speakerId` here rather than run through `writableBy`: a co-author who could
+ * grant access could grant it to anyone, and the filer would have given away
+ * more than they chose to.
+ */
+export async function setAuthorAccess(opts: {
+  submissionId: string;
+  ownerId: string;
+  editorId: string;
+  userId: string;
+  canEdit: boolean;
+}): Promise<{ error?: string }> {
+  const [owned] = await db
+    .select({ speakerId: submissions.speakerId })
+    .from(submissions)
+    .where(and(eq(submissions.id, opts.submissionId), eq(submissions.speakerId, opts.ownerId)))
+    .limit(1);
+  if (!owned) return { error: 'Submission not found.' };
+  if (opts.userId === owned.speakerId) {
+    return { error: 'The speaker who filed the submission always has access to it.' };
+  }
+
+  const result = await db
+    .update(submissionAuthors)
+    .set({ canEdit: opts.canEdit })
+    .where(
+      and(
+        eq(submissionAuthors.submissionId, opts.submissionId),
+        eq(submissionAuthors.userId, opts.userId),
+      ),
+    )
+    .returning({ userId: submissionAuthors.userId });
+  if (result.length === 0) return { error: 'That person is not credited on this submission.' };
+
+  await db.insert(submissionRevisions).values({
+    submissionId: opts.submissionId,
+    editorId: opts.editorId,
+    field: 'authorAccess',
+    oldValue: opts.canEdit ? 'view' : 'edit',
+    newValue: opts.canEdit ? 'edit' : 'view',
+  });
+
   return {};
 }
 

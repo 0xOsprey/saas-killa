@@ -9,6 +9,7 @@ import { submissions } from '@/db/schema';
 import type { ContentStatus } from '@/db/schema';
 import { requireUser } from '@/lib/auth';
 import { applyTextEdit, isLocked, logRevisions, type TextEdit } from '@/lib/content';
+import { writableBy } from '@/lib/abstracts';
 
 /**
  * The speaker's own content surface. Every action scopes its WHERE clause to
@@ -54,7 +55,7 @@ async function loadOwned(submissionId: string, speakerId: string): Promise<Owned
     .where(
       and(
         eq(submissions.id, submissionId),
-        eq(submissions.speakerId, speakerId),
+        writableBy(speakerId),
         eq(submissions.status, 'accepted'),
       ),
     )
@@ -89,7 +90,7 @@ async function setContentStatus(
   await db
     .update(submissions)
     .set({ contentStatus: next, updatedAt: new Date() })
-    .where(and(eq(submissions.id, row.id), eq(submissions.speakerId, speakerId)));
+    .where(and(eq(submissions.id, row.id), writableBy(speakerId)));
   await logRevisions([
     {
       submissionId: row.id,

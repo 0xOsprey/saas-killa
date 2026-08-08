@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { db } from '@/db';
 import { reviews, submissions } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
+import { activeRound } from '@/lib/rounds';
 import { RUBRIC_KEYS, weightedScore, type RubricKey } from '@/lib/rubric';
 
 const criterion = z.coerce.number().int().min(1).max(5);
@@ -46,9 +47,16 @@ export async function submitReview(formData: FormData): Promise<void> {
   // A reviewer may not grade their own proposal.
   if (target.speakerId === reviewer.id) return;
 
+  // A grade belongs to a round. With no round open there is nothing to file it
+  // against, and silently writing it into the last closed one would reopen a
+  // pass the committee has already reported on.
+  const round = await activeRound();
+  if (!round) return;
+
   await db
     .insert(reviews)
     .values({
+      roundId: round.id,
       submissionId: input.submissionId,
       reviewerId: reviewer.id,
       score,
@@ -57,7 +65,7 @@ export async function submitReview(formData: FormData): Promise<void> {
       source: 'human',
     })
     .onConflictDoUpdate({
-      target: [reviews.submissionId, reviews.reviewerId],
+      target: [reviews.roundId, reviews.submissionId, reviews.reviewerId],
       set: { score, rubric, comment: input.comment ?? null, createdAt: sql`now()` },
     });
 
