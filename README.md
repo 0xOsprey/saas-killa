@@ -2,7 +2,13 @@
 
 Conference programme software: a call for papers, blind reviewer grading, an AI
 evaluator, accept/reject with speaker notification, a drag-and-drop schedule
-grid, awards, an ePoster gallery, and a public agenda.
+grid, calendar invitations that update in place, file uploads, awards, an
+ePoster gallery, a speaker portal with organizer-authored pages, a public
+agenda, embeddable widgets for the event's own website, and a one-way push of
+the finished programme to Accelevents.
+
+`SCOPE.md` is the requirement-by-requirement account of what is built, what is
+deliberately not, and which test covers each.
 
 Next.js 15 (App Router, Server Actions) · Postgres via Drizzle · Tailwind v4 ·
 Playwright.
@@ -15,7 +21,8 @@ openssl rand -hex 32                # a value for SESSION_SECRET
 
 pnpm db:up                          # Postgres 17 in Docker, 127.0.0.1:5433
 pnpm db:migrate                     # apply drizzle/*.sql
-pnpm db:seed                        # one event, 40 submissions, 24 speakers
+pnpm db:seed                        # one event, 40 submissions, 24 speakers,
+                                    # a two-day grid with 9 talks on it
 pnpm dev                            # http://127.0.0.1:9140
 ```
 
@@ -73,6 +80,28 @@ schedule form posts a bare wall clock with no offset;
 server's, which is what makes a London schedule come out right on a UTC host and
 across a DST boundary.
 
+**A re-sent invitation updates the entry the speaker already has.** The UID of
+every `.ics` is derived from the submission id and `SEQUENCE` always rises, which
+is the pair RFC 5545 clients use to revise an appointment instead of adding a
+second one an hour after the first. What gets emailed is decided by comparing
+the current placement against the one the speaker was last told about, so a talk
+dragged four times sends one mail and a talk moved out and back sends none.
+
+**An uploaded file's type comes from its own first bytes.** `src/lib/uploads.ts`
+sniffs magic bytes and never trusts the declared `Content-Type`; the name on disk
+is `<uuid><sniffed ext>`, so no part of a user's filename reaches the filesystem.
+SVG is refused everywhere, being the one image format that runs script. A read
+the viewer is not entitled to is a 404 rather than a 403, because a 403 tells an
+anonymous prober which document ids exist.
+
+**The Accelevents push rehearses against fixtures unless all three variables are
+set.** Missing any one of `ACCELEVENTS_BASE_URL`, `_API_KEY` or `_EVENT_ID` is a
+dry run rather than an error, because the failure worth designing against is a
+half-configured deploy pushing a partial programme into somebody's live event.
+The dry run is not a print statement: it builds every request, checks every
+response, records every remote id, and refuses a speaker with no name the way the
+far end would.
+
 **The AI evaluator is a reviewer, not a decision-maker.** It holds a `users` row
 with the `reviewer` role and writes ordinary `reviews` rows tagged
 `source: 'ai'`, so its grade averages with human grades on the same 1-5 scale.
@@ -86,14 +115,21 @@ its rubric breakdown through a tool call rather than parseable prose. Without
 pnpm test          # Playwright; resets the database first
 ```
 
-Three specs. The first walks one proposal the length of the pipeline —
-submit, grade, accept, notify, schedule, publish, then read it as a signed-out
-visitor — and checks the acceptance email actually landed. The other two are the
-authorisation cases: an undecided proposal 404s for the public even by direct
-URL, and the review queue redirects a signed-out visitor to `/login`.
+Ten specs, 34 tests, no unit runner. `pipeline.spec.ts` walks one proposal the
+length of the pipeline: submit, grade, accept, notify, schedule, publish, then
+read it as a signed-out visitor, checking the acceptance email actually landed.
+`smoke.spec.ts` opens every route the nav leads to, reading the tab list off the
+nav rather than from a copy that goes stale. The rest are one file per feature:
+uploads, portal pages, the schedule grid, calendar invitations, the embeddable
+widgets, the Accelevents push, and the speaker onboarding tracker.
 
-Placement in the test uses click-to-select then click-to-place rather than
-dragging, because HTML5 drag events are not reliably synthesisable in a browser
+They share one database, seeded once in `globalSetup` and never between files,
+so they run in a fixed order with a single worker and each file puts back what
+it changed. A test that leaves a talk on the grid is a test that breaks four
+later files for a reason none of them can see.
+
+Placement in the tests uses click-to-select then click-to-place as well as
+dragging, because HTML5 drag events are not reliably synthesisable in every
 harness. Both paths call the same server action.
 
 ## Deploying
@@ -104,6 +140,7 @@ Any Postgres connection string works: Supabase, Neon, or your own. Point
 
 ## Not built
 
-Attendee registration, ticketing and check-in; sponsors and exhibitors; an
-embeddable widget for an external site; and wiki or resource pages inside the
-speaker portal.
+Attendee registration, ticketing and check-in; sponsors and exhibitors;
+submission payments and payment gateways; multi-language workflows; and AMS
+integrations (iMIS, Personify, Blackbaud, Salesforce). `SCOPE.md` says why for
+each.
