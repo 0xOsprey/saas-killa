@@ -48,9 +48,22 @@ export function dayLabel(date: Date, timezone: string): string {
   return inEventZone(date, timezone, { weekday: 'long', day: 'numeric', month: 'long' });
 }
 
-/** Stable key for grouping slots into days, computed in the event's timezone. */
+/**
+ * Stable key for one day, computed in the event's timezone.
+ *
+ * `en-CA` rather than this module's usual `en-GB`, because the key is not only a
+ * grouping key: the day filter puts it in the query string, and
+ * `parseAgendaFilters` keeps `YYYY-MM-DD` and discards anything else. Under
+ * `en-GB` this formatted as `06/11/2026`, so every day the filter offered was
+ * thrown away on arrival and the agenda came back unfiltered.
+ */
 export function dayKey(date: Date, timezone: string): string {
-  return inEventZone(date, timezone, { year: 'numeric', month: '2-digit', day: '2-digit' });
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
 }
 
 /**
