@@ -32,7 +32,10 @@ const TRACKS = [
 const ROOMS = [
   { name: 'Main hall', capacity: 400, position: 0 },
   { name: 'Studio', capacity: 120, position: 1 },
-  { name: 'Workshop room', capacity: 60, position: 2 },
+  // Deliberately smaller than the number of people who star the headline talk
+  // below, so the room-capacity warning has a placement that actually trips it.
+  // At 60 seats nothing in a 28-account fixture could ever exceed it.
+  { name: 'Workshop room', capacity: 18, position: 2 },
 ];
 
 const TITLE_HEADS = [
@@ -101,6 +104,41 @@ const KEYWORDS = [
  * broken feature rather than the coincidence it is. One poster stays undecided
  * so the format is represented in the review queue too.
  */
+/**
+ * Speaker-supplied materials and their moderation state. Both bands are needed
+ * and for different screens: the `pending` rows are what the organizer's
+ * approve queue has to act on, and the `approved` rows are the only ones a
+ * public detail page will render a Materials card for. Seeding only `pending`
+ * left that card unreachable on a fresh clone, which reads as a missing
+ * feature. `draft` rows carry nothing, which is what a speaker who has not
+ * uploaded yet actually looks like.
+ */
+function contentFor(index: number, status: SubmissionStatus) {
+  const nothing = {
+    slidesUrl: null,
+    recordingUrl: null,
+    resourcesNote: null,
+    contentStatus: 'draft' as const,
+  };
+  if (status !== 'accepted') return nothing;
+  if (index % 4 === 1) {
+    return {
+      ...nothing,
+      slidesUrl: `https://example.com/slides/${index + 1}.pdf`,
+      contentStatus: 'pending' as const,
+    };
+  }
+  if (index % 4 === 2) {
+    return {
+      slidesUrl: `https://example.com/slides/${index + 1}.pdf`,
+      recordingUrl: `https://example.com/recordings/${index + 1}.mp4`,
+      resourcesNote: 'Repo and the load-test harness are linked from the last slide.',
+      contentStatus: 'approved' as const,
+    };
+  }
+  return nothing;
+}
+
 function statusFor(index: number, format: SubmissionFormat): SubmissionStatus {
   if (format === 'poster') return index === 39 ? 'submitted' : 'accepted';
   if (index >= 15) return 'submitted';
@@ -254,14 +292,7 @@ async function main() {
       // Half the accepted speakers have confirmed, so the organizer roster shows
       // the "not confirmed" badge doing its job rather than an all-green column.
       speakerConfirmedAt: status === 'accepted' && i % 2 === 0 ? new Date() : null,
-      // A few accepted talks arrive with slides waiting on approval, so the
-      // content moderation queue is not empty on a fresh clone.
-      slidesUrl:
-        status === 'accepted' && i % 4 === 1
-          ? `https://example.com/slides/${i + 1}.pdf`
-          : null,
-      contentStatus:
-        status === 'accepted' && i % 4 === 1 ? ('pending' as const) : ('draft' as const),
+      ...contentFor(i, status),
       posterUrl:
         format === 'poster'
           ? `https://placehold.co/900x1200/png?text=${encodeURIComponent(`${head}+${i + 1}`)}`
@@ -417,11 +448,20 @@ async function main() {
 
   // Stars on accepted work. These are the only demand signal the room-capacity
   // warning and the poster gallery's engagement column have to read.
-  const bookmarkValues = speakerRows.slice(0, 14).flatMap((user, i) =>
-    accepted
-      .filter((_, j) => (i + j) % 3 === 0)
-      .map((submission) => ({ userId: user.id, submissionId: submission.id })),
-  );
+  // One headline talk that everybody stars. Spread evenly, no submission gets
+  // more than about five stars, and the smallest room seats 18, so the
+  // room-capacity warning had no placement anywhere that could trip it.
+  const headliner = accepted[0];
+  const bookmarkValues = [
+    ...(headliner
+      ? speakerRows.map((user) => ({ userId: user.id, submissionId: headliner.id }))
+      : []),
+    ...speakerRows.slice(0, 14).flatMap((user, i) =>
+      accepted
+        .filter((_, j) => (i + j) % 3 === 0)
+        .map((submission) => ({ userId: user.id, submissionId: submission.id })),
+    ),
+  ];
   await db.insert(bookmarks).values(bookmarkValues).onConflictDoNothing();
 
   // Three speakers who cannot be scheduled on the morning of day one.

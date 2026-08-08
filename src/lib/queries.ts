@@ -1,4 +1,4 @@
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, ne, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { events, reviews, rooms, slots, submissions, tracks, users } from '@/db/schema';
 import type { AudienceLevel, Event, SubmissionFormat, SubmissionStatus } from '@/db/schema';
@@ -165,7 +165,17 @@ export async function unscheduledAccepted() {
     .innerJoin(users, eq(users.id, submissions.speakerId))
     .leftJoin(tracks, eq(tracks.id, submissions.trackId))
     .leftJoin(slots, eq(slots.submissionId, submissions.id))
-    .where(and(eq(submissions.status, 'accepted'), sql`${slots.id} is null`))
+    .where(
+      and(
+        eq(submissions.status, 'accepted'),
+        sql`${slots.id} is null`,
+        // A poster is displayed on a board, not slotted into a time band, and
+        // its format is worth zero minutes. Before any poster was accepted this
+        // filter was invisible; now that the fixture accepts three, without it
+        // the scheduling pool offers three items no band can hold.
+        ne(submissions.format, 'poster'),
+      ),
+    )
     .orderBy(asc(submissions.title));
 }
 
