@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { extractMagicLink, waitForMail } from './mailbox';
 
 /**
@@ -32,6 +32,35 @@ async function placeFirstFromPool(page: Page): Promise<string> {
   return title;
 }
 
+/**
+ * Drag one cell onto another, by hand.
+ *
+ * Not `locator.dragTo`, which scrolls the target into view *after* pressing the
+ * mouse button and before Chromium has decided a drag is starting. On a grid
+ * taller than the viewport that scroll moves the layout under a stationary
+ * cursor, so `dragstart` fires on whichever cell has slid into the point:
+ * measured on this fixture as mousedown landing on the right cell at scrollY
+ * 670 and dragstart firing on its neighbour at scrollY 626, which moved a talk
+ * the test had never named. A viewport tall enough to hold both cells means
+ * nothing scrolls once the button is down.
+ */
+async function dragSlot(page: Page, source: Locator, target: Locator) {
+  await page.setViewportSize({ width: 1280, height: 1600 });
+  await source.scrollIntoViewIfNeeded();
+  const from = (await source.boundingBox())!;
+  const to = (await target.boundingBox())!;
+  const at = (box: { x: number; y: number; width: number; height: number }) =>
+    [box.x + box.width / 2, box.y + box.height / 2] as const;
+
+  await page.mouse.move(...at(from));
+  await page.mouse.down();
+  // Two moves, not one. The first is what Chromium treats as the gesture
+  // beginning and the second is the one the drop target sees.
+  await page.mouse.move(...at(to), { steps: 12 });
+  await page.mouse.move(...at(to));
+  await page.mouse.up();
+}
+
 test('an organizer drags a placed talk into another box', async ({ page }) => {
   await signInVia(page, ORGANIZER);
   await page.goto('/organizer/schedule');
@@ -48,7 +77,7 @@ test('an organizer drags a placed talk into another box', async ({ page }) => {
   // The gesture under test is moving a talk that is already placed, which is
   // what rearranging a schedule mostly is. Dragging out of the pool was already
   // possible; dragging out of a box was not.
-  await source.dragTo(target);
+  await dragSlot(page, source, target);
 
   await expect(page.locator(`[data-testid="${targetId}"]`)).toContainText(title);
   await expect(page.locator(`[data-testid="${sourceId}"]`)).toContainText('empty');

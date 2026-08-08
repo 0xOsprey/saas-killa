@@ -6,12 +6,12 @@ import { extractMagicLink, waitForMail, type CapturedMail } from './mailbox';
  * attached to them.
  *
  * Runs after `schedule.spec.ts` and `smoke.spec.ts`, before `uploads.spec.ts`.
- * `pipeline.spec.ts` has already accepted one talk and placed it, so there is a
- * real placement waiting for its first invitation when this file starts. That
- * talk, and not any of the fixture's nine, is the one under test here: a talk
- * already in a slot when it is accepted gets its invitation attached to the
- * acceptance mail, and `notifyDecided` records the notice key at the same time,
- * so it has no separate schedule notice to read.
+ * This is the only file that presses the send button, so it is the one that
+ * finds every placement still waiting for its first invitation. Which talk that
+ * turns out to be depends on what ran before it — a talk already in a slot when
+ * it is accepted has its invitation attached to the acceptance mail instead,
+ * because `notifyDecided` records the notice key in the same write — so the
+ * talk under test is read off the receipt rather than assumed.
  *
  * The property worth an end-to-end test is that a change reaches the calendar
  * entry the speaker already has. That needs three things to line up across two
@@ -115,11 +115,36 @@ test('a schedule change updates the invitation the speaker already has', async (
   await expect(page.getByTestId('notify-schedule')).toBeDisabled();
 
   // 2. Move it --------------------------------------------------------------
-  const placed = page.locator('[data-testid^="slot-"]').filter({ hasText: title }).first();
-  await expect(placed, `"${title}" is on the grid`).toBeVisible();
-  const target = page.locator('[data-testid^="slot-"]').filter({ hasText: 'empty' }).first();
-  const targetId = await target.getAttribute('data-testid');
-  await placed.dragTo(target);
+  // Moved through the no-script form rather than by dragging. The gesture is
+  // `schedule.spec.ts`'s subject; what this file needs is a move that lands in
+  // a box of its choosing every time, because everything asserted below is
+  // about the calendar entry and not about the grid.
+  await expect(
+    page.locator('[data-testid^="slot-"]').filter({ hasText: title }),
+    `"${title}" is on the grid`,
+  ).toHaveCount(1);
+
+  const fallback = page.getByTestId('schedule-fallback');
+  await fallback.locator('summary').click();
+  const talkId = await fallback
+    .getByTestId('fallback-talk')
+    .locator('option')
+    .filter({ hasText: title })
+    .first()
+    .getAttribute('value');
+  // Every option carries its occupant after an em dash, so the ones without a
+  // dash are the free boxes. Index 0 is the "Choose a slot" placeholder.
+  const targetSlotId = await fallback
+    .getByTestId('fallback-slot')
+    .locator('option')
+    .filter({ hasNotText: '—' })
+    .nth(1)
+    .getAttribute('value');
+  await fallback.getByTestId('fallback-talk').selectOption(talkId!);
+  await fallback.getByTestId('fallback-slot').selectOption(targetSlotId!);
+  await fallback.getByTestId('fallback-place').click();
+
+  const targetId = `slot-${targetSlotId}`;
   await expect(page.locator(`[data-testid="${targetId}"]`)).toContainText(title);
 
   await sendNotices(page);
