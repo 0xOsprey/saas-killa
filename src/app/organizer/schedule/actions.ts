@@ -1,7 +1,8 @@
 'use server';
 
-import { eq } from 'drizzle-orm';
+import { eq, isNull } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { db } from '@/db';
 import { rooms, slots, submissions } from '@/db/schema';
@@ -12,6 +13,7 @@ import { getEvent } from '@/lib/queries';
 function revalidateSchedule() {
   revalidatePath('/organizer/schedule');
   revalidatePath('/organizer/submissions');
+  revalidatePath('/organizer/rooms');
   revalidatePath('/agenda');
   revalidatePath('/speaker');
 }
@@ -49,19 +51,23 @@ export async function placeSubmission(formData: FormData): Promise<void> {
       .update(slots)
       .set({ submissionId: null })
       .where(eq(slots.submissionId, input.submissionId));
+    // Dropping a talk onto "Lunch" makes the box a talk. A slot is either a
+    // named block or a placement, never both, so the label goes with the write
+    // that fills the box rather than needing an organizer to clear it first.
     await tx
       .update(slots)
-      .set({ submissionId: input.submissionId })
+      .set({ submissionId: input.submissionId, label: null })
       .where(eq(slots.id, input.slotId));
   });
 
   revalidateSchedule();
 }
 
+/** Empty a slot. Also drops a label, so one control clears whatever is in the box. */
 export async function clearSlot(formData: FormData): Promise<void> {
   await requireRole('organizer');
   const slotId = z.string().uuid().parse(formData.get('slotId'));
-  await db.update(slots).set({ submissionId: null }).where(eq(slots.id, slotId));
+  await db.update(slots).set({ submissionId: null, label: null }).where(eq(slots.id, slotId));
   revalidateSchedule();
 }
 
@@ -100,11 +106,76 @@ export async function addTimeBand(formData: FormData): Promise<void> {
   revalidateSchedule();
 }
 
+const blockSchema = addSlotSchema.extend({ label: z.string().trim().min(1).max(80) });
+
+/**
+ * Add a named non-session block — "Lunch", "Registration" — across every room.
+ *
+ * A break spanning the venue is one labelled slot per room, which is the shape
+ * the grid already draws; the public agenda collapses them back into one line.
+ * Where a slot already exists at that time it is relabelled, but only if it is
+ * empty: an organizer adding lunch over a band that already has talks in it
+ * means the gaps, not "unplace everything".
+ */
+export async function addBreakBand(formData: FormData): Promise<void> {
+  await requireRole('organizer');
+  const input = blockSchema.parse({
+    startsAt: formData.get('startsAt'),
+    minutes: formData.get('minutes'),
+    label: formData.get('label'),
+  });
+
+  const [allRooms, event] = await Promise.all([db.select().from(rooms), getEvent()]);
+  if (allRooms.length === 0) return;
+
+  const startsAt = wallClockToInstant(input.startsAt, event.timezone);
+  const endsAt = new Date(startsAt.getTime() + input.minutes * 60_000);
+
+  await db
+    .insert(slots)
+    .values(allRooms.map((room) => ({ roomId: room.id, startsAt, endsAt, label: input.label })))
+    .onConflictDoUpdate({
+      target: [slots.roomId, slots.startsAt],
+      // Only the label. Rewriting `endsAt` here would leave a band ragged —
+      // the empty boxes lengthened, the ones with talks in them not — because
+      // `setWhere` skips the occupied rows. Naming an existing band keeps that
+      // band's length.
+      set: { label: input.label },
+      setWhere: isNull(slots.submissionId),
+    });
+
+  revalidateSchedule();
+}
+
+/** Strip the label from a band, leaving the boxes as ordinary empty slots. */
+export async function clearBreakBand(formData: FormData): Promise<void> {
+  await requireRole('organizer');
+  const startsAt = z.coerce.date().parse(formData.get('startsAt'));
+  await db.update(slots).set({ label: null }).where(eq(slots.startsAt, startsAt));
+  revalidateSchedule();
+}
+
+/**
+ * Delete a whole time band.
+ *
+ * This used to run straight off a one-click form and silently unplace whatever
+ * was in it — the slots go, and every talk in them quietly returns to the
+ * unscheduled pool with nothing said. It now refuses without an explicit
+ * confirmation, and the screen that asks for it names the count and the talks.
+ */
 export async function deleteTimeBand(formData: FormData): Promise<void> {
   await requireRole('organizer');
   const startsAt = z.coerce.date().parse(formData.get('startsAt'));
+
+  // Unconfirmed, this bounces to the confirmation screen rather than erroring:
+  // the organizer asked for something reasonable and is owed the count first.
+  if (formData.get('confirm') !== 'yes') {
+    redirect(`/organizer/schedule?confirmDelete=${encodeURIComponent(startsAt.toISOString())}`);
+  }
+
   await db.delete(slots).where(eq(slots.startsAt, startsAt));
   revalidateSchedule();
+  redirect('/organizer/schedule');
 }
 
 export async function setAgendaPublished(formData: FormData): Promise<void> {

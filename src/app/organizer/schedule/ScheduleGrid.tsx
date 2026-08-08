@@ -11,6 +11,12 @@ export type PoolItem = {
   trackColour: string | null;
 };
 
+export type GridRoom = {
+  id: string;
+  name: string;
+  capacity: number | null;
+};
+
 export type Cell = {
   slotId: string;
   roomId: string;
@@ -18,7 +24,17 @@ export type Cell = {
   title: string | null;
   speakerName: string | null;
   trackColour: string | null;
+  /** Set when the box is a named non-session block rather than a placement. */
+  label: string | null;
   conflicted: boolean;
+  /**
+   * The speaker declared this window unavailable. An object rather than the
+   * note itself: a declaration with no note is still a declaration, and a bare
+   * `string | null` cannot tell that apart from no declaration at all.
+   */
+  unavailable: { note: string | null } | null;
+  /** More people starred this than the room seats. */
+  overCapacity: { bookmarks: number; capacity: number } | null;
 };
 
 export type Band = {
@@ -34,13 +50,17 @@ export type Band = {
  * without a pointer, and it is the path the end-to-end test drives, because
  * HTML5 drag events are not reliably synthesisable in a browser automation
  * harness. Both call the same server action.
+ *
+ * Every warning a cell can carry is reported, never enforced. An organizer
+ * mid-rearrangement passes through invalid states as a matter of course, and a
+ * grid that refuses the drop is a grid nobody can rearrange.
  */
 export function ScheduleGrid({
-  roomNames,
+  rooms,
   bands,
   pool,
 }: {
-  roomNames: { id: string; name: string }[];
+  rooms: GridRoom[];
   bands: Band[];
   pool: PoolItem[];
 }) {
@@ -66,7 +86,7 @@ export function ScheduleGrid({
   }
 
   const gridStyle = {
-    gridTemplateColumns: `7rem repeat(${roomNames.length}, minmax(9rem, 1fr))`,
+    gridTemplateColumns: `7rem repeat(${rooms.length}, minmax(9rem, 1fr))`,
   };
 
   let lastDay = '';
@@ -74,12 +94,10 @@ export function ScheduleGrid({
   return (
     <div className="grid gap-5 lg:grid-cols-[16rem_1fr]">
       <aside className="space-y-2">
-        <h2 className="text-sm font-semibold text-ink">
-          Unscheduled ({pool.length})
-        </h2>
+        <h2 className="text-sm font-semibold text-ink">Unscheduled ({pool.length})</h2>
         <p className="text-xs text-muted">
           {held
-            ? 'Now click an empty slot to place it.'
+            ? 'Now click a slot to place it.'
             : 'Click a talk to pick it up, or drag it onto the grid.'}
         </p>
         {pool.length === 0 ? (
@@ -112,9 +130,12 @@ export function ScheduleGrid({
       <div className="overflow-x-auto">
         <div className={cn('schedule-grid', pending && 'opacity-60')} style={gridStyle}>
           <div />
-          {roomNames.map((room) => (
+          {rooms.map((room) => (
             <div key={room.id} className="px-2 pb-1 text-xs font-semibold text-ink">
               {room.name}
+              {room.capacity !== null ? (
+                <span className="ml-1 font-normal text-muted">· {room.capacity} seats</span>
+              ) : null}
             </div>
           ))}
 
@@ -141,6 +162,8 @@ export function ScheduleGrid({
                     onDrop={(e) => {
                       e.preventDefault();
                       const id = e.dataTransfer.getData('text/plain');
+                      // A drop onto a labelled block is a placement too; the
+                      // action clears the label as part of the same write.
                       if (id) place(cell.slotId, id);
                     }}
                     onClick={() => {
@@ -152,27 +175,61 @@ export function ScheduleGrid({
                       'min-h-16 cursor-pointer rounded-md border p-2 text-xs transition-colors',
                       cell.submissionId
                         ? 'border-line bg-white'
-                        : 'border-dashed border-line bg-slate-50 hover:border-accent hover:bg-accent-soft',
+                        : cell.label
+                          ? 'border-slate-300 bg-slate-100'
+                          : 'border-dashed border-line bg-slate-50 hover:border-accent hover:bg-accent-soft',
                       cell.conflicted && 'border-red-300 bg-red-50',
+                      cell.unavailable !== null && 'border-amber-300 bg-amber-50',
                       held === cell.submissionId && 'ring-2 ring-accent/40',
                     )}
                     style={
-                      cell.trackColour
-                        ? { borderLeft: `3px solid ${cell.trackColour}` }
-                        : undefined
+                      cell.trackColour ? { borderLeft: `3px solid ${cell.trackColour}` } : undefined
                     }
                   >
                     {cell.submissionId ? (
                       <>
                         <span className="block font-medium text-ink">{cell.title}</span>
-                        <span className="block text-muted">
-                          {cell.speakerName ?? 'Unnamed'}
-                        </span>
+                        <span className="block text-muted">{cell.speakerName ?? 'Unnamed'}</span>
                         {cell.conflicted ? (
                           <span className="mt-1 block font-medium text-red-700">
                             speaker double-booked
                           </span>
                         ) : null}
+                        {cell.unavailable ? (
+                          <span
+                            className="mt-1 block font-medium text-amber-800"
+                            data-testid={`unavailable-${cell.slotId}`}
+                          >
+                            speaker unavailable
+                            {cell.unavailable.note ? `: ${cell.unavailable.note}` : ''}
+                          </span>
+                        ) : null}
+                        {cell.overCapacity ? (
+                          <span
+                            className="mt-1 block font-medium text-amber-800"
+                            data-testid={`over-capacity-${cell.slotId}`}
+                          >
+                            {cell.overCapacity.bookmarks} starred · room seats{' '}
+                            {cell.overCapacity.capacity}
+                          </span>
+                        ) : null}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            clear(cell.slotId);
+                          }}
+                          className="mt-1 text-muted underline hover:text-ink"
+                          data-testid={`clear-${cell.slotId}`}
+                        >
+                          remove
+                        </button>
+                      </>
+                    ) : cell.label ? (
+                      <>
+                        <span className="block font-medium uppercase tracking-wide text-slate-600">
+                          {cell.label}
+                        </span>
                         <button
                           type="button"
                           onClick={(e) => {

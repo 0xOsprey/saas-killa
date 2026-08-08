@@ -4,16 +4,31 @@ import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { db } from '@/db';
-import { submissionStatusEnum, submissions, users } from '@/db/schema';
+import { contentStatusEnum, submissionStatusEnum, submissions, users } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
-import { acceptanceMail, rejectionMail, sendMail } from '@/lib/email';
+import { acceptanceMail, rejectionMail, sendAndLog, sendMail } from '@/lib/email';
 import { evaluatePending, evaluatorConfigured } from '@/lib/ai-evaluator';
+import {
+  LOCKABLE_FIELDS,
+  applyTextEdit,
+  contentRecipient,
+  currentStatuses,
+  isLocked,
+  logRevisions,
+  withLock,
+} from '@/lib/content';
 import { getEvent } from '@/lib/queries';
+import { contentReturnedMail } from './mail';
 
 const decisionSchema = z.object({
   submissionId: z.string().uuid(),
   status: z.enum(submissionStatusEnum.enumValues),
 });
+
+function revalidateDashboard(): void {
+  revalidatePath('/organizer/submissions');
+  revalidatePath('/organizer/schedule');
+}
 
 /**
  * Set a decision. Deliberately does not email: an organizer works through the
@@ -32,8 +47,7 @@ export async function setDecision(formData: FormData): Promise<void> {
     .set({ status: input.status, updatedAt: new Date() })
     .where(eq(submissions.id, input.submissionId));
 
-  revalidatePath('/organizer/submissions');
-  revalidatePath('/organizer/schedule');
+  revalidateDashboard();
 }
 
 /**
@@ -81,12 +95,301 @@ export async function notifyDecided(): Promise<void> {
   revalidatePath('/speaker');
 }
 
-/** Run the AI evaluator over everything it has not already graded. */
-export async function runEvaluator(): Promise<void> {
+/**
+ * Grade everything the evaluator has not already seen, with the default persona
+ * and no options. This is the one-button version on the decision dashboard. The
+ * button on /organizer/evaluators is `runPersonaEvaluation`, which picks a
+ * persona, takes a limit and hands back a report. Both were called
+ * `runEvaluator` until the two pages were read side by side.
+ */
+export async function gradePending(): Promise<void> {
   await requireRole('organizer');
   if (!evaluatorConfigured()) return;
   const event = await getEvent();
   await evaluatePending(event.name);
   revalidatePath('/organizer/submissions');
   revalidatePath('/review');
+}
+
+// ---------------------------------------------------------------------------
+// Inline editing
+// ---------------------------------------------------------------------------
+
+const inlineEditSchema = z.object({
+  submissionId: z.string().uuid(),
+  title: z.string().trim().min(4).max(200),
+  abstract: z.string().trim().min(20).max(8000),
+});
+
+/**
+ * Edit a title or abstract from the dashboard. An organizer edits through the
+ * lock rather than around it: `lockedFields` freezes the speaker, never the
+ * committee, so nothing here consults it.
+ */
+export async function editSubmissionText(formData: FormData): Promise<void> {
+  const editor = await requireRole('organizer');
+  const input = inlineEditSchema.parse({
+    submissionId: formData.get('submissionId'),
+    title: formData.get('title'),
+    abstract: formData.get('abstract'),
+  });
+
+  await applyTextEdit({
+    submissionId: input.submissionId,
+    editorId: editor.id,
+    next: { title: input.title, abstract: input.abstract },
+  });
+
+  revalidateDashboard();
+  revalidatePath(`/agenda/${input.submissionId}`);
+}
+
+// ---------------------------------------------------------------------------
+// Content moderation
+// ---------------------------------------------------------------------------
+
+const idsSchema = z.array(z.string().uuid()).min(1).max(500);
+
+function readIds(formData: FormData): string[] {
+  return idsSchema.parse(formData.getAll('ids').map(String));
+}
+
+/**
+ * Move content to a new status and log the move. Approval and send-back are the
+ * two ends of the same transition, so they share one writer and differ only in
+ * the mail that follows.
+ */
+async function moveContent(
+  ids: string[],
+  next: (typeof contentStatusEnum.enumValues)[number],
+  editorId: string,
+): Promise<void> {
+  const before = await db
+    .select({ id: submissions.id, contentStatus: submissions.contentStatus })
+    .from(submissions)
+    .where(inArray(submissions.id, ids));
+
+  await db
+    .update(submissions)
+    .set({ contentStatus: next, updatedAt: new Date() })
+    .where(inArray(submissions.id, ids));
+
+  await logRevisions(
+    before.map((row) => ({
+      submissionId: row.id,
+      editorId,
+      field: 'contentStatus',
+      oldValue: row.contentStatus,
+      newValue: next,
+    })),
+  );
+}
+
+function revalidateContent(ids: string[]): void {
+  revalidatePath('/organizer/submissions');
+  revalidatePath('/speaker/content');
+  revalidatePath('/posters');
+  for (const id of ids) revalidatePath(`/agenda/${id}`);
+}
+
+/** Approve one submission's content. Publishing follows from the status alone. */
+export async function approveContent(formData: FormData): Promise<void> {
+  const editor = await requireRole('organizer');
+  const id = z.string().uuid().parse(formData.get('submissionId'));
+  await moveContent([id], 'approved', editor.id);
+  revalidateContent([id]);
+}
+
+const returnSchema = z.object({
+  submissionId: z.string().uuid(),
+  reason: z.string().trim().min(4).max(2000),
+});
+
+/**
+ * Send content back for changes. The status drops to 'draft' before the mail is
+ * built, so a send that fails leaves the speaker able to edit rather than stuck
+ * in a review queue nobody is looking at.
+ */
+export async function returnContent(formData: FormData): Promise<void> {
+  const editor = await requireRole('organizer');
+  const input = returnSchema.parse({
+    submissionId: formData.get('submissionId'),
+    reason: formData.get('reason'),
+  });
+
+  const recipient = await contentRecipient(input.submissionId);
+  if (!recipient) return;
+
+  await moveContent([input.submissionId], 'draft', editor.id);
+
+  const event = await getEvent();
+  await sendAndLog(
+    contentReturnedMail({
+      to: recipient.speakerEmail,
+      title: recipient.title,
+      eventName: event.name,
+      reason: input.reason,
+    }),
+    { userId: recipient.speakerId, kind: 'content_returned', submissionId: recipient.submissionId },
+  );
+
+  revalidateContent([input.submissionId]);
+}
+
+// ---------------------------------------------------------------------------
+// Field locks
+// ---------------------------------------------------------------------------
+
+const lockSchema = z.object({
+  submissionId: z.string().uuid(),
+  field: z.enum(LOCKABLE_FIELDS),
+  locked: z.enum(['true', 'false']),
+});
+
+/**
+ * Freeze or release one field on one submission. Read-modify-write on a jsonb
+ * array, so it runs in a transaction with the row held: two organizers toggling
+ * two different fields at once would otherwise each write an array missing the
+ * other's lock.
+ */
+export async function setFieldLock(formData: FormData): Promise<void> {
+  await requireRole('organizer');
+  const input = lockSchema.parse({
+    submissionId: formData.get('submissionId'),
+    field: formData.get('field'),
+    locked: formData.get('locked'),
+  });
+
+  await db.transaction(async (tx) => {
+    const [current] = await tx
+      .select({ lockedFields: submissions.lockedFields })
+      .from(submissions)
+      .where(eq(submissions.id, input.submissionId))
+      .limit(1)
+      .for('update');
+    if (!current) return;
+
+    await tx
+      .update(submissions)
+      .set({
+        lockedFields: withLock(current.lockedFields, input.field, input.locked === 'true'),
+        updatedAt: new Date(),
+      })
+      .where(eq(submissions.id, input.submissionId));
+  });
+
+  revalidatePath('/organizer/submissions');
+  revalidatePath('/speaker');
+  revalidatePath('/speaker/content');
+}
+
+// ---------------------------------------------------------------------------
+// Bulk editing
+// ---------------------------------------------------------------------------
+
+/**
+ * Set the status on a selection. Bulk deciding still does not mail anybody:
+ * `notifyDecided` remains the only thing that sends, so a hundred rows flipped
+ * by mistake cost an undo rather than a hundred apologies.
+ */
+export async function bulkSetStatus(formData: FormData): Promise<void> {
+  const editor = await requireRole('organizer');
+  const ids = readIds(formData);
+  const status = z.enum(submissionStatusEnum.enumValues).parse(formData.get('status'));
+
+  const before = await currentStatuses(ids);
+  await db
+    .update(submissions)
+    .set({ status, updatedAt: new Date() })
+    .where(inArray(submissions.id, ids));
+
+  await logRevisions(
+    ids.map((id) => ({
+      submissionId: id,
+      editorId: editor.id,
+      field: 'status',
+      oldValue: before.get(id)?.status ?? null,
+      newValue: status,
+    })),
+  );
+
+  revalidateDashboard();
+}
+
+/** Move a selection into a track, or out of every track when `trackId` is blank. */
+export async function bulkSetTrack(formData: FormData): Promise<void> {
+  const editor = await requireRole('organizer');
+  const ids = readIds(formData);
+  const raw = String(formData.get('trackId') ?? '');
+  const trackId = raw === '' ? null : z.string().uuid().parse(raw);
+
+  const before = await currentStatuses(ids);
+  await db
+    .update(submissions)
+    .set({ trackId, updatedAt: new Date() })
+    .where(inArray(submissions.id, ids));
+
+  await logRevisions(
+    ids.map((id) => ({
+      submissionId: id,
+      editorId: editor.id,
+      field: 'trackId',
+      oldValue: before.get(id)?.trackId ?? null,
+      newValue: trackId,
+    })),
+  );
+
+  revalidateDashboard();
+}
+
+export async function bulkApproveContent(formData: FormData): Promise<void> {
+  const editor = await requireRole('organizer');
+  const ids = readIds(formData);
+  await moveContent(ids, 'approved', editor.id);
+  revalidateContent(ids);
+}
+
+const bulkLockSchema = z.object({
+  field: z.enum(LOCKABLE_FIELDS),
+  locked: z.enum(['true', 'false']),
+});
+
+/**
+ * Freeze or release one field across a selection. Each row is read and written
+ * inside the same transaction so a bulk lock cannot drop a lock another
+ * organizer set on a different field a moment earlier.
+ */
+export async function bulkSetLock(formData: FormData): Promise<void> {
+  await requireRole('organizer');
+  const ids = readIds(formData);
+  const input = bulkLockSchema.parse({
+    field: formData.get('field'),
+    locked: formData.get('locked'),
+  });
+  const locked = input.locked === 'true';
+
+  await db.transaction(async (tx) => {
+    const rows = await tx
+      .select({ id: submissions.id, lockedFields: submissions.lockedFields })
+      .from(submissions)
+      .where(inArray(submissions.id, ids))
+      .for('update');
+
+    for (const row of rows) {
+      // A lock already in the wanted state is left alone rather than rewritten,
+      // so `updatedAt` still means "this submission changed".
+      if (isLocked(row.lockedFields, input.field) === locked) continue;
+      await tx
+        .update(submissions)
+        .set({
+          lockedFields: withLock(row.lockedFields, input.field, locked),
+          updatedAt: new Date(),
+        })
+        .where(eq(submissions.id, row.id));
+    }
+  });
+
+  revalidatePath('/organizer/submissions');
+  revalidatePath('/speaker');
+  revalidatePath('/speaker/content');
 }

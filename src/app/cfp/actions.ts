@@ -23,9 +23,32 @@ const schema = z.object({
 
 export type CfpState = { error?: string };
 
+const MAX_KEYWORDS = 12;
+
 function optional(value: FormDataEntryValue | null): string | null {
   const text = typeof value === 'string' ? value.trim() : '';
   return text === '' ? null : text;
+}
+
+/**
+ * Split the comma-separated keyword field. Deduped case-insensitively but
+ * stored as typed, because "Postgres" is what the speaker wrote and the
+ * gallery filter is what wants it lowercased, not the record.
+ */
+function parseKeywords(value: FormDataEntryValue | null): string[] {
+  if (typeof value !== 'string') return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of value.split(',')) {
+    const keyword = raw.trim().slice(0, 40);
+    if (keyword === '') continue;
+    const key = keyword.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(keyword);
+    if (out.length === MAX_KEYWORDS) break;
+  }
+  return out;
 }
 
 export async function submitProposal(_prev: CfpState, formData: FormData): Promise<CfpState> {
@@ -76,6 +99,7 @@ export async function submitProposal(_prev: CfpState, formData: FormData): Promi
     format: input.format,
     audienceLevel: input.audienceLevel,
     posterUrl: input.posterUrl,
+    keywords: parseKeywords(formData.get('keywords')),
   });
 
   // A first-time submitter has no session. Email them a link so the submission

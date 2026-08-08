@@ -1,8 +1,21 @@
-import { Badge, Button, Card, Empty, Notice, PageHeader, ScoreDots } from '@/components/ui';
+import Link from 'next/link';
+import { Button, Empty, LinkButton, Notice, PageHeader, cn } from '@/components/ui';
+import { contentStatusEnum, submissionStatusEnum } from '@/db/schema';
 import { evaluatorConfigured } from '@/lib/ai-evaluator';
-import { FORMAT_LABELS, LEVEL_LABELS, STATUS_LABELS } from '@/lib/format';
-import { organizerSubmissions } from '@/lib/queries';
-import { notifyDecided, runEvaluator, setDecision } from './actions';
+import {
+  CONTENT_STATUS_LABELS,
+  contentRowsById,
+  fieldLabel,
+  knownLocks,
+  lastEditBySubmission,
+  LOCKABLE_FIELDS,
+  recentRevisions,
+  type RevisionRow,
+} from '@/lib/content';
+import { FORMAT_LABELS, LEVEL_LABELS, STATUS_LABELS, inEventZone } from '@/lib/format';
+import { allTracks, getEvent, organizerSubmissions } from '@/lib/queries';
+import { gradePending, notifyDecided } from './actions';
+import { SubmissionsBoard, type BoardRow } from './SubmissionsBoard';
 
 const STATUS_TONE = {
   submitted: 'neutral',
@@ -11,8 +24,40 @@ const STATUS_TONE = {
   withdrawn: 'neutral',
 } as const;
 
-export default async function OrganizerSubmissionsPage() {
-  const rows = await organizerSubmissions();
+const LOCKABLE_OPTIONS = LOCKABLE_FIELDS.map((field) => ({ field, label: fieldLabel(field) }));
+
+const STATUS_OPTIONS = submissionStatusEnum.enumValues.map((value) => ({
+  value,
+  label: STATUS_LABELS[value],
+}));
+
+/**
+ * The moderation queue is this filter rather than a separate screen: the row an
+ * organizer approves content on is the row they were already deciding.
+ */
+const CONTENT_FILTERS: { value: 'draft' | 'pending' | 'approved' | null; label: string }[] = [
+  { value: null, label: 'All' },
+  { value: 'pending', label: 'Awaiting review' },
+  { value: 'approved', label: 'Approved' },
+  { value: 'draft', label: 'Draft' },
+];
+
+export default async function OrganizerSubmissionsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ content?: string }>;
+}) {
+  const [rows, content, history, lastEdits, tracks, event, params] = await Promise.all([
+    organizerSubmissions(),
+    contentRowsById(),
+    recentRevisions(),
+    lastEditBySubmission(),
+    allTracks(),
+    getEvent(),
+    searchParams,
+  ]);
+
+  const filter = contentStatusEnum.enumValues.find((value) => value === params.content) ?? null;
 
   const counts = {
     submitted: rows.filter((r) => r.status === 'submitted').length,
@@ -22,6 +67,49 @@ export default async function OrganizerSubmissionsPage() {
   const awaitingEmail = rows.filter(
     (r) => (r.status === 'accepted' || r.status === 'rejected') && !r.decisionEmailedAt,
   ).length;
+  const statuses = rows.map((row) => content.get(row.id)?.contentStatus ?? 'draft');
+  const contentCounts = {
+    all: rows.length,
+    draft: statuses.filter((s) => s === 'draft').length,
+    pending: statuses.filter((s) => s === 'pending').length,
+    approved: statuses.filter((s) => s === 'approved').length,
+  };
+  const awaitingContent = contentCounts.pending;
+
+  const board: BoardRow[] = rows
+    .filter((row) => !filter || (content.get(row.id)?.contentStatus ?? 'draft') === filter)
+    .map((row) => {
+      const extra = content.get(row.id);
+      return {
+        id: row.id,
+        title: row.title,
+        abstract: row.abstract,
+        speakerName: row.speakerName ?? 'Unnamed',
+        speakerEmail: row.speakerEmail,
+        meta: [
+          FORMAT_LABELS[row.format],
+          LEVEL_LABELS[row.audienceLevel],
+          ...(row.trackName ? [row.trackName] : []),
+        ].join(' · '),
+        status: row.status,
+        statusLabel: STATUS_LABELS[row.status],
+        statusTone: STATUS_TONE[row.status],
+        averageScore: row.averageScore,
+        reviewCount: row.reviewCount,
+        notified: Boolean(row.decisionEmailedAt),
+        scheduled: row.scheduled,
+        contentStatus: extra?.contentStatus ?? 'draft',
+        contentStatusLabel: CONTENT_STATUS_LABELS[extra?.contentStatus ?? 'draft'],
+        hasContent: Boolean(extra?.slidesUrl || extra?.recordingUrl || extra?.resourcesNote),
+        lockedFields: knownLocks(extra?.lockedFields ?? []),
+        revisionCount: extra?.revisionCount ?? 0,
+        lastEdit: toEntry(lastEdits.get(row.id) ?? null, event.timezone),
+        history: (history.get(row.id) ?? []).flatMap((entry) => {
+          const mapped = toEntry(entry, event.timezone);
+          return mapped ? [mapped] : [];
+        }),
+      };
+    });
 
   return (
     <div className="space-y-5">
@@ -30,8 +118,11 @@ export default async function OrganizerSubmissionsPage() {
         description={`${counts.submitted} undecided · ${counts.accepted} accepted · ${counts.rejected} rejected. Sorted by average grade.`}
         action={
           <div className="flex flex-wrap gap-2">
+            <LinkButton href="/organizer/settings" variant="secondary">
+              Event settings
+            </LinkButton>
             {evaluatorConfigured() ? (
-              <form action={runEvaluator}>
+              <form action={gradePending}>
                 <Button type="submit" variant="secondary">
                   Run AI evaluator
                 </Button>
@@ -53,66 +144,73 @@ export default async function OrganizerSubmissionsPage() {
         </Notice>
       )}
 
-      {rows.length === 0 ? <Empty>No submissions yet.</Empty> : null}
+      {awaitingContent > 0 ? (
+        <Notice tone="accent">
+          <span data-testid="content-queue">
+            {awaitingContent} submission(s) have content awaiting review. Nothing submitted for
+            review appears on the public agenda until it is approved.
+          </span>
+        </Notice>
+      ) : null}
 
-      {rows.map((row) => (
-        <Card key={row.id} className="space-y-3" data-testid={`submission-${row.id}`}>
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0">
-              <h2 className="font-medium text-ink">{row.title}</h2>
-              <p className="mt-0.5 text-xs text-muted">
-                {row.speakerName ?? 'Unnamed'} · {row.speakerEmail}
-              </p>
-              <p className="mt-0.5 text-xs text-muted">
-                {FORMAT_LABELS[row.format]} · {LEVEL_LABELS[row.audienceLevel]}
-                {row.trackName ? ` · ${row.trackName}` : ''}
-              </p>
-            </div>
-            <div className="flex flex-col items-end gap-1.5">
-              <ScoreDots score={row.averageScore} />
-              <span className="text-xs text-muted">{row.reviewCount} review(s)</span>
-              <Badge tone={STATUS_TONE[row.status]}>{STATUS_LABELS[row.status]}</Badge>
-            </div>
-          </div>
+      <div className="flex flex-wrap items-center gap-1.5 text-sm">
+        <span className="text-muted">Content:</span>
+        {CONTENT_FILTERS.map((option) => (
+          <Link
+            key={option.label}
+            href={
+              option.value
+                ? `/organizer/submissions?content=${option.value}`
+                : '/organizer/submissions'
+            }
+            data-testid={`filter-${option.value ?? 'all'}`}
+            className={cn(
+              'rounded-md border px-2 py-1 text-xs',
+              filter === option.value
+                ? 'border-accent bg-accent-soft text-accent'
+                : 'border-line bg-white text-muted hover:text-ink',
+            )}
+          >
+            {option.label} ({contentCounts[option.value ?? 'all']})
+          </Link>
+        ))}
+      </div>
 
-          <p className="line-clamp-3 whitespace-pre-wrap text-sm text-muted">{row.abstract}</p>
-
-          <div className="flex flex-wrap items-center gap-2 border-t border-line pt-3">
-            <form action={setDecision}>
-              <input type="hidden" name="submissionId" value={row.id} />
-              <input type="hidden" name="status" value="accepted" />
-              <Button
-                type="submit"
-                variant={row.status === 'accepted' ? 'primary' : 'secondary'}
-                data-testid={`accept-${row.id}`}
-              >
-                Accept
-              </Button>
-            </form>
-            <form action={setDecision}>
-              <input type="hidden" name="submissionId" value={row.id} />
-              <input type="hidden" name="status" value="rejected" />
-              <Button type="submit" variant={row.status === 'rejected' ? 'danger' : 'secondary'}>
-                Reject
-              </Button>
-            </form>
-            {row.status !== 'submitted' ? (
-              <form action={setDecision}>
-                <input type="hidden" name="submissionId" value={row.id} />
-                <input type="hidden" name="status" value="submitted" />
-                <Button type="submit" variant="ghost" className="text-xs">
-                  Undecide
-                </Button>
-              </form>
-            ) : null}
-
-            <span className="ml-auto text-xs text-muted">
-              {row.decisionEmailedAt ? 'speaker notified' : 'not notified'}
-              {row.scheduled ? ' · scheduled' : ''}
-            </span>
-          </div>
-        </Card>
-      ))}
+      {rows.length === 0 ? (
+        <Empty>No submissions yet.</Empty>
+      ) : board.length === 0 ? (
+        <Empty>Nothing with that content status.</Empty>
+      ) : (
+        <SubmissionsBoard
+          rows={board}
+          tracks={tracks.map((track) => ({ id: track.id, name: track.name }))}
+          lockableFields={LOCKABLE_OPTIONS}
+          statuses={STATUS_OPTIONS}
+        />
+      )}
     </div>
   );
+}
+
+/**
+ * A revision as the board renders it. The timestamp is formatted here rather
+ * than in the client component, where the browser's locale would disagree with
+ * the server's and fail hydration.
+ */
+function toEntry(row: RevisionRow | null, timezone: string) {
+  if (!row) return null;
+  return {
+    field: row.field,
+    fieldLabel: fieldLabel(row.field),
+    who: row.editorName ?? row.editorEmail,
+    when: inEventZone(row.createdAt, timezone, { dateStyle: 'medium', timeStyle: 'short' }),
+    oldValue: truncate(row.oldValue),
+    newValue: truncate(row.newValue),
+  };
+}
+
+/** An abstract is thousands of characters; a history line is one line. */
+function truncate(value: string | null): string | null {
+  if (value === null) return null;
+  return value.length > 120 ? `${value.slice(0, 120)}…` : value;
 }

@@ -1,10 +1,10 @@
 'use server';
 
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { db } from '@/db';
-import { submissions } from '@/db/schema';
+import { speakerTasks, submissions } from '@/db/schema';
 import { requireUser } from '@/lib/auth';
 
 /**
@@ -44,33 +44,36 @@ export async function withdrawSubmission(formData: FormData): Promise<void> {
   revalidatePath('/agenda');
 }
 
-const contentSchema = z.object({
-  submissionId: z.string().uuid(),
-  slidesUrl: z.string().url().or(z.literal('')).nullable(),
-  recordingUrl: z.string().url().or(z.literal('')).nullable(),
-  resourcesNote: z.string().max(4000).nullable(),
-});
+/*
+ * Materials used to be saved by a `saveContent` action here, from a form folded
+ * into each card on /speaker. It was written before /speaker/content existed and
+ * the two were built in parallel, so they ended up as two doors onto one job.
+ * The one here was the weaker door: it wrote the URLs straight through without
+ * moving `contentStatus`, so a speaker filled it in and nothing ever became
+ * visible, and it ignored `lockedFields`, so it could overwrite a field an
+ * organizer had frozen. /speaker/content is the single remaining route, and this
+ * page links to it.
+ */
 
-/** Post-event content: slides, a recording link and a short note of resources. */
-export async function saveContent(formData: FormData): Promise<void> {
+/**
+ * Tick off one of the things the organizer is chasing. `completedAt IS NULL` is
+ * in the WHERE clause as well as the ownership predicate, so a double submit
+ * cannot move a completion time that has already been recorded.
+ */
+export async function completeTask(formData: FormData): Promise<void> {
   const user = await requireUser();
-  const parsed = contentSchema.parse({
-    submissionId: formData.get('submissionId'),
-    slidesUrl: (formData.get('slidesUrl') as string | null)?.trim() || null,
-    recordingUrl: (formData.get('recordingUrl') as string | null)?.trim() || null,
-    resourcesNote: (formData.get('resourcesNote') as string | null)?.trim() || null,
-  });
+  const id = z.string().uuid().parse(formData.get('taskId'));
 
   await db
-    .update(submissions)
-    .set({
-      slidesUrl: parsed.slidesUrl || null,
-      recordingUrl: parsed.recordingUrl || null,
-      resourcesNote: parsed.resourcesNote,
-      updatedAt: new Date(),
-    })
-    .where(and(eq(submissions.id, parsed.submissionId), eq(submissions.speakerId, user.id)));
+    .update(speakerTasks)
+    .set({ completedAt: new Date() })
+    .where(
+      and(
+        eq(speakerTasks.id, id),
+        eq(speakerTasks.userId, user.id),
+        isNull(speakerTasks.completedAt),
+      ),
+    );
 
   revalidatePath('/speaker');
-  revalidatePath(`/agenda/${parsed.submissionId}`);
 }

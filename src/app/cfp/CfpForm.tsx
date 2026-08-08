@@ -95,6 +95,18 @@ export function CfpForm({
           </Field>
         </div>
 
+        <Field
+          label="Keywords"
+          hint="Comma separated, up to 12. They help organizers route your proposal to the right reviewers."
+        >
+          <Input
+            name="keywords"
+            maxLength={400}
+            placeholder="observability, postgres, migrations"
+            data-testid="cfp-keywords"
+          />
+        </Field>
+
         {format === 'poster' ? (
           <Field
             label="Poster artwork URL"

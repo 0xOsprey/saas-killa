@@ -1,27 +1,121 @@
 'use server';
 
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { db } from '@/db';
-import { awardNominees, awardVotes, awards, submissions } from '@/db/schema';
+import { awardNominees, awards, submissions, voteChannelEnum } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
+import {
+  WINNER_EMAIL_KIND,
+  awardDetail,
+  parseCriteriaInput,
+  tally,
+  winnersAwaitingNotification,
+} from '@/lib/awards';
+import { sendAndLog } from '@/lib/email';
+import { wallClockToInstant } from '@/lib/format';
+import { getEvent } from '@/lib/queries';
 
+/**
+ * Awards now render in three places: the organizer console, the public results
+ * page, and the committee ballot. A declared winner also shows on the agenda
+ * detail page, which is why `/agenda` is still in the list.
+ */
 function revalidateAwards() {
   revalidatePath('/organizer/awards');
+  revalidatePath('/awards');
+  revalidatePath('/awards/judge');
   revalidatePath('/agenda');
+}
+
+function text(formData: FormData, field: string): string | undefined {
+  const value = formData.get(field);
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function checked(formData: FormData, field: string): boolean {
+  return formData.get(field) !== null;
 }
 
 export async function createAward(formData: FormData): Promise<void> {
   await requireRole('organizer');
   const input = z
     .object({ name: z.string().min(2).max(120), description: z.string().max(1000).optional() })
+    .parse({ name: text(formData, 'name'), description: text(formData, 'description') });
+
+  await db.insert(awards).values({
+    name: input.name,
+    description: input.description ?? null,
+    publicVoting: checked(formData, 'publicVoting'),
+  });
+  revalidateAwards();
+}
+
+/**
+ * Edit the category: its wording, whether the community may vote, the window
+ * that bounds them, and the weighted criteria committee judges score against.
+ *
+ * Times arrive as a bare wall clock from `datetime-local` and are read in the
+ * event's timezone, the same way the schedule grid reads its own, so a window
+ * an organizer typed in the event's zone is the window attendees experience.
+ */
+export async function editAward(formData: FormData): Promise<void> {
+  await requireRole('organizer');
+  const input = z
+    .object({
+      awardId: z.string().uuid(),
+      name: z.string().min(2).max(120),
+      description: z.string().max(1000).optional(),
+      criteria: z.string().max(4000).optional(),
+      votingOpensAt: z.string().optional(),
+      votingClosesAt: z.string().optional(),
+    })
     .parse({
-      name: (formData.get('name') as string | null)?.trim(),
-      description: (formData.get('description') as string | null)?.trim() || undefined,
+      awardId: formData.get('awardId'),
+      name: text(formData, 'name'),
+      description: text(formData, 'description'),
+      criteria: text(formData, 'criteria'),
+      votingOpensAt: text(formData, 'votingOpensAt'),
+      votingClosesAt: text(formData, 'votingClosesAt'),
     });
 
-  await db.insert(awards).values({ name: input.name, description: input.description ?? null });
+  const event = await getEvent();
+  const opensAt = input.votingOpensAt
+    ? wallClockToInstant(input.votingOpensAt, event.timezone)
+    : null;
+  const closesAt = input.votingClosesAt
+    ? wallClockToInstant(input.votingClosesAt, event.timezone)
+    : null;
+  if (opensAt && closesAt && opensAt >= closesAt) {
+    throw new Error('Community voting has to open before it closes.');
+  }
+
+  await db
+    .update(awards)
+    .set({
+      name: input.name,
+      description: input.description ?? null,
+      publicVoting: checked(formData, 'publicVoting'),
+      votingOpensAt: opensAt,
+      votingClosesAt: closesAt,
+      criteria: parseCriteriaInput(input.criteria ?? ''),
+    })
+    .where(eq(awards.id, input.awardId));
+  revalidateAwards();
+}
+
+/**
+ * Delete a category outright. Nominees and ballots go with it through the
+ * foreign key's cascade; the organizer page states both counts on the confirm
+ * so the size of that cascade is known before the press, not after.
+ */
+export async function deleteAward(formData: FormData): Promise<void> {
+  await requireRole('organizer');
+  const awardId = z.string().uuid().parse(formData.get('awardId'));
+  await db.delete(awards).where(eq(awards.id, awardId));
   revalidateAwards();
 }
 
@@ -66,67 +160,161 @@ export async function withdrawNomination(formData: FormData): Promise<void> {
 }
 
 /**
- * Cast or move a judge's vote. The primary key is (awardId, judgeId), so the
- * upsert enforces one vote per judge per award structurally rather than by a
- * check that could be raced.
+ * Promote out of round one, or demote back into it. One row, one flag: the
+ * committee tally can then be asked for finalists alone without moving anything
+ * or losing who was originally in the running.
  */
-export async function castVote(formData: FormData): Promise<void> {
-  const judge = await requireRole('organizer', 'reviewer');
-  const input = nomineeSchema.parse({
+export async function setFinalist(formData: FormData): Promise<void> {
+  await requireRole('organizer');
+  const input = nomineeSchema.extend({ isFinalist: z.enum(['true', 'false']) }).parse({
     awardId: formData.get('awardId'),
     submissionId: formData.get('submissionId'),
+    isFinalist: formData.get('isFinalist'),
   });
 
-  const award = await db.query.awards.findFirst({ where: eq(awards.id, input.awardId) });
-  if (!award || award.votingClosedAt) return;
-
   await db
-    .insert(awardVotes)
-    .values({ ...input, judgeId: judge.id })
-    .onConflictDoUpdate({
-      target: [awardVotes.awardId, awardVotes.judgeId],
-      set: { submissionId: input.submissionId, createdAt: sql`now()` },
-    });
-
+    .update(awardNominees)
+    .set({ isFinalist: input.isFinalist === 'true' })
+    .where(
+      and(
+        eq(awardNominees.awardId, input.awardId),
+        eq(awardNominees.submissionId, input.submissionId),
+      ),
+    );
   revalidateAwards();
 }
 
 /**
- * Close voting and declare the winner: whichever nominee has the most votes.
- * A tie resolves to the earliest-nominated submission rather than at random,
- * so re-running the close produces the same result.
+ * Close voting and declare the result from one channel's tally.
+ *
+ * Which channel decides is the organizer's call at close time, because both are
+ * legitimate: a committee prize reads the committee tally, a People's Choice
+ * reads the community one. They are never summed, and the losing channel's
+ * numbers stay on the public page so the declared result is checkable against
+ * the ballots that produced it.
+ *
+ * A tie declares nobody. Breaking one is a judgement about the work, so it goes
+ * through `overrideWinner`, which demands a reason and says so publicly, rather
+ * than being silently resolved by whichever row sorted first.
+ *
+ * Nothing is emailed here. `notifyWinners` is a separate press, matching how
+ * accept/reject already works: an organizer can close, look at the result,
+ * change their mind and override, all before a word leaves the building.
  */
 export async function closeVoting(formData: FormData): Promise<void> {
   await requireRole('organizer');
-  const awardId = z.string().uuid().parse(formData.get('awardId'));
-
-  const tally = await db
-    .select({
-      submissionId: awardVotes.submissionId,
-      votes: sql<number>`count(*)::int`,
+  const input = z
+    .object({
+      awardId: z.string().uuid(),
+      decideFrom: z.enum(voteChannelEnum.enumValues),
+      finalistsOnly: z.coerce.boolean(),
     })
-    .from(awardVotes)
-    .where(eq(awardVotes.awardId, awardId))
-    .groupBy(awardVotes.submissionId)
-    .orderBy(desc(sql`count(*)`));
+    .parse({
+      awardId: formData.get('awardId'),
+      decideFrom: formData.get('decideFrom') ?? 'committee',
+      finalistsOnly: formData.get('finalistsOnly') === 'true',
+    });
+
+  const detail = await awardDetail(input.awardId);
+  if (!detail || detail.award.votingClosedAt) return;
+
+  // A hand-picked winner outranks the tally. An organizer who overrode first
+  // and closed second meant the override, and recomputing here would throw away
+  // both their decision and the reason they gave for it.
+  const winnerSubmissionId = detail.award.winnerOverrideReason
+    ? detail.award.winnerSubmissionId
+    : (tally(detail, input.decideFrom, input.finalistsOnly).leader?.submissionId ?? null);
 
   await db
     .update(awards)
-    .set({
-      votingClosedAt: new Date(),
-      winnerSubmissionId: tally[0]?.submissionId ?? null,
-    })
-    .where(eq(awards.id, awardId));
-
+    .set({ votingClosedAt: new Date(), winnerSubmissionId })
+    .where(eq(awards.id, input.awardId));
   revalidateAwards();
 }
 
+/**
+ * Reopen voting, refusing while a winner stands.
+ *
+ * The alternative was to clear the winner as a side effect, and that quietly
+ * destroys an override reason — the one record of why a human overruled the
+ * ballots. Retracting a published result should be a deliberate act, so it is
+ * its own button: `clearWinner`, then reopen.
+ */
 export async function reopenVoting(formData: FormData): Promise<void> {
+  await requireRole('organizer');
+  const awardId = z.string().uuid().parse(formData.get('awardId'));
+
+  const award = await db.query.awards.findFirst({ where: eq(awards.id, awardId) });
+  if (!award || award.winnerSubmissionId) return;
+
+  await db.update(awards).set({ votingClosedAt: null }).where(eq(awards.id, awardId));
+  revalidateAwards();
+}
+
+/** Retract a declared result, and the override reason with it. */
+export async function clearWinner(formData: FormData): Promise<void> {
   await requireRole('organizer');
   const awardId = z.string().uuid().parse(formData.get('awardId'));
   await db
     .update(awards)
-    .set({ votingClosedAt: null, winnerSubmissionId: null })
+    .set({ winnerSubmissionId: null, winnerOverrideReason: null })
     .where(eq(awards.id, awardId));
+  revalidateAwards();
+}
+
+/**
+ * Set the winner by hand against the tally. The reason is mandatory and it is
+ * printed on the public page: an overridden result that looks like a computed
+ * one is dishonest, and the reason is the only thing that tells the two apart.
+ */
+export async function overrideWinner(formData: FormData): Promise<void> {
+  await requireRole('organizer');
+  const input = nomineeSchema.extend({ reason: z.string().min(8).max(500) }).parse({
+    awardId: formData.get('awardId'),
+    submissionId: formData.get('submissionId'),
+    reason: text(formData, 'reason'),
+  });
+
+  // Only a nominee can win. A submission id typed into the form by hand does
+  // not become a winner without going through nomination first.
+  const nominee = await db.query.awardNominees.findFirst({
+    where: and(
+      eq(awardNominees.awardId, input.awardId),
+      eq(awardNominees.submissionId, input.submissionId),
+    ),
+  });
+  if (!nominee) return;
+
+  await db
+    .update(awards)
+    .set({ winnerSubmissionId: input.submissionId, winnerOverrideReason: input.reason })
+    .where(eq(awards.id, input.awardId));
+  revalidateAwards();
+}
+
+/**
+ * Mail every declared winner's speaker, once.
+ *
+ * `email_log` is the idempotency record, exactly as its comment describes, but
+ * it carries no award column — so the key is (kind, submissionId, subject) and
+ * the subject names the award. That is what lets one submission that won two
+ * categories receive two mails while a second press of this button sends none.
+ *
+ * The row is written per send rather than in one pass at the end, matching
+ * `notifyDecided`: a failure halfway through leaves the speakers already told
+ * marked as told, and a retry resumes instead of mailing them twice.
+ */
+export async function notifyWinners(): Promise<void> {
+  await requireRole('organizer');
+  const event = await getEvent();
+
+  for (const winner of await winnersAwaitingNotification(event.name)) {
+    await sendAndLog(winner.mail, {
+      userId: winner.speakerId,
+      kind: WINNER_EMAIL_KIND,
+      submissionId: winner.submissionId,
+    });
+  }
+
   revalidateAwards();
 }
