@@ -93,8 +93,16 @@ const KEYWORDS = [
  * speaker directory and every award surface open empty, because each one filters
  * to accepted work. Rows 15 onward stay undecided so the review queue and the
  * "an undecided proposal is not reachable" test both still have material.
+ *
+ * Posters are special-cased because format is drawn by the same seeded PRNG that
+ * picks every other field, and it places all four posters at indices 15, 21, 26
+ * and 39 — every one of them outside the accepted band. That left the poster
+ * hall and the "Best poster" award empty on a fresh clone, which reads as a
+ * broken feature rather than the coincidence it is. One poster stays undecided
+ * so the format is represented in the review queue too.
  */
-function statusFor(index: number): SubmissionStatus {
+function statusFor(index: number, format: SubmissionFormat): SubmissionStatus {
+  if (format === 'poster') return index === 39 ? 'submitted' : 'accepted';
   if (index >= 15) return 'submitted';
   return index % 5 === 4 ? 'rejected' : 'accepted';
 }
@@ -229,7 +237,7 @@ async function main() {
     const format = FORMATS[Math.floor(random() * FORMATS.length)]!;
     const speaker = speakerRows[i % speakerRows.length]!;
     const track = trackRows[Math.floor(random() * trackRows.length)]!;
-    const status = statusFor(i);
+    const status = statusFor(i, format);
     return {
       speakerId: speaker.id,
       trackId: track.id,
