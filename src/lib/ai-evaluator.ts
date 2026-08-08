@@ -3,23 +3,18 @@ import { and, eq, isNull, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { reviews, submissions, tracks, userRoles, users } from '@/db/schema';
 import { FORMAT_LABELS, LEVEL_LABELS } from './format';
+import { RUBRIC, type RubricKey } from './rubric';
 
 export const EVALUATOR_EMAIL = 'ai-evaluator@sessionboard.local';
 export const EVALUATOR_MODEL = 'claude-sonnet-5';
 
 /**
- * The rubric the model scores against. Kept here rather than in the prompt
- * string so the criteria, the UI legend and the stored breakdown can never
- * drift apart — they all read this one object.
+ * The rubric moved to `./rubric` so human reviewers grade against the same
+ * criteria. Re-exported here because the prompt, the UI legend and the stored
+ * breakdown all still resolve it through this module.
  */
-export const RUBRIC = {
-  clarity: 'Is the abstract specific about what the audience will see and learn?',
-  originality: 'Does this cover ground the audience has not already heard?',
-  relevance: 'Does it fit the track and the stated audience level?',
-  credibility: 'Does the proposal show the speaker has actually done this work?',
-} as const;
-
-export type RubricKey = keyof typeof RUBRIC;
+export { RUBRIC };
+export type { RubricKey };
 
 export type Evaluation = {
   score: number;

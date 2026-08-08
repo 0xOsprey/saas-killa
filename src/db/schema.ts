@@ -22,6 +22,12 @@ import {
  *   slot          a (room, start, end) box on the schedule grid
  *   award         a prize category accepted submissions are nominated into
  *   authSession   a logged-in browser session
+ *   assignment    a (submission, reviewer) pair one grade is owed on
+ *   revision      one logged edit to one field of one submission
+ *   author        a person credited on a submission; the filer is author 0
+ *   task          something a speaker owes, with a deadline
+ *   bookmark      an attendee starring a submission
+ *   persona       a configured AI evaluator, backed by a bot user row
  *
  * "session" alone is deliberately never used for conference content, because it
  * would collide with the login session. Accepted submissions placed in a slot
@@ -55,6 +61,30 @@ export const audienceLevelEnum = pgEnum('audience_level', [
 export const reviewSourceEnum = pgEnum('review_source', ['human', 'ai']);
 
 /**
+ * Speaker-supplied content (slides, recording, resources, poster artwork) is
+ * published only once an organizer approves it. 'draft' is the speaker still
+ * working, 'pending' is submitted for review, 'approved' is public. Anything
+ * not approved is invisible on the public detail page.
+ */
+export const contentStatusEnum = pgEnum('content_status', ['draft', 'pending', 'approved']);
+
+/**
+ * A committee ballot and a People's Choice ballot are counted separately, so a
+ * judge who also votes as an attendee does not double-weight one submission.
+ */
+export const voteChannelEnum = pgEnum('vote_channel', ['committee', 'community']);
+
+/** What a speaker still owes: each row in speaker_tasks is one of these. */
+export const speakerTaskKindEnum = pgEnum('speaker_task_kind', [
+  'headshot',
+  'bio',
+  'slides',
+  'poster',
+  'confirm',
+  'other',
+]);
+
+/**
  * One row. The app is single-event per deploy; the table exists so the CFP
  * window, the event name and the timezone are data rather than constants.
  */
@@ -68,6 +98,12 @@ export const events = pgTable('events', {
   cfpOpensAt: timestamp('cfp_opens_at', { withTimezone: true }).notNull(),
   cfpClosesAt: timestamp('cfp_closes_at', { withTimezone: true }).notNull(),
   agendaPublished: boolean('agenda_published').notNull().default(false),
+  /**
+   * Poster embargo. Null means no embargo and the gallery follows the agenda's
+   * publish flag; a future timestamp hides the gallery until it passes. Posters
+   * are frequently under a journal embargo the agenda is not.
+   */
+  posterEmbargoUntil: timestamp('poster_embargo_until', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -168,10 +204,22 @@ export const submissions = pgTable(
     speakerConfirmedAt: timestamp('speaker_confirmed_at', { withTimezone: true }),
     /** ePoster artwork. Only meaningful when format is 'poster'. */
     posterUrl: text('poster_url'),
+    /** Poster hall board this poster hangs on. Only meaningful for posters. */
+    boardNumber: text('board_number'),
     /** Post-event content, surfaced on the public detail page once present. */
     slidesUrl: text('slides_url'),
     recordingUrl: text('recording_url'),
     resourcesNote: text('resources_note'),
+    /** Gate on the four fields above. Nothing publishes until an organizer approves. */
+    contentStatus: contentStatusEnum('content_status').notNull().default('draft'),
+    /** Free-text topics, used for gallery filtering and reviewer matching. */
+    keywords: text('keywords').array().notNull().default([]),
+    /**
+     * Column names an organizer has frozen against speaker edits, e.g.
+     * ["title"]. The speaker-facing edit action refuses anything listed here;
+     * an organizer can still write the field.
+     */
+    lockedFields: jsonb('locked_fields').$type<string[]>().notNull().default([]),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -191,13 +239,22 @@ export const reviews = pgTable(
     reviewerId: uuid('reviewer_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
-    /** 1 to 5, validated in the app layer before insert. */
+    /**
+     * 1 to 5, validated in the app layer before insert. For a rubric grade this
+     * is the weighted mean of `rubric`, rounded, so every consumer that only
+     * wants one number keeps working.
+     */
     score: integer('score').notNull(),
     comment: text('comment'),
     source: reviewSourceEnum('source').notNull().default('human'),
-    /** AI grades carry their per-criterion breakdown; human grades leave it null. */
+    /**
+     * Per-criterion breakdown, keyed by the criterion keys in `src/lib/rubric.ts`.
+     * Both humans and the AI evaluators fill this in; it was AI-only in v1.
+     */
     rubric: jsonb('rubric').$type<Record<string, number>>(),
     model: text('model'),
+    /** Which evaluator persona produced an AI grade. Null for human grades. */
+    personaId: uuid('persona_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -224,6 +281,12 @@ export const slots = pgTable(
     submissionId: uuid('submission_id').references(() => submissions.id, {
       onDelete: 'set null',
     }),
+    /**
+     * A named non-session block: "Lunch", "Registration", "Coffee". Set only
+     * when `submissionId` is null. A break spanning the venue is one labelled
+     * slot per room, which is what the grid already knows how to draw.
+     */
+    label: text('label'),
   },
   (t) => [
     uniqueIndex('slots_room_start_idx').on(t.roomId, t.startsAt),
@@ -241,6 +304,24 @@ export const awards = pgTable('awards', {
     onDelete: 'set null',
   }),
   votingClosedAt: timestamp('voting_closed_at', { withTimezone: true }),
+  /**
+   * Community voting. When true anyone signed in may cast a 'community' ballot
+   * inside the window below; the committee ballot is unaffected either way, so
+   * an award can run both and report them separately.
+   */
+  publicVoting: boolean('public_voting').notNull().default(false),
+  votingOpensAt: timestamp('voting_opens_at', { withTimezone: true }),
+  votingClosesAt: timestamp('voting_closes_at', { withTimezone: true }),
+  /**
+   * Weighted judging criteria, e.g. [{key:'impact',label:'Impact',weight:2}].
+   * Empty means a single unweighted pick, which is how v1 behaved.
+   */
+  criteria: jsonb('criteria')
+    .$type<{ key: string; label: string; weight: number }[]>()
+    .notNull()
+    .default([]),
+  /** Set when an organizer overrides the tally by hand, with their reason. */
+  winnerOverrideReason: text('winner_override_reason'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -254,11 +335,17 @@ export const awardNominees = pgTable(
     submissionId: uuid('submission_id')
       .notNull()
       .references(() => submissions.id, { onDelete: 'cascade' }),
+    /** Promoted out of round one. Finalist-only awards tally these alone. */
+    isFinalist: boolean('is_finalist').notNull().default(false),
   },
   (t) => [primaryKey({ columns: [t.awardId, t.submissionId] })],
 );
 
-/** One vote per judge per award; re-voting moves the vote. */
+/**
+ * One vote per person per award per channel; re-voting moves the vote. The
+ * channel is in the key so a judge who also votes as an attendee casts two
+ * ballots that are counted in two different tallies, never summed.
+ */
 export const awardVotes = pgTable(
   'award_votes',
   {
@@ -271,9 +358,187 @@ export const awardVotes = pgTable(
     submissionId: uuid('submission_id')
       .notNull()
       .references(() => submissions.id, { onDelete: 'cascade' }),
+    channel: voteChannelEnum('channel').notNull().default('committee'),
+    /**
+     * Per-criterion scores keyed by `awards.criteria[].key`. Null for a plain
+     * unweighted pick, which is what a community ballot always is.
+     */
+    scores: jsonb('scores').$type<Record<string, number>>(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [primaryKey({ columns: [t.awardId, t.judgeId] })],
+  (t) => [primaryKey({ columns: [t.awardId, t.judgeId, t.channel] })],
+);
+
+/**
+ * Which reviewer owes a grade on which submission. v1 showed every reviewer
+ * every submitted row; with assignments the queue is per-reviewer, "max reviews
+ * per submission" becomes countable, and a completion rate is a real number
+ * rather than a guess.
+ */
+export const reviewAssignments = pgTable(
+  'review_assignments',
+  {
+    submissionId: uuid('submission_id')
+      .notNull()
+      .references(() => submissions.id, { onDelete: 'cascade' }),
+    reviewerId: uuid('reviewer_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    dueAt: timestamp('due_at', { withTimezone: true }),
+    assignedAt: timestamp('assigned_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.submissionId, t.reviewerId] }),
+    index('review_assignments_reviewer_idx').on(t.reviewerId),
+  ],
+);
+
+/**
+ * Append-only edit log for submission text. One row per field changed, so the
+ * detail page can show who changed the abstract and to what. Never updated,
+ * never deleted: an audit trail that can be rewritten is not one.
+ */
+export const submissionRevisions = pgTable(
+  'submission_revisions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    submissionId: uuid('submission_id')
+      .notNull()
+      .references(() => submissions.id, { onDelete: 'cascade' }),
+    editorId: uuid('editor_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    field: text('field').notNull(),
+    oldValue: text('old_value'),
+    newValue: text('new_value'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('submission_revisions_submission_idx').on(t.submissionId, t.createdAt)],
+);
+
+/**
+ * Co-presenters. `submissions.speakerId` stays the owning account that filed
+ * and can edit; this table is everyone who appears on the billing, in order.
+ * The owner is row 0, so a listing reads straight off `position`.
+ */
+export const submissionAuthors = pgTable(
+  'submission_authors',
+  {
+    submissionId: uuid('submission_id')
+      .notNull()
+      .references(() => submissions.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    position: integer('position').notNull().default(0),
+    affiliation: text('affiliation'),
+    /** False for a credited co-author who will not be in the room. */
+    isPresenter: boolean('is_presenter').notNull().default(true),
+  },
+  (t) => [
+    primaryKey({ columns: [t.submissionId, t.userId] }),
+    index('submission_authors_user_idx').on(t.userId),
+  ],
+);
+
+/** What a speaker still owes, with a deadline the organizer can chase. */
+export const speakerTasks = pgTable(
+  'speaker_tasks',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    /** Null for an account-level task like a headshot, which spans every talk. */
+    submissionId: uuid('submission_id').references(() => submissions.id, {
+      onDelete: 'cascade',
+    }),
+    kind: speakerTaskKindEnum('kind').notNull(),
+    label: text('label').notNull(),
+    dueAt: timestamp('due_at', { withTimezone: true }),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    lastRemindedAt: timestamp('last_reminded_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('speaker_tasks_user_idx').on(t.userId)],
+);
+
+/**
+ * An attendee starring a talk or a poster. Backs both the personal agenda and
+ * the poster gallery's bookmarks; they are the same gesture on the same row.
+ */
+export const bookmarks = pgTable(
+  'bookmarks',
+  {
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    submissionId: uuid('submission_id')
+      .notNull()
+      .references(() => submissions.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.submissionId] })],
+);
+
+/**
+ * A configured AI reviewer. v1 hardcoded one persona and one rubric in source;
+ * this makes the tone, the expertise and the criterion weights data an
+ * organizer can edit. Each persona owns a bot `users` row so its grades
+ * attribute exactly like a human's.
+ */
+export const evaluatorPersonas = pgTable('evaluator_personas', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  profession: text('profession'),
+  tone: text('tone'),
+  expertise: text('expertise'),
+  /** Criterion key to weight, keyed by `src/lib/rubric.ts`. */
+  weights: jsonb('weights').$type<Record<string, number>>().notNull().default({}),
+  active: boolean('active').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Every message the platform sent, written after the send. Two jobs: it is the
+ * receipt an organizer reads instead of asking "did that go out", and it is the
+ * idempotency record that stops a bulk reminder firing twice in one day.
+ */
+export const emailLog = pgTable(
+  'email_log',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    submissionId: uuid('submission_id').references(() => submissions.id, {
+      onDelete: 'set null',
+    }),
+    kind: text('kind').notNull(),
+    subject: text('subject').notNull(),
+    /** False when RESEND_API_KEY is unset and the mail only reached .mail/. */
+    delivered: boolean('delivered').notNull().default(false),
+    sentAt: timestamp('sent_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('email_log_user_idx').on(t.userId, t.sentAt)],
+);
+
+/** When a speaker cannot be scheduled. Read by the agenda conflict checker. */
+export const speakerAvailability = pgTable(
+  'speaker_availability',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    startsAt: timestamp('starts_at', { withTimezone: true }).notNull(),
+    endsAt: timestamp('ends_at', { withTimezone: true }).notNull(),
+    note: text('note'),
+  },
+  (t) => [index('speaker_availability_user_idx').on(t.userId)],
 );
 
 export type User = typeof users.$inferSelect;
@@ -284,8 +549,19 @@ export type Room = typeof rooms.$inferSelect;
 export type Track = typeof tracks.$inferSelect;
 export type Event = typeof events.$inferSelect;
 export type Award = typeof awards.$inferSelect;
+export type ReviewAssignment = typeof reviewAssignments.$inferSelect;
+export type SubmissionRevision = typeof submissionRevisions.$inferSelect;
+export type SubmissionAuthor = typeof submissionAuthors.$inferSelect;
+export type SpeakerTask = typeof speakerTasks.$inferSelect;
+export type Bookmark = typeof bookmarks.$inferSelect;
+export type EvaluatorPersona = typeof evaluatorPersonas.$inferSelect;
+export type EmailLogRow = typeof emailLog.$inferSelect;
+export type SpeakerAvailability = typeof speakerAvailability.$inferSelect;
 export type Role = (typeof roleEnum.enumValues)[number];
 export type SubmissionStatus = (typeof submissionStatusEnum.enumValues)[number];
 export type SubmissionFormat = (typeof submissionFormatEnum.enumValues)[number];
 export type AudienceLevel = (typeof audienceLevelEnum.enumValues)[number];
 export type ReviewSource = (typeof reviewSourceEnum.enumValues)[number];
+export type ContentStatus = (typeof contentStatusEnum.enumValues)[number];
+export type VoteChannel = (typeof voteChannelEnum.enumValues)[number];
+export type SpeakerTaskKind = (typeof speakerTaskKindEnum.enumValues)[number];
