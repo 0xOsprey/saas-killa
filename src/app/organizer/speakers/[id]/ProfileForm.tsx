@@ -30,7 +30,7 @@ export function ProfileForm({
       <input type="hidden" name="userId" value={userId} />
 
       <Field label="Name">
-        <Input name="name" defaultValue={name ?? ''} maxLength={120} />
+        <Input name="name" defaultValue={name ?? ''} maxLength={120} data-testid="profile-name" />
       </Field>
 
       <Field label="Bio" hint="Shown on the agenda detail page and the public directory.">
@@ -51,12 +51,16 @@ export function ProfileForm({
         <Headshot src={headshotUrl} name={name} size="md" />
       </div>
 
-      <Button type="submit" disabled={pending}>
+      <Button type="submit" disabled={pending} data-testid="profile-save">
         {pending ? 'Saving…' : 'Save profile'}
       </Button>
 
       {state.error ? <Notice tone="bad">{state.error}</Notice> : null}
-      {state.saved ? <Notice tone="good">Saved.</Notice> : null}
+      {state.saved ? (
+        <Notice tone="good">
+          <span data-testid="profile-saved">Saved.</span>
+        </Notice>
+      ) : null}
     </form>
   );
 }

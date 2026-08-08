@@ -12,6 +12,13 @@ const schema = z.object({
   RESEND_API_KEY: z.string().optional(),
   MAIL_FROM: z.string().default('Sessionboard <cfp@example.com>'),
   BOOTSTRAP_ORGANIZER_EMAIL: z.string().email().optional(),
+
+  // The Accelevents push. All three unset means dry run, which is the mode this
+  // app reaches unless someone deliberately configures otherwise, and the only
+  // mode any test has ever run in. See `src/lib/accelevents.ts`.
+  ACCELEVENTS_BASE_URL: z.string().url().optional(),
+  ACCELEVENTS_API_KEY: z.string().optional(),
+  ACCELEVENTS_EVENT_ID: z.string().optional(),
 });
 
 let cached: z.infer<typeof schema> | null = null;

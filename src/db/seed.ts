@@ -187,8 +187,8 @@ async function main() {
         submission_answers, form_questions, submission_revisions,
         submission_authors, speaker_tasks, speaker_availability, email_log,
         evaluator_personas, reviews, review_rounds, slots, submissions,
-        uploads, portal_pages, auth_sessions, magic_link_tokens, user_roles,
-        users, rooms, tracks, events
+        uploads, portal_pages, integration_runs, auth_sessions,
+        magic_link_tokens, user_roles, users, rooms, tracks, events
       restart identity cascade
     `);
     console.log('✓ tables truncated');

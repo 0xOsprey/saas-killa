@@ -104,6 +104,13 @@ export const uploadKindEnum = pgEnum('upload_kind', [
   'document',
 ]);
 
+/** How a push of the programme to an outside platform ended. */
+export const integrationRunStatusEnum = pgEnum('integration_run_status', [
+  'running',
+  'ok',
+  'failed',
+]);
+
 /** What a speaker still owes: each row in speaker_tasks is one of these. */
 export const speakerTaskKindEnum = pgEnum('speaker_task_kind', [
   'headshot',
@@ -674,6 +681,54 @@ export const portalPages = pgTable(
   (t) => [uniqueIndex('portal_pages_slug_idx').on(t.slug)],
 );
 
+/** One call in a run: what was asked for, and what the far end said. */
+export type IntegrationRequestLog = {
+  method: string;
+  path: string;
+  body: unknown;
+  status: number;
+  /** The id the far end gave this object, when it gave one. */
+  remoteId: string | null;
+  error: string | null;
+};
+
+/**
+ * One push of the programme to an outside event platform.
+ *
+ * The integration is one-way by construction: this table records what we sent
+ * and what came back, and nothing in it is ever read back into a submission, a
+ * slot or a speaker. Accelevents holds a copy; this app holds the original.
+ *
+ * `requests` is the exact list of calls the run made, method, path and body,
+ * kept whether they were sent or only rehearsed. That is what makes a dry run
+ * worth anything: an organizer can read what would go over the wire before
+ * anyone points this at a live event.
+ *
+ * A run is never deleted. "What did we send them on the Tuesday" is the first
+ * question anyone asks when two systems disagree.
+ */
+export const integrationRuns = pgTable(
+  'integration_runs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    target: text('target').notNull().default('accelevents'),
+    /** 'dry_run' rehearses against fixtures. 'live' is the only mode that leaves this host. */
+    mode: text('mode').notNull(),
+    status: integrationRunStatusEnum('status').notNull().default('running'),
+    /** Where a live run went, recorded so a mis-set base URL is visible afterwards. */
+    baseUrl: text('base_url'),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+    speakerCount: integer('speaker_count').notNull().default(0),
+    sessionCount: integer('session_count').notNull().default(0),
+    trackCount: integer('track_count').notNull().default(0),
+    requests: jsonb('requests').$type<IntegrationRequestLog[]>().notNull().default([]),
+    error: text('error'),
+    startedById: uuid('started_by_id').references(() => users.id, { onDelete: 'set null' }),
+  },
+  (t) => [index('integration_runs_started_idx').on(t.startedAt)],
+);
+
 /** When a speaker cannot be scheduled. Read by the agenda conflict checker. */
 export const speakerAvailability = pgTable(
   'speaker_availability',
@@ -795,6 +850,8 @@ export type EvaluatorPersona = typeof evaluatorPersonas.$inferSelect;
 export type EmailLogRow = typeof emailLog.$inferSelect;
 export type SpeakerAvailability = typeof speakerAvailability.$inferSelect;
 export type PortalPage = typeof portalPages.$inferSelect;
+export type IntegrationRun = typeof integrationRuns.$inferSelect;
+export type IntegrationRunStatus = (typeof integrationRunStatusEnum.enumValues)[number];
 export type Role = (typeof roleEnum.enumValues)[number];
 export type SubmissionStatus = (typeof submissionStatusEnum.enumValues)[number];
 export type SubmissionFormat = (typeof submissionFormatEnum.enumValues)[number];
