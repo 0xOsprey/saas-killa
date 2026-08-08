@@ -8,7 +8,9 @@ agenda, embeddable widgets for the event's own website, and a one-way push of
 the finished programme to Accelevents.
 
 `SCOPE.md` is the requirement-by-requirement account of what is built, what is
-deliberately not, and which test covers each.
+deliberately not, and which test covers each. It also records that four of the
+brief's nine requirements are struck through in the source document, all four of
+which were built here before that was noticed.
 
 Next.js 15 (App Router, Server Actions) · Postgres via Drizzle · Tailwind v4 ·
 Playwright.
@@ -128,9 +130,13 @@ so they run in a fixed order with a single worker and each file puts back what
 it changed. A test that leaves a talk on the grid is a test that breaks four
 later files for a reason none of them can see.
 
-Placement in the tests uses click-to-select then click-to-place as well as
-dragging, because HTML5 drag events are not reliably synthesisable in every
-harness. Both paths call the same server action.
+Placement in the tests uses click-to-select then click-to-place, and the
+no-script form, as well as dragging. All three call the same server action, and
+exactly one test is about the drag itself. That one drives the mouse by hand
+rather than through `locator.dragTo`, which scrolls the target into view after
+the button is down and before Chromium decides a drag has begun: on a grid
+taller than the viewport that moves the layout under a stationary cursor, and
+the gesture picks up whichever cell arrives at the point.
 
 ## Deploying
 

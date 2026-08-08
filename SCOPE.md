@@ -1,12 +1,40 @@
 # Scope
 
 What is built, what is deliberately not, and which test covers each. Written
-2026-08-08 against commit `cc452a1` plus the working tree described at the
-bottom.
+2026-08-08, revised the same day against commit `73f4c00`.
 
-The spec this is measured against is the "Kill My SaaS" brief and its nine
-judged requirements, not the sessionboard.com marketing pages. An earlier gap
-audit in this repository's history was built the second way and is superseded.
+The spec this is measured against is the "Kill My SaaS" brief, not the
+sessionboard.com marketing pages. An earlier gap audit in this repository's
+history was built the second way and is superseded.
+
+## Four of the nine requirements are struck through in the brief
+
+Read from the document's own HTML export rather than from the PDF, because a
+PDF export drops the formatting that carries this:
+
+```
+curl -sL -o brief.html ".../export?format=html"   # then: grep line-through
+```
+
+One CSS class carries `text-decoration:line-through` and it wraps exactly four
+spans:
+
+| Item | Struck |
+| --- | --- |
+| 4 | the clause "including optional AI-assisted review across multiple rounds" only; "Submission evaluation and scoring workflows" stands |
+| 7 | Accelevents integration, in full |
+| 8 | Portal resource and wiki pages, in full |
+| 9 | Embeddable speaker gallery and schedule, in full |
+
+Reading a strike as "descoped" is an inference, not something the brief states.
+It is the only reading consistent with the "NOT NEEDED" annotation on payments
+being written a different way, but it is an inference.
+
+**All four were built anyway, before this was noticed, and all four stay.**
+Removing working, tested surface to match a strike would cost work and gain
+nothing; the brief's own tiebreaker is "whoever has made subjective judgment
+calls for the product that we would actually use/buy". What changes is where
+further effort goes: requirements 1 to 6 are the judged list.
 
 ## Verification
 
@@ -23,6 +51,9 @@ worker, no retries, a single database reset once in `globalSetup` and shared
 across the whole run. Every file puts back what it changed.
 
 ## The nine requirements
+
+Numbered as the brief numbers them. 1 to 6 are the judged list; 7, 8 and 9 are
+struck there and built here.
 
 ### 1. CFP forms with conditional logic and category routing
 
@@ -83,9 +114,11 @@ Built.
   invitation → time change → cancellation and asserts the UID, the rising
   SEQUENCE and the changed start across three separate mails.
 
-### 4. Evaluation and scoring, AI-assisted, multi-round
+### 4. Evaluation and scoring, multi-round
 
-Built. Not extended during this pass, deliberately.
+Built. Not extended during this pass, deliberately. The AI-assisted clause is the
+part of this requirement the brief strikes; the evaluator below was built before
+that was noticed and is left in place, off by default.
 
 - Reviewers grade at `/review` against four criteria. Blind review is a
   query-level property: `reviewQueue()` selects no speaker column, so the
@@ -129,10 +162,17 @@ Built.
 - Each tile links to the roster filter it counts, and the counts are computed
   over the same population as that filter, so the tile and the list it opens
   agree by construction rather than by seed coincidence.
+- Below the tiles, how many accepted speakers have confirmed they are coming.
+  A different question from tasks and kept visually apart for that reason: a
+  speaker can owe nothing and still not have answered, and every tile above
+  counts that person as fine. `unconfirmed` is the figure counted in SQL and
+  `confirmed` is derived from it, because the roster's own filter is
+  `accepted > confirmed` and deriving it the other way would have made the card
+  disagree with the list it links to.
 - Tests: `onboarding.spec.ts` — all three, each written relative to a baseline
   read at the start rather than against a fixed number.
 
-### 7. Accelevents one-way integration
+### 7. Accelevents one-way integration — struck in the brief
 
 Built as a dry run. **No request has ever left this machine.**
 
@@ -158,7 +198,7 @@ Built as a dry run. **No request has ever left this machine.**
   real; the far end's schema is unconfirmed".
 - Tests: `integrations.spec.ts` — all three, every one of them a dry run.
 
-### 8. Portal resource and wiki pages with HTML embed support
+### 8. Portal resource and wiki pages with HTML embed support — struck in the brief
 
 Built.
 
@@ -176,7 +216,7 @@ Built.
 - Tests: `portal-pages.spec.ts` — all three, including one that asserts script
   tags, event handlers and unlisted embed hosts do not survive the page.
 
-### 9. Embeddable, mobile-friendly speaker gallery and schedule itinerary
+### 9. Embeddable, mobile-friendly speaker gallery and schedule itinerary — struck in the brief
 
 Built.
 
@@ -241,23 +281,41 @@ Stated plainly, because every one of these is easy to mistake for a feature.
 - **Mail goes to `.mail/` unless `RESEND_API_KEY` is set.** That is how the tests
   read magic links, and it means a fresh deploy sends nothing until the key is
   there.
-- **Drag-and-drop is asserted through Playwright's `dragTo`.** The click-to-place
-  path is the one that also works with scripting off, and both call the same
-  server action.
+- **The drag is asserted with hand-driven mouse events, not `dragTo`.** On a
+  grid taller than the viewport `dragTo` scrolls the target into view after the
+  mouse button is down and before Chromium starts the drag, so `dragstart` fires
+  on whichever cell slid under a stationary cursor. Measured, and it moved a talk
+  the test had never named. `schedule.spec.ts` now presses, moves and releases by
+  hand inside a viewport tall enough that nothing scrolls mid-gesture.
 
-## Uncommitted at the time of writing
+## Subfeature sweep, 2026-08-08
 
-The seeded schedule and the test-hygiene repairs it forced:
+Every clause of requirements 1 to 6 read back against the code, one at a time:
 
-- `src/db/seed.ts` seeds 24 slots over two days with 9 talks placed and two
-  break bands. Before this, the fixture had an empty grid, so three judged
-  requirements demoed as blank screens on a fresh clone.
-- `e2e/smoke.spec.ts` reads the organizer tab list off the nav instead of a
-  hand-kept copy. Four tabs had been added over one week and the test went on
-  passing under a name that had stopped being true.
-- `e2e/embed.spec.ts` uses the fixture's own break band instead of writing and
-  then deleting one. Its deletion took a seeded band with it and four later
-  files failed for a reason none of them could see.
-- `e2e/speaker-calendar.spec.ts` binds the mail it reads to the talk it moves.
-- `e2e/integrations.spec.ts` finds its session request by title rather than
-  taking the first one in the bundle.
+| Clause | Where |
+| --- | --- |
+| 1 · conditional logic | `showIfQuestionId` / `showIfValue` on `form_questions` |
+| 1 · category-based routing | `planAssignments({ matchTrack })`, plus per-question narrowing by `formats` and `trackIds` |
+| 2 · bios, headshots | `/speaker/profile` |
+| 2 · slides, supporting documents | `/speaker/content`, files on local disk |
+| 3 · templated | every template in `src/lib/email.ts` |
+| 3 · reminders | task reminders at `/organizer/speakers`, CFP reminders at `/organizer/cfp`, both deduplicated at 24 hours |
+| 3 · calendar invites to the speaker's own calendar | `.ics` with `METHOD:REQUEST`, rising `SEQUENCE`, stable UID |
+| 4 · scoring workflows | `/review`, four criteria, blind at query level |
+| 4 · multiple rounds | `review_rounds`, `/organizer/evaluators` |
+| 5 · drag and drop | `ScheduleGrid`, with a no-script form behind it |
+| 5 · conflict detection across rooms and tracks | `src/lib/conflicts.ts`, three classes |
+| 5 · list, day, week, track, room | all five, plus grid, in `SCHEDULE_VIEWS` |
+| 6 · real-time | 15-second self-refresh, pauses on a hidden tab |
+| 6 · outstanding onboarding tasks | four tiles, a per-kind table, and a chase list |
+
+Nothing in the wording of 1 to 6 is unbuilt.
+
+The features visible in the brief's annotated screenshots but absent from its
+requirement sentences are not built, and are listed here so nobody mistakes the
+sweep above for a claim about the screenshots: pronouns, honorific and social
+links on a speaker profile; saved drafts and a per-user submission cap;
+participant roles with minimum and maximum counts; cross-field character limits;
+XLSX export (CSV and JSON are built), session import, and a bulk file bundle;
+Month and Conflicts as named schedule views; an organizer-side manual "Add
+Abstract".
