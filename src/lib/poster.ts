@@ -1,11 +1,12 @@
 /**
  * How a poster should be rendered, and who is allowed to see the hall.
  *
- * `posterUrl` points at something on someone else's server — there is no upload
- * and no blob store — so the URL itself is the only signal available. Every
- * consumer asks this module instead of sniffing an extension inline, so the
- * gallery card, the full view and the speaker's own preview cannot disagree
- * about what a given URL is.
+ * `posterUrl` holds either a file uploaded to this server, served back from
+ * `/files/<id>/<name>`, or a link to something on someone else's. Either way
+ * the URL is the only signal available, and the trailing name on an upload is
+ * carried precisely so this module can still read an extension off it. Every
+ * consumer asks here rather than sniffing inline, so the gallery card, the full
+ * view and the speaker's own preview cannot disagree about what a URL is.
  *
  * Pure. No database, no fetch, no clock except the one passed in.
  */

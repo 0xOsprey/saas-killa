@@ -31,6 +31,7 @@ import {
  *   round         one pass of committee review; assignments and reviews belong to one
  *   question      an organizer-defined field on the submission form
  *   answer        one submission's response to one question
+ *   upload        a file on this server's disk, addressed by /files/<id>
  *
  * "session" alone is deliberately never used for conference content, because it
  * would collide with the login session. Accepted submissions placed in a slot
@@ -89,6 +90,18 @@ export const questionKindEnum = pgEnum('question_kind', [
   'select',
   'checkbox',
   'url',
+]);
+
+/**
+ * What an uploaded file is for. The kind decides the size cap, the file types
+ * accepted and who may read it back, so it is an enum rather than free text:
+ * a typo in a kind string would otherwise widen an access rule silently.
+ */
+export const uploadKindEnum = pgEnum('upload_kind', [
+  'headshot',
+  'slides',
+  'poster',
+  'document',
 ]);
 
 /** What a speaker still owes: each row in speaker_tasks is one of these. */
@@ -502,6 +515,50 @@ export const speakerTasks = pgTable(
 );
 
 /**
+ * A file a speaker put on this server's disk.
+ *
+ * The bytes live under a gitignored `uploads/` directory and are served back by
+ * `/files/<id>`; this row is the index and the access-control record. There is
+ * deliberately no blob store and no signed URL — one machine, one disk, and a
+ * route handler that checks who is asking.
+ *
+ * Two names per file, and the split is the security property:
+ *
+ *   `storedName`  machine-generated, `<uuid><ext>`, and the only string that
+ *                 ever reaches the filesystem. The extension comes from the
+ *                 sniffed magic bytes, never from what the browser sent, so
+ *                 there is no user-controlled path component to traverse with.
+ *   `filename`    the sanitized original, shown to humans and put in the
+ *                 `content-disposition` header. Never touches disk.
+ *
+ * `submissionId` is null for an account-level file — a headshot belongs to the
+ * person, not to any one talk.
+ */
+export const uploads = pgTable(
+  'uploads',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    ownerId: uuid('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    submissionId: uuid('submission_id').references(() => submissions.id, {
+      onDelete: 'cascade',
+    }),
+    kind: uploadKindEnum('kind').notNull(),
+    filename: text('filename').notNull(),
+    storedName: text('stored_name').notNull(),
+    /** The sniffed type, not the declared one. This is what gets served back. */
+    contentType: text('content_type').notNull(),
+    bytes: integer('bytes').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('uploads_owner_idx').on(t.ownerId),
+    index('uploads_submission_idx').on(t.submissionId),
+  ],
+);
+
+/**
  * An attendee starring a talk or a poster. Backs both the personal agenda and
  * the poster gallery's bookmarks; they are the same gesture on the same row.
  */
@@ -679,6 +736,7 @@ export type ReviewAssignment = typeof reviewAssignments.$inferSelect;
 export type SubmissionRevision = typeof submissionRevisions.$inferSelect;
 export type SubmissionAuthor = typeof submissionAuthors.$inferSelect;
 export type SpeakerTask = typeof speakerTasks.$inferSelect;
+export type Upload = typeof uploads.$inferSelect;
 export type Bookmark = typeof bookmarks.$inferSelect;
 export type EvaluatorPersona = typeof evaluatorPersonas.$inferSelect;
 export type EmailLogRow = typeof emailLog.$inferSelect;
@@ -691,3 +749,4 @@ export type ReviewSource = (typeof reviewSourceEnum.enumValues)[number];
 export type ContentStatus = (typeof contentStatusEnum.enumValues)[number];
 export type VoteChannel = (typeof voteChannelEnum.enumValues)[number];
 export type SpeakerTaskKind = (typeof speakerTaskKindEnum.enumValues)[number];
+export type UploadKind = (typeof uploadKindEnum.enumValues)[number];

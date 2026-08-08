@@ -40,6 +40,8 @@ export type BoardRow = {
   contentStatus: 'draft' | 'pending' | 'approved';
   contentStatusLabel: string;
   hasContent: boolean;
+  /** Supporting documents. Private, so this board is the only way to reach one. */
+  documents: { href: string; name: string; size: string }[];
   lockedFields: string[];
   revisionCount: number;
   lastEdit: RevisionEntry | null;
@@ -297,6 +299,24 @@ function Row({
               ? 'Slides, a recording or resources are attached.'
               : 'The speaker has not attached anything yet.'}
           </p>
+
+          {row.documents.length > 0 ? (
+            <div className="space-y-1" data-testid={`organizer-documents-${row.id}`}>
+              <p className="text-xs font-medium text-ink">
+                Supporting documents ({row.documents.length})
+              </p>
+              <ul className="space-y-0.5">
+                {row.documents.map((document) => (
+                  <li key={document.href} className="flex items-baseline gap-2 text-xs">
+                    <a href={document.href} className="truncate underline hover:text-ink">
+                      {document.name}
+                    </a>
+                    <span className="shrink-0 text-muted">{document.size}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
 
           <div className="flex flex-wrap items-center gap-2">
             {row.contentStatus === 'approved' ? null : (

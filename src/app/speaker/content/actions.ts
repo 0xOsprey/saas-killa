@@ -10,6 +10,7 @@ import type { ContentStatus } from '@/db/schema';
 import { requireUser } from '@/lib/auth';
 import { applyTextEdit, isLocked, logRevisions, type TextEdit } from '@/lib/content';
 import { writableBy } from '@/lib/abstracts';
+import { deleteUpload, linkField, saveUpload, uploadHref } from '@/lib/uploads';
 
 /**
  * The speaker's own content surface. Every action scopes its WHERE clause to
@@ -18,6 +19,12 @@ import { writableBy } from '@/lib/abstracts';
  * logs one `submission_revisions` row per field it changed.
  */
 
+/**
+ * A recording is somebody else's URL — Vimeo, YouTube, a university's own
+ * player — and there is no upload for one, so an app-relative path in this
+ * column could only be a hand-crafted POST pointing at a 404. Slides take
+ * `linkField` instead, because a slide deck can now be a file on this disk.
+ */
 const urlField = z.string().url().or(z.literal('')).transform((value) => value || null);
 const noteField = z
   .string()
@@ -76,9 +83,53 @@ function readFields(formData: FormData, lockedFields: string[]): TextEdit {
   for (const field of CONTENT_FIELDS) {
     if (!formData.has(field) || isLocked(lockedFields, field)) continue;
     const raw = String(formData.get(field) ?? '').trim();
-    next[field] = field === 'resourcesNote' ? noteField.parse(raw) : urlField.parse(raw);
+    if (field === 'resourcesNote') next[field] = noteField.parse(raw);
+    else if (field === 'slidesUrl') next[field] = linkField.parse(raw);
+    else next[field] = urlField.parse(raw);
   }
   return next;
+}
+
+/**
+ * The slide deck when the speaker attached a file rather than pasting a link.
+ *
+ * The stored path is folded into the same `TextEdit` the text fields produce,
+ * so a file and a URL are one write and one revision row. Two separate routes
+ * into `slidesUrl` would eventually disagree about what the history says
+ * happened.
+ *
+ * Returns a refusal to show the speaker, or null when there was nothing to do.
+ * An untouched file input still posts, as a zero-byte File, so "no file" is the
+ * ordinary case here and not a failure.
+ */
+async function foldInSlidesUpload(
+  formData: FormData,
+  row: OwnedRow,
+  speakerId: string,
+  next: TextEdit,
+): Promise<string | null> {
+  const file = formData.get('slidesFile');
+  if (!(file instanceof File) || file.size === 0) return null;
+  if (isLocked(row.lockedFields, 'slidesUrl')) {
+    return 'An organizer has frozen the slides on that talk. Ask them to unlock it.';
+  }
+
+  const result = await saveUpload({
+    file,
+    kind: 'slides',
+    ownerId: speakerId,
+    submissionId: row.id,
+  });
+  if (!result.ok) return result.reason;
+
+  // The file wins over the text field. A speaker who did both meant the file:
+  // it is the one they had to go and find.
+  next.slidesUrl = uploadHref(result.upload);
+  return null;
+}
+
+function refuse(reason: string): never {
+  redirect(`/speaker/content?error=${encodeURIComponent(reason)}`);
 }
 
 async function setContentStatus(
@@ -116,12 +167,11 @@ export async function saveContentDraft(formData: FormData): Promise<void> {
   const row = await loadOwned(id, user.id);
   if (!row) redirect('/speaker/content');
 
-  await applyTextEdit({
-    submissionId: id,
-    editorId: user.id,
-    ownerId: user.id,
-    next: readFields(formData, row.lockedFields),
-  });
+  const next = readFields(formData, row.lockedFields);
+  const refusal = await foldInSlidesUpload(formData, row, user.id, next);
+  if (refusal) refuse(refusal);
+
+  await applyTextEdit({ submissionId: id, editorId: user.id, ownerId: user.id, next });
 
   revalidate(id);
   redirect('/speaker/content?saved=1');
@@ -140,6 +190,9 @@ export async function submitContentForReview(formData: FormData): Promise<void> 
   if (!row) redirect('/speaker/content');
 
   const next = readFields(formData, row.lockedFields);
+  const refusal = await foldInSlidesUpload(formData, row, user.id, next);
+  if (refusal) refuse(refusal);
+
   await applyTextEdit({ submissionId: id, editorId: user.id, ownerId: user.id, next });
 
   const after = { ...row, ...next };
@@ -152,6 +205,72 @@ export async function submitContentForReview(formData: FormData): Promise<void> 
   await setContentStatus(row, user.id, 'pending');
   revalidate(id);
   redirect('/speaker/content?review=1');
+}
+
+/**
+ * Attach a supporting document: a handout, a data appendix, a signed release.
+ *
+ * Its own action rather than another field on the content form, because a talk
+ * carries any number of these and one file input cannot express "add one more".
+ *
+ * A document never publishes. It is not in `CONTENT_FIELDS`, so attaching one
+ * does not make an otherwise-empty content record submittable, and
+ * `readableUpload` keeps it off the public agenda whatever the content status
+ * says. That is the point of the kind: this is material for the organizers,
+ * and it routinely carries a draft or a phone number nobody agreed to publish.
+ */
+export async function uploadDocument(formData: FormData): Promise<void> {
+  const user = await requireUser();
+  const id = z.string().uuid().parse(formData.get('submissionId'));
+  const row = await loadOwned(id, user.id);
+  if (!row) redirect('/speaker/content');
+
+  const result = await saveUpload({
+    file: formData.get('documentFile'),
+    kind: 'document',
+    ownerId: user.id,
+    submissionId: id,
+  });
+  if (!result.ok) refuse(result.reason);
+
+  await logRevisions([
+    {
+      submissionId: id,
+      editorId: user.id,
+      field: 'document',
+      oldValue: null,
+      newValue: result.upload.filename,
+    },
+  ]);
+
+  revalidate(id);
+  redirect('/speaker/content?document=1');
+}
+
+/**
+ * Take a document back down. Scoped to the caller's own uploads, so a co-author
+ * with write access can add their own and remove their own but cannot delete
+ * the filer's release form out from under them.
+ */
+export async function removeDocument(formData: FormData): Promise<void> {
+  const user = await requireUser();
+  const submissionId = z.string().uuid().parse(formData.get('submissionId'));
+  const uploadId = z.string().uuid().parse(formData.get('uploadId'));
+
+  if (await deleteUpload(uploadId, user.id)) {
+    await logRevisions([
+      {
+        submissionId,
+        editorId: user.id,
+        field: 'document',
+        oldValue: 'attached',
+        newValue: null,
+      },
+    ]);
+  }
+
+  revalidate(submissionId);
+  redirect('/speaker/content?removed=1');
 }
 
 /** Pull it back out of the queue to keep working on it. */

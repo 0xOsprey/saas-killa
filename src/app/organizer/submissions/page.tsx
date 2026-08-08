@@ -14,6 +14,7 @@ import {
 } from '@/lib/content';
 import { FORMAT_LABELS, LEVEL_LABELS, STATUS_LABELS, inEventZone } from '@/lib/format';
 import { allTracks, getEvent, organizerSubmissions } from '@/lib/queries';
+import { documentsFor, formatBytes, uploadHref } from '@/lib/uploads';
 import { gradePending, notifyDecided } from './actions';
 import { SubmissionsBoard, type BoardRow } from './SubmissionsBoard';
 
@@ -58,6 +59,7 @@ export default async function OrganizerSubmissionsPage({
   ]);
 
   const filter = contentStatusEnum.enumValues.find((value) => value === params.content) ?? null;
+  const documents = await documentsFor(rows.map((row) => row.id));
 
   const counts = {
     submitted: rows.filter((r) => r.status === 'submitted').length,
@@ -101,6 +103,15 @@ export default async function OrganizerSubmissionsPage({
         contentStatus: extra?.contentStatus ?? 'draft',
         contentStatusLabel: CONTENT_STATUS_LABELS[extra?.contentStatus ?? 'draft'],
         hasContent: Boolean(extra?.slidesUrl || extra?.recordingUrl || extra?.resourcesNote),
+        // A supporting document is private, so this panel is the only place an
+        // organizer can find one. Without it the speaker's upload would be
+        // write-only: stored, access-controlled and unreachable by the people
+        // it was sent to.
+        documents: (documents.get(row.id) ?? []).map((document) => ({
+          href: uploadHref(document),
+          name: document.filename,
+          size: formatBytes(document.bytes),
+        })),
         lockedFields: knownLocks(extra?.lockedFields ?? []),
         revisionCount: extra?.revisionCount ?? 0,
         lastEdit: toEntry(lastEdits.get(row.id) ?? null, event.timezone),

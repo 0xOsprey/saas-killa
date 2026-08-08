@@ -21,7 +21,23 @@ import {
 } from '@/lib/content';
 import { FORMAT_LABELS, dayLabel, timeOfDay } from '@/lib/format';
 import { getEvent } from '@/lib/queries';
-import { saveContentDraft, submitContentForReview, withdrawContentFromReview } from './actions';
+import {
+  UPLOAD_KINDS,
+  acceptAttribute,
+  documentsFor,
+  formatBytes,
+  uploadHref,
+} from '@/lib/uploads';
+import {
+  removeDocument,
+  saveContentDraft,
+  submitContentForReview,
+  uploadDocument,
+  withdrawContentFromReview,
+} from './actions';
+
+const FILE_INPUT =
+  'block w-full text-sm text-ink file:mr-3 file:rounded-md file:border file:border-line file:bg-white file:px-3 file:py-1.5 file:text-sm file:font-medium hover:file:bg-slate-50';
 
 const CONTENT_TONE = {
   draft: 'neutral',
@@ -43,6 +59,11 @@ const FLASH: Record<string, { tone: 'good' | 'warn' | 'accent'; text: string }> 
     tone: 'warn',
     text: 'Add slides, a recording or a resources note before submitting for review.',
   },
+  document: {
+    tone: 'good',
+    text: 'Document attached. Supporting documents go to the organizers only, never to the public agenda.',
+  },
+  removed: { tone: 'accent', text: 'Document removed.' },
 };
 
 /**
@@ -61,6 +82,7 @@ export default async function SpeakerContentPage({
 
   const [event, rows, params] = await Promise.all([getEvent(), myContent(user.id), searchParams]);
   const flash = Object.keys(FLASH).find((key) => params[key]);
+  const documents = await documentsFor(rows.map((row) => row.id));
 
   return (
     <div className="space-y-6">
@@ -77,6 +99,15 @@ export default async function SpeakerContentPage({
       {flash ? (
         <Notice tone={FLASH[flash]!.tone}>
           <span data-testid="content-flash">{FLASH[flash]!.text}</span>
+        </Notice>
+      ) : null}
+
+      {/* A refused upload names the rule it hit. The message comes back on the
+          query string because the action redirects, and a speaker who picked
+          the wrong file needs to know which file to pick instead. */}
+      {typeof params.error === 'string' ? (
+        <Notice tone="bad">
+          <span data-testid="upload-error">{params.error}</span>
         </Notice>
       ) : null}
 
@@ -142,10 +173,28 @@ export default async function SpeakerContentPage({
               >
                 <Input
                   name="slidesUrl"
-                  type="url"
+                  // Not `type="url"`: an uploaded deck stores an app-relative
+                  // `/files/…` path here, and the browser's own URL validation
+                  // would refuse to submit the form on a value this app wrote.
                   defaultValue={row.slidesUrl ?? ''}
                   disabled={locks.slidesUrl}
                   data-testid={`slides-${row.id}`}
+                />
+              </Field>
+
+              <Field
+                label="Or upload the deck"
+                hint={`PDF or an image, up to ${formatBytes(
+                  UPLOAD_KINDS.slides.maxBytes,
+                )}. A file replaces the URL above.`}
+              >
+                <input
+                  type="file"
+                  name="slidesFile"
+                  accept={acceptAttribute('slides')}
+                  disabled={locks.slidesUrl}
+                  data-testid={`slides-file-${row.id}`}
+                  className={FILE_INPUT}
                 />
               </Field>
 
@@ -193,6 +242,77 @@ export default async function SpeakerContentPage({
                 </Button>
               </div>
             </form>
+
+            <div
+              className="space-y-3 rounded-md border border-line p-3"
+              data-testid={`documents-${row.id}`}
+            >
+              <div>
+                <h3 className="text-sm font-medium text-ink">Supporting documents</h3>
+                <p className="mt-0.5 text-xs text-muted">
+                  Handouts, a data appendix, a signed release. Organizers only — these never
+                  appear on the public agenda.
+                </p>
+              </div>
+
+              {(documents.get(row.id) ?? []).length === 0 ? (
+                <p className="text-xs text-muted">Nothing attached yet.</p>
+              ) : (
+                <ul className="space-y-1">
+                  {(documents.get(row.id) ?? []).map((document) => (
+                    <li
+                      key={document.id}
+                      className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm"
+                      data-testid={`document-${document.id}`}
+                    >
+                      <a
+                        href={uploadHref(document)}
+                        className="min-w-0 flex-1 truncate underline hover:text-ink"
+                      >
+                        {document.filename}
+                      </a>
+                      <span className="text-xs text-muted">{formatBytes(document.bytes)}</span>
+                      {/* Only your own. A co-author may attach and withdraw their
+                          own material without being able to delete the filer's. */}
+                      {document.ownerId === user.id ? (
+                        <form action={removeDocument}>
+                          <input type="hidden" name="submissionId" value={row.id} />
+                          <input type="hidden" name="uploadId" value={document.id} />
+                          <Button
+                            type="submit"
+                            variant="ghost"
+                            className="text-xs"
+                            data-testid={`document-remove-${document.id}`}
+                          >
+                            Remove
+                          </Button>
+                        </form>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              <form action={uploadDocument} className="space-y-2">
+                <input type="hidden" name="submissionId" value={row.id} />
+                <input
+                  type="file"
+                  name="documentFile"
+                  accept={acceptAttribute('document')}
+                  required
+                  data-testid={`document-file-${row.id}`}
+                  className={FILE_INPUT}
+                />
+                <Button
+                  type="submit"
+                  variant="secondary"
+                  className="text-xs"
+                  data-testid={`document-upload-${row.id}`}
+                >
+                  Attach document
+                </Button>
+              </form>
+            </div>
 
             {pending ? (
               <form action={withdrawContentFromReview}>

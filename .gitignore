@@ -20,3 +20,8 @@ dist/
 /playwright-report/
 /blob-report/
 /.playwright/
+
+# Speaker uploads. Real files on this machine's disk, served by /files/<id>.
+# Headshots, slide decks, posters and supporting documents belong to the people
+# who sent them and are not repository content.
+/uploads/

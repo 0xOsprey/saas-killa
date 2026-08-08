@@ -1,4 +1,6 @@
+import { rm } from 'node:fs/promises';
 import { inArray, sql } from 'drizzle-orm';
+import { UPLOAD_DIR } from '../lib/upload-dir';
 import { db } from './index';
 import {
   awardNominees,
@@ -184,11 +186,17 @@ async function main() {
         submission_answers, form_questions, submission_revisions,
         submission_authors, speaker_tasks, speaker_availability, email_log,
         evaluator_personas, reviews, review_rounds, slots, submissions,
-        auth_sessions, magic_link_tokens, user_roles, users, rooms, tracks,
-        events
+        uploads, auth_sessions, magic_link_tokens, user_roles, users, rooms,
+        tracks, events
       restart identity cascade
     `);
     console.log('✓ tables truncated');
+
+    // The bytes live outside the database. Truncating `uploads` alone would
+    // leave every file ever uploaded on disk with no row pointing at it, which
+    // nothing would ever read again and nothing would ever delete.
+    await rm(UPLOAD_DIR, { recursive: true, force: true });
+    console.log('✓ uploads/ cleared');
   }
 
   const existing = await db.select().from(events).limit(1);
