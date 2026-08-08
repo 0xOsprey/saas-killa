@@ -37,6 +37,14 @@ app never sends anything: every message is printed to the terminal and written
 to `.mail/`, so the sign-in link is in your scrollback. That is also how the
 end-to-end test reads its magic links.
 
+```bash
+node scripts/dev-inbox.mjs          # http://127.0.0.1:9141
+```
+
+serves that directory newest-first with each sign-in link rendered as a button,
+which is the only practical way in when you are browsing from another machine
+and cannot read the terminal.
+
 ## The pipeline
 
 | Stage | Route | Who |
