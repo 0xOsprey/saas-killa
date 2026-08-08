@@ -9,6 +9,7 @@ import {
   evaluatorPersonas,
   events,
   formQuestions,
+  portalPages,
   reviewAssignments,
   reviewRounds,
   reviews,
@@ -186,8 +187,8 @@ async function main() {
         submission_answers, form_questions, submission_revisions,
         submission_authors, speaker_tasks, speaker_availability, email_log,
         evaluator_personas, reviews, review_rounds, slots, submissions,
-        uploads, auth_sessions, magic_link_tokens, user_roles, users, rooms,
-        tracks, events
+        uploads, portal_pages, auth_sessions, magic_link_tokens, user_roles,
+        users, rooms, tracks, events
       restart identity cascade
     `);
     console.log('✓ tables truncated');
@@ -671,6 +672,48 @@ async function main() {
   });
   await db.insert(submissionAnswers).values(answerValues).onConflictDoNothing();
 
+  // Two wiki pages, one published and one draft, so the portal has something in
+  // it on a fresh reset and the draft/published split is visible without
+  // anybody having to write a page first.
+  const pageRows = await db
+    .insert(portalPages)
+    .values([
+      {
+        slug: 'venue-and-av',
+        title: 'Venue and AV',
+        summary: 'Where to go, what is on the lectern, and who to find when it does not work.',
+        position: 0,
+        published: true,
+        body: [
+          '<p>The venue is the Corn Exchange, two minutes from the station. Speaker',
+          'registration is the desk on the left as you come in.</p>',
+          '<h2>What is on the lectern</h2>',
+          '<ul>',
+          '  <li>HDMI and USB-C, both with power delivery</li>',
+          '  <li>A wireless presenter with a laser pointer</li>',
+          '  <li>A confidence monitor showing your current slide and the clock</li>',
+          '</ul>',
+          '<p>Adapters for anything older live in a box at the AV desk. If your deck',
+          'needs sound, say so at <a href="/speaker/pages/before-you-arrive">registration</a>',
+          'rather than on the day.</p>',
+          '<h2>Getting here</h2>',
+          '<iframe src="https://www.google.com/maps?output=embed&q=Corn+Exchange" width="600" height="340" title="Venue map"></iframe>',
+        ].join('\n'),
+      },
+      {
+        slug: 'before-you-arrive',
+        title: 'Before you arrive',
+        summary: 'The three things we need from you, and when.',
+        position: 1,
+        published: false,
+        body: [
+          '<p>This page is still being written.</p>',
+          '<ol><li>Upload your slides</li><li>Confirm your travel</li><li>Tell us about AV</li></ol>',
+        ].join('\n'),
+      },
+    ])
+    .returning({ id: portalPages.id });
+
   console.log(
     [
       `✓ event: ${event.name}`,
@@ -681,6 +724,7 @@ async function main() {
       `✓ ${taskValues.length} speaker tasks, ${bookmarkValues.length} bookmarks, ${authorValues.length} author rows`,
       `✓ ${awardRows.length} awards, ${nomineeValues.length} nominees`,
       `✓ 2 review rounds (round 1 closed), ${questionRows.length} form questions, ${answerValues.length} answers`,
+      `✓ ${pageRows.length} portal pages (1 published, 1 draft)`,
       `✓ organizer: ${organizerEmail}`,
       '',
       'Sign in at /login with the organizer address. With RESEND_API_KEY unset the',

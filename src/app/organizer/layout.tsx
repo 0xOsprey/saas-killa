@@ -20,6 +20,7 @@ const TABS = [
   { href: '/organizer/posters', label: 'Posters' },
   { href: '/organizer/speakers', label: 'Speakers' },
   { href: '/organizer/awards', label: 'Awards' },
+  { href: '/organizer/pages', label: 'Speaker info' },
   { href: '/organizer/embed', label: 'Embed' },
   { href: '/organizer/settings', label: 'Settings' },
 ];

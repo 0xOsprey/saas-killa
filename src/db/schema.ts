@@ -640,6 +640,40 @@ export const emailLog = pgTable(
   (t) => [index('email_log_user_idx').on(t.userId, t.sentAt)],
 );
 
+/**
+ * Organizer-authored pages in the speaker portal: the venue guide, the AV
+ * requirements, the travel and expenses policy, the code of conduct.
+ *
+ * A wiki rather than a settings screen, because this is the material an
+ * organizer rewrites every year and there is no way to know in advance which
+ * pages a given conference needs. `slug` is the address and the link target, so
+ * one page reaches another as `/speaker/pages/<slug>`.
+ *
+ * `body` holds the HTML as the organizer typed it, never as it renders.
+ * Sanitising on write would mean a page could not be edited back out of a
+ * mistake, and a tightened allowlist would not apply to anything already saved.
+ * `sanitizeHtml` runs on every read instead. See `src/lib/sanitize-html.ts`.
+ */
+export const portalPages = pgTable(
+  'portal_pages',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    slug: text('slug').notNull(),
+    title: text('title').notNull(),
+    /** One line under the title in the index. Optional. */
+    summary: text('summary'),
+    body: text('body').notNull().default(''),
+    /** Draft pages are invisible to speakers and readable by organizers. */
+    published: boolean('published').notNull().default(false),
+    /** Hand order for the index; ties break on title. */
+    position: integer('position').notNull().default(0),
+    updatedById: uuid('updated_by_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('portal_pages_slug_idx').on(t.slug)],
+);
+
 /** When a speaker cannot be scheduled. Read by the agenda conflict checker. */
 export const speakerAvailability = pgTable(
   'speaker_availability',
@@ -760,6 +794,7 @@ export type Bookmark = typeof bookmarks.$inferSelect;
 export type EvaluatorPersona = typeof evaluatorPersonas.$inferSelect;
 export type EmailLogRow = typeof emailLog.$inferSelect;
 export type SpeakerAvailability = typeof speakerAvailability.$inferSelect;
+export type PortalPage = typeof portalPages.$inferSelect;
 export type Role = (typeof roleEnum.enumValues)[number];
 export type SubmissionStatus = (typeof submissionStatusEnum.enumValues)[number];
 export type SubmissionFormat = (typeof submissionFormatEnum.enumValues)[number];

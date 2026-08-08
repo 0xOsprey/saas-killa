@@ -22,6 +22,7 @@ export async function Nav() {
   ];
   if (user) {
     links.push({ href: '/speaker', label: 'My submissions' });
+    links.push({ href: '/speaker/pages', label: 'Speaker info' });
     links.push({ href: '/speaker/profile', label: 'Profile' });
   }
   if (user?.roles.includes('reviewer')) {
