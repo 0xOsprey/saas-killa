@@ -83,7 +83,20 @@ async function fetchInPage(page: Page, path: string): Promise<FetchedFile> {
 }
 
 test('the public pages render for a signed-out visitor', async ({ page }) => {
-  for (const path of ['/', '/login', '/cfp', '/agenda', '/posters', '/speakers', '/awards']) {
+  for (const path of [
+    '/',
+    '/login',
+    '/cfp',
+    '/agenda',
+    '/posters',
+    '/speakers',
+    '/awards',
+    // The embed surfaces are documents in their own right rather than pages
+    // under the app's layout, so nothing else here would open them.
+    '/embed/demo',
+    '/embed/speakers',
+    '/embed/agenda',
+  ]) {
     await visit(page, path);
   }
 
