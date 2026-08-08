@@ -334,11 +334,18 @@ async function main() {
   // AI grades are seeded rather than generated, because generating them means
   // calling a paid API from a seed script. Every fifth row is pushed two points
   // away from the human mean so the outlier list opens with real entries.
-  const humanMean = new Map<string, number>();
+  // A true mean, not a running one. Folding as (seen + score) / 2 weights the
+  // last grade at half and the first at a quarter, so the gap the outlier rows
+  // below are supposed to open against SQL's avg() would not have been the two
+  // points they are meant to demonstrate.
+  const humanTotals = new Map<string, { sum: number; count: number }>();
   for (const row of reviewValues) {
-    const seen = humanMean.get(row.submissionId) ?? 0;
-    humanMean.set(row.submissionId, seen === 0 ? row.score : (seen + row.score) / 2);
+    const seen = humanTotals.get(row.submissionId) ?? { sum: 0, count: 0 };
+    humanTotals.set(row.submissionId, { sum: seen.sum + row.score, count: seen.count + 1 });
   }
+  const humanMean = new Map(
+    [...humanTotals].map(([id, { sum, count }]) => [id, sum / count] as const),
+  );
   const aiValues = submissionRows.slice(0, 22).map((submission, i) => {
     const mean = humanMean.get(submission.id) ?? 3;
     const target = i % 5 === 0 ? (mean >= 3 ? 1 : 5) : Math.min(5, Math.max(1, Math.round(mean)));
