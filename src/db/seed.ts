@@ -486,6 +486,11 @@ async function main() {
 
   // What accepted speakers still owe. Nobody in the fixture has a headshot, so
   // that task is the one the chase screens are actually built around.
+  //
+  // Four kinds rather than two. The onboarding dashboard breaks its figures down
+  // by kind, and a fixture with only headshots and slides in it renders that
+  // table as two rows, which reads as a table with nothing to say rather than as
+  // an event where most people are only behind on one thing.
   const taskValues = accepted.flatMap((submission, i) => [
     {
       userId: submission.speakerId,
@@ -503,6 +508,43 @@ async function main() {
       dueAt: new Date(now.getTime() + 21 * day),
       completedAt: null,
     },
+    // A bio is asked of everyone and most people have already done it, which is
+    // what makes the "done this week" figure move on a fresh fixture.
+    {
+      userId: submission.speakerId,
+      submissionId: null,
+      kind: 'bio' as const,
+      label: 'Write a two-sentence speaker bio',
+      dueAt: new Date(now.getTime() + 14 * day),
+      completedAt: i % 3 === 0 ? null : new Date(now.getTime() - (i % 6) * day),
+    },
+    // Confirming is asked only of the people who have not confirmed already, so
+    // this kind's count agrees with the confirmation figure beside it.
+    ...(submission.speakerConfirmedAt
+      ? []
+      : [
+          {
+            userId: submission.speakerId,
+            submissionId: submission.id,
+            kind: 'confirm' as const,
+            label: 'Confirm you are able to present',
+            dueAt: new Date(now.getTime() + (i % 4 === 1 ? -6 : 7) * day),
+            completedAt: null,
+          },
+        ]),
+    // Poster artwork is only owed by the people presenting a poster.
+    ...(submission.format === 'poster'
+      ? [
+          {
+            userId: submission.speakerId,
+            submissionId: submission.id,
+            kind: 'poster' as const,
+            label: 'Send poster artwork, A0 portrait, PDF',
+            dueAt: new Date(now.getTime() + 12 * day),
+            completedAt: null,
+          },
+        ]
+      : []),
   ]);
   await db.insert(speakerTasks).values(taskValues);
 
@@ -720,11 +762,31 @@ async function main() {
   const openSlots = slotRows.filter((slot) => slot.label === null);
   const placements = schedulable.slice(0, Math.max(schedulable.length - 3, 0));
 
+  // Placement alternates between the days rather than filling the first one.
+  // Slots are inserted band by band, so taking them in that order put every
+  // talk on the Friday and left the Saturday holding nothing but the coffee
+  // break. The Day, Week, Track and Room views and the public agenda then all
+  // demoed a one-day conference on a two-day fixture.
+  const dayOf = (slot: { startsAt: Date }) =>
+    Math.floor((slot.startsAt.getTime() - startsOn.getTime()) / day);
+  const queues = new Map<number, typeof openSlots>();
+  for (const slot of openSlots) {
+    queues.set(dayOf(slot), [...(queues.get(dayOf(slot)) ?? []), slot]);
+  }
+  const rota = [...queues.keys()].sort((a, b) => a - b).map((key) => queues.get(key)!);
+  const spread = Array.from({ length: Math.max(...rota.map((q) => q.length)) }, (_, i) =>
+    rota.map((queue) => queue[i]).filter((slot) => slot !== undefined),
+  ).flat();
+
   for (const [i, submission] of placements.entries()) {
-    const slot = openSlots[i];
+    const slot = spread[i];
     if (!slot) break;
     await db.update(slots).set({ submissionId: submission.id }).where(eq(slots.id, slot.id));
   }
+  const placedByDay = placements
+    .map((_, i) => spread[i])
+    .filter((slot) => slot !== undefined)
+    .reduce((counts, slot) => counts.set(dayOf(slot), (counts.get(dayOf(slot)) ?? 0) + 1), new Map<number, number>());
 
   // Two wiki pages, one published and one draft, so the portal has something in
   // it on a fresh reset and the draft/published split is visible without
@@ -778,7 +840,10 @@ async function main() {
       `✓ ${taskValues.length} speaker tasks, ${bookmarkValues.length} bookmarks, ${authorValues.length} author rows`,
       `✓ ${awardRows.length} awards, ${nomineeValues.length} nominees`,
       `✓ 2 review rounds (round 1 closed), ${questionRows.length} form questions, ${answerValues.length} answers`,
-      `✓ ${slotRows.length} slots over 2 days, ${placements.length} talks placed, agenda unpublished`,
+      `✓ ${slotRows.length} slots over 2 days, ${placements.length} talks placed (${[...placedByDay.entries()]
+        .sort(([a], [b]) => a - b)
+        .map(([key, count]) => `day ${key + 1}: ${count}`)
+        .join(', ')}), agenda unpublished`,
       `✓ ${pageRows.length} portal pages (1 published, 1 draft)`,
       `✓ organizer: ${organizerEmail}`,
       '',
