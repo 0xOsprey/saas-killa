@@ -111,7 +111,11 @@ export default async function SpeakersPage({
             const missingHeadshot = person.accepted > 0 && !person.headshotUrl;
             const unconfirmed = person.accepted > person.confirmed;
             return (
-              <Card key={person.id} className="flex flex-wrap items-start gap-3">
+              <Card
+                key={person.id}
+                data-testid={`roster-${person.id}`}
+                className="flex flex-wrap items-start gap-3"
+              >
                 <Headshot src={person.headshotUrl} name={person.name} size="sm" />
 
                 <div className="min-w-0 flex-1 space-y-1">

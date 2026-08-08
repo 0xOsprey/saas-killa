@@ -84,6 +84,7 @@ export default async function SpeakerDetailPage({ params }: { params: Promise<{ 
               return (
                 <li
                   key={task.id}
+                  data-testid={`speaker-task-${task.id}`}
                   className="flex flex-wrap items-start gap-3 rounded-md border border-line p-3"
                 >
                   <div className="min-w-0 flex-1">
@@ -118,7 +119,12 @@ export default async function SpeakerDetailPage({ params }: { params: Promise<{ 
                         <form action={completeSpeakerTaskAction}>
                           <input type="hidden" name="taskId" value={task.id} />
                           <input type="hidden" name="userId" value={user.id} />
-                          <Button type="submit" variant="secondary" className="px-2 py-1 text-xs">
+                          <Button
+                            type="submit"
+                            variant="secondary"
+                            className="px-2 py-1 text-xs"
+                            data-testid="task-complete"
+                          >
                             Mark done
                           </Button>
                         </form>
@@ -127,7 +133,12 @@ export default async function SpeakerDetailPage({ params }: { params: Promise<{ 
                     <form action={deleteSpeakerTaskAction}>
                       <input type="hidden" name="taskId" value={task.id} />
                       <input type="hidden" name="userId" value={user.id} />
-                      <Button type="submit" variant="danger" className="px-2 py-1 text-xs">
+                      <Button
+                        type="submit"
+                        variant="danger"
+                        className="px-2 py-1 text-xs"
+                        data-testid="task-delete"
+                      >
                         Delete
                       </Button>
                     </form>

@@ -20,7 +20,7 @@ export function TaskForm({
 
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="What is owed">
-          <Select name="kind" defaultValue="headshot">
+          <Select name="kind" defaultValue="headshot" data-testid="task-kind">
             {Object.entries(TASK_KIND_LABELS).map(([value, label]) => (
               <option key={value} value={value}>
                 {label}
@@ -29,10 +29,16 @@ export function TaskForm({
           </Select>
         </Field>
         <Field label="Label">
-          <Input name="label" required maxLength={200} placeholder="Send us a headshot" />
+          <Input
+            name="label"
+            required
+            maxLength={200}
+            placeholder="Send us a headshot"
+            data-testid="task-label"
+          />
         </Field>
         <Field label="Due" hint="Optional.">
-          <Input type="datetime-local" name="dueAt" />
+          <Input type="datetime-local" name="dueAt" data-testid="task-due" />
         </Field>
         <Field label="About a submission" hint="Optional. Leave off for an account-level task.">
           <Select name="submissionId" defaultValue="">
@@ -46,7 +52,7 @@ export function TaskForm({
         </Field>
       </div>
 
-      <Button type="submit" variant="secondary">
+      <Button type="submit" variant="secondary" data-testid="task-add">
         Add task
       </Button>
     </form>
