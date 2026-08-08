@@ -1,12 +1,16 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const PORT = 9141;
+const PORT = 9143;
 const BASE_URL = `http://127.0.0.1:${PORT}`;
 
 /**
  * The suite runs against a production build on its own port, not the dev
  * server on 9140, so a `pnpm dev` you have open in another terminal does not
  * collide with a test run and the code under test is the code that deploys.
+ *
+ * Not 9141 either: that is the dev mail inbox, the thing you sign in through.
+ * `reuseExistingServer` is false, so a run would try to bind a port the inbox
+ * already holds and fail to start its own server at all.
  */
 export default defineConfig({
   testDir: './e2e',
