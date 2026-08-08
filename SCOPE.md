@@ -121,8 +121,9 @@ part of this requirement the brief strikes; the evaluator below was built before
 that was noticed and is left in place, off by default.
 
 - Reviewers grade at `/review` against four criteria. Blind review is a
-  query-level property: `reviewQueue()` selects no speaker column, so the
-  identity cannot leak through a stray render.
+  query-level property: `assignedQueue()` and `openSubmissionQueue()` in
+  `src/lib/grading.ts` are what `/review` runs, and neither selects a speaker
+  column or joins `users`, so the identity cannot leak through a stray render.
 - The AI evaluator holds a `users` row with the `reviewer` role and writes
   ordinary `reviews` rows tagged `source: 'ai'`. It never decides. Without
   `ANTHROPIC_API_KEY` it is off and the organizer screen says so.

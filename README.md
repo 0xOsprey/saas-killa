@@ -12,6 +12,10 @@ deliberately not, and which test covers each. It also records that four of the
 brief's nine requirements are struck through in the source document, all four of
 which were built here before that was noticed.
 
+`FLOWS.md` is the other axis: every user flow in the app, 173 of them across 783
+numbered steps, by role. Each one carries its route, its preconditions, the
+server action behind each control, the column it writes, and its refusal paths.
+
 Next.js 15 (App Router, Server Actions) · Postgres via Drizzle · Tailwind v4 ·
 Playwright.
 
@@ -62,10 +66,11 @@ deploy fails at boot instead of shipping a forgeable cookie.
 the handler seconds after every sign-in and deleted the session the user had
 just opened.
 
-**Blind review is enforced in the query, not the template.** `reviewQueue()` in
-`src/lib/queries.ts` never selects a speaker column, so the identity cannot leak
-through a stray render. The end-to-end test asserts the speaker's name is absent
-from the whole reviewer page.
+**Blind review is enforced in the query, not the template.** `assignedQueue()`
+and `openSubmissionQueue()` in `src/lib/grading.ts` are the two queries `/review`
+runs, and neither selects a speaker column or joins `users`, so the identity
+cannot leak through a stray render. The end-to-end test asserts the speaker's
+name is absent from the whole reviewer page.
 
 **Deciding and emailing are separate actions.** An organizer flips statuses and
 changes their mind freely; nothing leaves the building until they press send.
