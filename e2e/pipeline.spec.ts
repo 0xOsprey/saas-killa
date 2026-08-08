@@ -131,14 +131,29 @@ test('a proposal travels from the CFP to the published agenda', async ({ page })
 });
 
 test('an undecided proposal is not reachable from the public agenda', async ({ page }) => {
-  // The seed leaves every proposal at "submitted". A signed-out visitor must
-  // not be able to read one by guessing its detail URL, because that would leak
-  // a decision the committee has not made.
+  // A signed-out visitor must not be able to read an undecided proposal by
+  // guessing its detail URL, because that would leak a decision the committee
+  // has not made.
+  //
+  // The proposal is filed here rather than picked off the organizer's dashboard.
+  // Taking the first row assumed the fixture decided nothing, which stopped
+  // being true once the seed started accepting work, and the test then passed
+  // an accepted talk to a published agenda and read a legitimate 200. Filing one
+  // makes the precondition the test's own rather than the fixture's.
+  const title = `Instrumenting a job nobody owns ${Date.now()}`;
+  await page.goto('/cfp');
+  await page.getByTestId('cfp-email').fill(`e2e-undecided-${Date.now()}@example.com`);
+  await page.getByTestId('cfp-name').fill('Undecided Testcase');
+  await page.getByTestId('cfp-title').fill(title);
+  await page.getByTestId('cfp-abstract').fill(ABSTRACT);
+  await page.getByTestId('cfp-format').selectOption('talk_25');
+  await page.getByTestId('cfp-submit').click();
+  await expect(page.getByTestId('submitted-confirmation')).toBeVisible();
+
   await signInVia(page, ORGANIZER_EMAIL);
   await page.goto('/organizer/submissions');
-
-  const firstRow = page.locator('[data-testid^="submission-"]').first();
-  const testId = await firstRow.getAttribute('data-testid');
+  const row = page.locator('[data-testid^="submission-"]').filter({ hasText: title });
+  const testId = await row.getAttribute('data-testid');
   const submissionId = testId!.replace('submission-', '');
 
   await signOut(page);
