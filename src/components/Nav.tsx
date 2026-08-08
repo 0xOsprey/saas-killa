@@ -14,12 +14,25 @@ export async function Nav() {
     getEvent().catch(() => null),
   ]);
 
-  const links: { href: string; label: string }[] = [{ href: '/agenda', label: 'Agenda' }];
-  links.push({ href: '/posters', label: 'Posters' });
-  if (user) links.push({ href: '/speaker', label: 'My submissions' });
-  if (user?.roles.includes('reviewer')) links.push({ href: '/review', label: 'Review' });
+  const links: { href: string; label: string }[] = [
+    { href: '/agenda', label: 'Agenda' },
+    { href: '/posters', label: 'Posters' },
+    { href: '/speakers', label: 'Speakers' },
+    { href: '/awards', label: 'Awards' },
+  ];
+  if (user) {
+    links.push({ href: '/speaker', label: 'My submissions' });
+    links.push({ href: '/speaker/profile', label: 'Profile' });
+  }
+  if (user?.roles.includes('reviewer')) {
+    links.push({ href: '/review', label: 'Review' });
+    // Load-bearing rather than cosmetic: committee balloting lives outside the
+    // organizer layout precisely so a reviewer can reach it, and without this
+    // link their only route to it is a typed URL.
+    links.push({ href: '/awards/judge', label: 'Judge awards' });
+  }
   if (user?.roles.includes('organizer')) {
-    links.push({ href: '/organizer/submissions', label: 'Organize' });
+    links.push({ href: '/organizer', label: 'Organize' });
   }
 
   return (
