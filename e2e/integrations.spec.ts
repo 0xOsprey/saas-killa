@@ -26,10 +26,15 @@ async function signIn(page: Page, email: string) {
   await expect(page.getByTestId('current-user')).toHaveText(email);
 }
 
-/** Put the first unplaced talk into the first empty box. Returns its title. */
+/**
+ * Put the first unplaced talk into the first empty box. Returns its title.
+ *
+ * It used to add a time band first, back when the fixture seeded none. The
+ * fixture now seeds two days of grid with empty boxes in it, and a fresh band
+ * defaults to the event's own start time, which is a band that already exists.
+ */
 async function placeFirstFromPool(page: Page): Promise<string> {
   await page.goto('/organizer/schedule');
-  await page.getByTestId('add-band').click();
   const item = page.locator('[data-testid^="pool-"]').first();
   const title = (await item.locator('span').first().innerText()).trim();
   await item.click();
@@ -138,10 +143,15 @@ test('the bundle is downloadable and carries no credential', async ({ page }) =>
 
   // Times go out as instants, not wall clocks. A naive string would be read in
   // whatever timezone the far end thinks the event is in.
-  const session = bundle.requests.find((r) => r.path.includes('/sessions/external/'));
-  expect(session, 'a session request').toBeTruthy();
+  //
+  // The talk is found by title rather than by being the first session in the
+  // bundle: the fixture seeds nine placements of its own, so "the first one" is
+  // some other conference talk that this test never touched.
+  const session = bundle.requests.find(
+    (r) => r.path.includes('/sessions/external/') && r.body.title === title,
+  );
+  expect(session, `a session request for "${title}"`).toBeTruthy();
   expect(String(session!.body.startTime)).toMatch(/^\d{4}-\d{2}-\d{2}T.*Z$/);
-  expect(session!.body.title).toBe(title);
   expect(session!.remoteId).toMatch(/^ae_session_/);
 
   // Only what is on the schedule goes. An accepted talk still sitting in the

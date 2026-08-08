@@ -26,12 +26,16 @@ import { extractMagicLink, waitForMail } from './mailbox';
  * never depend on a session cookie.
  *
  * This file sorts first, ahead of `features.spec.ts`, and shares its database
- * with everything after it, so it publishes the agenda and adds a break band
- * and then puts both back.
+ * with everything after it. The only thing it changes is the published flag,
+ * and it puts that back. It used to add a break band and then delete one, which
+ * was safe only while the fixture seeded no schedule; the fixture now seeds two
+ * days of it, the deletion took a seeded band with it, and four later files
+ * failed for a reason none of them could see.
  */
 
 const ORGANIZER = 'organizer@example.com';
-const BREAK_LABEL = 'Lunch in the courtyard';
+/** A break the fixture seeds, so this file no longer has to write one. */
+const BREAK_LABEL = 'Lunch';
 const BOTH_WIDGETS =
   '<div data-sessionboard="speakers"></div><div data-sessionboard="agenda"></div>';
 
@@ -109,11 +113,10 @@ test('a host page on another origin renders the gallery and the itinerary', asyn
   await signInVia(page, ORGANIZER);
   await page.goto('/organizer/schedule');
 
-  // A named break is the cheapest real itinerary entry: it needs no accepted
-  // talk moved out of the pool, and it exercises the collapse — a break is one
-  // slot per room, so it arrives as three rows and must render as one line.
-  await page.getByTestId('block-label').fill(BREAK_LABEL);
-  await page.getByTestId('add-block').click();
+  // The fixture's own break is the entry under test. It exercises the collapse
+  // — a break is one slot per room, so it arrives as three rows and must render
+  // as one line — and using the seeded one rather than writing a fresh band
+  // keeps this file's only edit to the published flag.
   await page.getByTestId('toggle-publish').click();
   await expect(page.getByTestId('toggle-publish')).toHaveText('Unpublish agenda');
 
@@ -159,16 +162,12 @@ test('a host page on another origin renders the gallery and the itinerary', asyn
   await page.goto(`${baseURL}/embed/speakers`);
   await expect(page.locator('.sb-card').first()).toBeVisible();
 
-  // Put the fixture back for the files that run after this one.
+  // Put the fixture back for the files that run after this one. Unpublishing is
+  // the whole of it: nothing here wrote a row.
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/organizer/schedule');
   await page.getByTestId('toggle-publish').click();
   await expect(page.getByTestId('toggle-publish')).toHaveText('Publish agenda');
-
-  await page.locator('summary', { hasText: 'Remove a time band' }).click();
-  await page.getByRole('button', { name: /✕/ }).first().click();
-  await page.getByTestId('confirm-delete-band-submit').click();
-  await expect(page.getByText('Add a time band below to start building the grid.')).toBeVisible();
 });
 
 test('an unknown widget name and a malformed filter both fail soft', async ({ page, baseURL }) => {

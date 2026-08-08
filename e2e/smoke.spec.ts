@@ -110,22 +110,19 @@ test('the public pages render for a signed-out visitor', async ({ page }) => {
 test('the organizer console renders every tab', async ({ page }) => {
   await signInVia(page, ORGANIZER);
 
-  for (const path of [
-    '/organizer',
-    '/organizer/cfp',
-    '/organizer/cfp/questions',
-    '/organizer/submissions',
-    '/organizer/abstracts',
-    '/organizer/abstracts/book',
-    '/organizer/evaluators',
-    '/organizer/evaluators/audit',
-    '/organizer/schedule',
-    '/organizer/rooms',
-    '/organizer/posters',
-    '/organizer/speakers',
-    '/organizer/awards',
-    '/organizer/settings',
-  ]) {
+  // The tab list is read off the nav rather than typed out here. A hand-kept
+  // copy is a list that goes stale silently: four tabs were added over one week
+  // and this test went on passing under a name that had stopped being true.
+  await page.goto('/organizer');
+  const tabs = await page
+    .locator('nav a[href^="/organizer"]')
+    .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('href') ?? ''));
+
+  expect(tabs.length, 'tabs found in the organizer nav').toBeGreaterThan(10);
+  expect(tabs, 'the nav still leads to the schedule').toContain('/organizer/schedule');
+
+  // Sub-pages the nav does not link to, which are still part of the console.
+  for (const path of [...tabs, '/organizer/cfp/questions', '/organizer/abstracts/book', '/organizer/evaluators/audit']) {
     await visit(page, path);
   }
 

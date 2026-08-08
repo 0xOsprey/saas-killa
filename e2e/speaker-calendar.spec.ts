@@ -7,7 +7,11 @@ import { extractMagicLink, waitForMail, type CapturedMail } from './mailbox';
  *
  * Runs after `schedule.spec.ts` and `smoke.spec.ts`, before `uploads.spec.ts`.
  * `pipeline.spec.ts` has already accepted one talk and placed it, so there is a
- * real placement waiting for its first invitation when this file starts.
+ * real placement waiting for its first invitation when this file starts. That
+ * talk, and not any of the fixture's nine, is the one under test here: a talk
+ * already in a slot when it is accepted gets its invitation attached to the
+ * acceptance mail, and `notifyDecided` records the notice key at the same time,
+ * so it has no separate schedule notice to read.
  *
  * The property worth an end-to-end test is that a change reaches the calendar
  * entry the speaker already has. That needs three things to line up across two
@@ -82,6 +86,17 @@ test('a schedule change updates the invitation the speaker already has', async (
   const scheduled = await waitForMail((m) => m.subject.startsWith('You are scheduled:'));
   const first = attachment(scheduled, 'invite.ics');
 
+  // The talk this test follows is whichever one that receipt was about, read
+  // off its own subject line. The other direction — pick the first talk on the
+  // grid, then go looking for its mail — does not hold: the fixture seeds nine
+  // placements, those were already placed when they were accepted, so their
+  // acceptance mail carried the invitation and `notifyDecided` recorded the
+  // notice key. Only a talk placed after its decision has a separate
+  // "You are scheduled" to find.
+  const quoted = /"([^"]+)"/.exec(scheduled.subject);
+  expect(quoted, `a quoted title in "${scheduled.subject}"`).toBeTruthy();
+  const title = quoted![1]!;
+
   expect(contentType(scheduled, 'invite.ics')).toContain('method=REQUEST');
   expect(field(first, 'METHOD')).toBe('REQUEST');
   expect(field(first, 'ORGANIZER')).toContain('mailto:');
@@ -100,15 +115,17 @@ test('a schedule change updates the invitation the speaker already has', async (
   await expect(page.getByTestId('notify-schedule')).toBeDisabled();
 
   // 2. Move it --------------------------------------------------------------
-  const placed = page.locator('[data-testid^="slot-"]').filter({ hasText: 'remove' }).first();
-  const title = (await placed.innerText()).split('\n')[0]!.trim();
+  const placed = page.locator('[data-testid^="slot-"]').filter({ hasText: title }).first();
+  await expect(placed, `"${title}" is on the grid`).toBeVisible();
   const target = page.locator('[data-testid^="slot-"]').filter({ hasText: 'empty' }).first();
   const targetId = await target.getAttribute('data-testid');
   await placed.dragTo(target);
   await expect(page.locator(`[data-testid="${targetId}"]`)).toContainText(title);
 
   await sendNotices(page);
-  const moved = await waitForMail((m) => m.subject.startsWith('Time change:'));
+  const moved = await waitForMail(
+    (m) => m.subject.startsWith('Time change:') && m.subject.includes(title),
+  );
   const second = attachment(moved, 'invite.ics');
 
   // The whole mechanism, in three assertions. Same UID, so the client finds the
@@ -130,7 +147,9 @@ test('a schedule change updates the invitation the speaker already has', async (
   await expect(page.locator(`[data-testid="${targetId}"]`)).toContainText('empty');
 
   await sendNotices(page);
-  const cancelled = await waitForMail((m) => m.subject.includes('has come off the'));
+  const cancelled = await waitForMail(
+    (m) => m.subject.includes('has come off the') && m.subject.includes(title),
+  );
   const third = attachment(cancelled, 'cancelled.ics');
 
   expect(contentType(cancelled, 'cancelled.ics')).toContain('method=CANCEL');

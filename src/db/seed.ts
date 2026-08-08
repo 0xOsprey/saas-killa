@@ -1,5 +1,5 @@
 import { rm } from 'node:fs/promises';
-import { inArray, sql } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
 import { UPLOAD_DIR } from '../lib/upload-dir';
 import { db } from './index';
 import {
@@ -13,6 +13,7 @@ import {
   reviewAssignments,
   reviewRounds,
   reviews,
+  slots,
   submissionAnswers,
   rooms,
   speakerAvailability,
@@ -672,6 +673,59 @@ async function main() {
   });
   await db.insert(submissionAnswers).values(answerValues).onConflictDoNothing();
 
+  // A part-built schedule.
+  //
+  // Left empty, a fresh clone opens on a blank grid, an empty public agenda, an
+  // export with nothing in it and two widgets with nothing to show. Four
+  // screens then look broken when they are only unused. Two days of bands with
+  // most of the talks placed is what a programme actually looks like a month
+  // out, and it leaves the pool and half the boxes empty, which is where the
+  // dragging is still visible.
+  //
+  // Bands are offsets from the event's own start instant rather than wall
+  // clocks: the grid renders them in the event timezone, and building them from
+  // a formatted string here would put the fixture and the renderer in
+  // disagreement on a DST boundary.
+  const HOUR = 60 * 60 * 1000;
+  const MINUTE = 60 * 1000;
+  const bands: { offsetMs: number; minutes: number; label: string | null }[] = [
+    { offsetMs: 0, minutes: 45, label: null },
+    { offsetMs: HOUR, minutes: 45, label: null },
+    { offsetMs: 2 * HOUR, minutes: 45, label: null },
+    { offsetMs: 3 * HOUR, minutes: 60, label: 'Lunch' },
+    { offsetMs: 4.5 * HOUR, minutes: 45, label: null },
+    { offsetMs: day, minutes: 45, label: null },
+    { offsetMs: day + HOUR, minutes: 45, label: null },
+    { offsetMs: day + 2 * HOUR, minutes: 30, label: 'Coffee and posters' },
+  ];
+
+  const slotRows = await db
+    .insert(slots)
+    .values(
+      bands.flatMap((band) =>
+        roomRows.map((room) => ({
+          roomId: room.id,
+          startsAt: new Date(startsOn.getTime() + band.offsetMs),
+          endsAt: new Date(startsOn.getTime() + band.offsetMs + band.minutes * MINUTE),
+          label: band.label,
+        })),
+      ),
+    )
+    .returning();
+
+  // A poster is displayed for the length of the event rather than presented in
+  // a band, so it is never placed. Three talks stay in the pool: an organizer
+  // opening the grid should have something left to drag.
+  const schedulable = accepted.filter((submission) => submission.format !== 'poster');
+  const openSlots = slotRows.filter((slot) => slot.label === null);
+  const placements = schedulable.slice(0, Math.max(schedulable.length - 3, 0));
+
+  for (const [i, submission] of placements.entries()) {
+    const slot = openSlots[i];
+    if (!slot) break;
+    await db.update(slots).set({ submissionId: submission.id }).where(eq(slots.id, slot.id));
+  }
+
   // Two wiki pages, one published and one draft, so the portal has something in
   // it on a fresh reset and the draft/published split is visible without
   // anybody having to write a page first.
@@ -724,6 +778,7 @@ async function main() {
       `✓ ${taskValues.length} speaker tasks, ${bookmarkValues.length} bookmarks, ${authorValues.length} author rows`,
       `✓ ${awardRows.length} awards, ${nomineeValues.length} nominees`,
       `✓ 2 review rounds (round 1 closed), ${questionRows.length} form questions, ${answerValues.length} answers`,
+      `✓ ${slotRows.length} slots over 2 days, ${placements.length} talks placed, agenda unpublished`,
       `✓ ${pageRows.length} portal pages (1 published, 1 draft)`,
       `✓ organizer: ${organizerEmail}`,
       '',
