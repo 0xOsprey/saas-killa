@@ -234,3 +234,21 @@ export async function guardRoute(...allowed: Role[]): Promise<CurrentUser | Resp
 export async function grantRole(userId: string, role: Role): Promise<void> {
   await db.insert(userRoles).values({ userId, role }).onConflictDoNothing();
 }
+
+/** The roles a user holds, by id. `currentUser` needs a cookie; this does not. */
+export async function rolesFor(userId: string): Promise<Role[]> {
+  const held = await db.select().from(userRoles).where(eq(userRoles.userId, userId));
+  return held.map((r) => r.role);
+}
+
+/**
+ * Where a sign-in lands. Everyone used to land on `/speaker`, which put an
+ * organizer on their own empty submission list and left the screens they signed
+ * in for one unexplained click away in the nav. Ordered most-privileged first,
+ * because the bootstrap organizer holds `reviewer` as well.
+ */
+export function homeForRoles(roles: Role[]): string {
+  if (roles.includes('organizer')) return '/organizer';
+  if (roles.includes('reviewer')) return '/review';
+  return '/speaker';
+}

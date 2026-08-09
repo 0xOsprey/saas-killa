@@ -42,8 +42,8 @@ Run from the project root, in this order, on 2026-08-09:
 
 ```
 pnpm typecheck     clean
-pnpm build         clean, 58 routes
-pnpm test          77 passed (1.9m)
+pnpm build         clean, 59 routes
+pnpm test          78 passed (2.0m)
 ```
 
 `pnpm test` is Playwright and there is no unit runner. Seventeen spec files, one

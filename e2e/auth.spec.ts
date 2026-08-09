@@ -158,3 +158,35 @@ test('signing in sweeps expired sessions and expired links, and spares live ones
     });
   }
 });
+
+/**
+ * A sign-in lands on the screens that address belongs to.
+ *
+ * Every redemption used to end at `/speaker`, so the bootstrap organizer's first
+ * screen was their own empty submission list and the whole organizer surface was
+ * one unexplained click away in the nav. `homeForRoles` decides it now, and the
+ * ordering matters: `organizer@example.com` holds `reviewer` too, so a check that
+ * read the roles in any order could land the programme chair in a grading queue.
+ *
+ * Redeems one throwaway link per address and changes no seeded state.
+ */
+const LANDS_ON: Array<[string, RegExp]> = [
+  ['organizer@example.com', /\/organizer$/],
+  ['reviewer1@example.com', /\/review$/],
+  [SPEAKER, /\/speaker$/],
+];
+
+test('a sign-in lands on the home the address has a role for', async ({ page }) => {
+  for (const [email, expected] of LANDS_ON) {
+    await page.goto('/login');
+    await page.getByTestId('login-email').fill(email);
+    await page.getByTestId('login-submit').click();
+    await expect(page.getByTestId('magic-link-sent')).toBeVisible();
+
+    const mail = await waitForMail((m) => m.to === email && m.subject.includes('sign-in link'));
+    await page.goto(extractMagicLink(mail));
+
+    await expect(page, email).toHaveURL(expected);
+    await expect(page.getByTestId('current-user')).toHaveText(email);
+  }
+});

@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import { consumeMagicLink, startSession } from '@/lib/auth';
+import { consumeMagicLink, homeForRoles, rolesFor, startSession } from '@/lib/auth';
 import { env } from '@/lib/env';
 
 /**
@@ -22,5 +22,5 @@ export async function GET(request: NextRequest) {
   }
 
   await startSession(user.id);
-  return NextResponse.redirect(new URL('/speaker', base));
+  return NextResponse.redirect(new URL(homeForRoles(await rolesFor(user.id)), base));
 }

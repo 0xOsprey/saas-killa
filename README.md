@@ -22,6 +22,8 @@ Playwright.
 ## Run it
 
 ```bash
+pnpm install
+
 cp .env.example .env.local          # then fill SESSION_SECRET
 openssl rand -hex 32                # a value for SESSION_SECRET
 
@@ -32,10 +34,14 @@ pnpm db:seed                        # one event, 40 submissions, 24 speakers,
 pnpm dev                            # http://127.0.0.1:9140
 ```
 
-Sign in at `/login` as `organizer@example.com`. With `RESEND_API_KEY` unset the
-app never sends anything: every message is printed to the terminal and written
-to `.mail/`, so the sign-in link is in your scrollback. That is also how the
-end-to-end test reads its magic links.
+Sign in at `/login` as `organizer@example.com`, which lands on the organizer
+screens. `reviewer1@example.com` lands in the grading queue, and any of
+`speaker1@example.com` .. `speaker24@example.com` lands in that speaker's own
+portal.
+
+With `RESEND_API_KEY` unset the app never sends anything: every message is
+printed to the terminal and written to `.mail/`, so the sign-in link is in your
+scrollback. That is also how the end-to-end test reads its magic links.
 
 ```bash
 node scripts/dev-inbox.mjs          # http://127.0.0.1:9141
@@ -162,10 +168,11 @@ its rubric breakdown through a tool call rather than parseable prose. Without
 ## Tests
 
 ```bash
-pnpm test          # Playwright; resets the database first
+pnpm exec playwright install chromium   # once
+pnpm test                               # resets the database first
 ```
 
-Seventeen specs, 77 tests, no unit runner. `pipeline.spec.ts` walks one proposal the
+Seventeen specs, 78 tests, no unit runner. `pipeline.spec.ts` walks one proposal the
 length of the pipeline: submit, grade, accept, notify, schedule, publish, then
 read it as a signed-out visitor, checking the acceptance email actually landed.
 `smoke.spec.ts` opens every route the nav leads to, reading the tab list off the
