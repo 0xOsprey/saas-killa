@@ -1,5 +1,11 @@
 # sessionboard-clone
 
+Running at https://saas-killa.0xosprey.com. Sign-in is a magic link, so use an
+address you can read mail at. A new address gets the speaker role and lands in
+its own portal. The agenda starts unpublished, which is the state an organizer
+publishes from, so `/agenda` and the embedded widgets say so until somebody
+does.
+
 Conference programme software: a call for papers, blind reviewer grading, an AI
 evaluator, accept/reject with speaker notification, a drag-and-drop schedule
 grid, calendar invitations that update in place, file uploads, awards, an
