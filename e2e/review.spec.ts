@@ -85,7 +85,10 @@ test('a grade that cannot be recorded says why instead of vanishing', async ({
   // Decide it out from under the rendered form. A reviewer with the queue open
   // in a tab is the ordinary way this happens.
   const organizer = await asOrganizer(browser, baseURL);
-  await organizer.page.goto('/organizer/submissions');
+  // The board pages at 25, so a row is reached by searching for it. A uuid in
+  // the search box matches the row it names rather than being looked for inside
+  // a title, which is what makes an id from anywhere else in the app a way in.
+  await organizer.page.goto(`/organizer/submissions?q=${id}`);
   const row = organizer.page.getByTestId(`submission-${id}`);
   await organizer.page.getByTestId(`accept-${id}`).click();
   // Accept stays on screen and only changes style once it is the live decision,
@@ -97,7 +100,7 @@ test('a grade that cannot be recorded says why instead of vanishing', async ({
   await card.getByTestId(`grade-${id}`).click();
   await expect(page.getByTestId('grade-refusal')).toContainText('already been decided');
 
-  await organizer.page.goto('/organizer/submissions');
+  await organizer.page.goto(`/organizer/submissions?q=${id}`);
   await row.getByRole('button', { name: 'Undecide' }).click();
   await expect(row.getByRole('button', { name: 'Undecide' })).toBeHidden();
   await organizer.context.close();

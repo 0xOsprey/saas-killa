@@ -12,7 +12,7 @@ deliberately not, and which test covers each. It also records that four of the
 brief's nine requirements are struck through in the source document, all four of
 which were built here before that was noticed.
 
-`FLOWS.md` is the other axis: every user flow in the app, 174 of them across 787
+`FLOWS.md` is the other axis: every user flow in the app, 175 of them across 796
 numbered steps, by role. Each one carries its route, its preconditions, the
 server action behind each control, the column it writes, and its refusal paths.
 
@@ -90,6 +90,17 @@ changes their mind freely; nothing leaves the building until they press send.
 `decisionEmailedAt` is the idempotency key, written per row right after that
 row's send, so a failure halfway through resumes rather than restarting.
 
+**The decision board narrows in SQL and pages at 25.** Search, decision, track,
+content status and sort are all a `<form method="get">`, so a filtered board is
+an address: linkable, reloadable and reachable with the back button. Every sort
+ends on the submission id, because a sort without a total order lets Postgres
+return tied rows in a different order per query and a tie across a page boundary
+is one row on both pages and another on neither. The counts in the header and on
+the content chips come from a separate whole-event query rather than from the
+rows on screen: "12 undecided" and the send button beside it describe the work
+outstanding, not the page. `?per=all` renders everything for the organizer who
+wants to scan the lot.
+
 **Double-booking is reported, never blocked.** An organizer mid-rearrangement
 routinely passes through an invalid grid, and refusing the drop would make the
 schedule unusable. The warning persists until it is resolved.
@@ -141,13 +152,14 @@ its rubric breakdown through a tool call rather than parseable prose. Without
 pnpm test          # Playwright; resets the database first
 ```
 
-Sixteen specs, 65 tests, no unit runner. `pipeline.spec.ts` walks one proposal the
+Seventeen specs, 71 tests, no unit runner. `pipeline.spec.ts` walks one proposal the
 length of the pipeline: submit, grade, accept, notify, schedule, publish, then
 read it as a signed-out visitor, checking the acceptance email actually landed.
 `smoke.spec.ts` opens every route the nav leads to, reading the tab list off the
 nav rather than from a copy that goes stale. The rest are one file per feature:
-uploads, portal pages, the schedule grid, calendar invitations, the embeddable
-widgets, the Accelevents push, and the speaker onboarding tracker.
+uploads, portal pages, the schedule grid, calendar invitations, the decision
+board's filters and pager, the embeddable widgets, the Accelevents push, and the
+speaker onboarding tracker.
 
 They share one database, seeded once in `globalSetup` and never between files,
 so they run in a fixed order with a single worker and each file puts back what

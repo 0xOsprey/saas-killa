@@ -1,7 +1,13 @@
-import { and, asc, eq, inArray, ne, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, inArray, ne, or, sql, type SQL } from 'drizzle-orm';
 import { db } from '@/db';
 import { events, reviews, rooms, slots, submissions, tracks, users } from '@/db/schema';
-import type { AudienceLevel, Event, SubmissionFormat, SubmissionStatus } from '@/db/schema';
+import type {
+  AudienceLevel,
+  ContentStatus,
+  Event,
+  SubmissionFormat,
+  SubmissionStatus,
+} from '@/db/schema';
 import { writableBy } from './abstracts';
 import { UNSCHEDULED } from './speaker-calendar';
 
@@ -79,13 +85,91 @@ export type OrganizerRow = {
   scheduled: boolean;
 };
 
+export const ORGANIZER_SORTS = [
+  { value: 'grade', label: 'Average grade' },
+  { value: 'newest', label: 'Newest first' },
+  { value: 'title', label: 'Title' },
+] as const;
+
+export type OrganizerSort = (typeof ORGANIZER_SORTS)[number]['value'];
+
+export type OrganizerFilters = {
+  q?: string | null;
+  status?: SubmissionStatus | null;
+  trackId?: string | null;
+  content?: ContentStatus | null;
+};
+
+export type OrganizerQuery = OrganizerFilters & {
+  sort?: OrganizerSort;
+  limit?: number;
+  offset?: number;
+};
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The WHERE the board and its counter share. Written once because a pager built
+ * on two predicates that drift is a pager that says "of 40" over 12 rows.
+ *
+ * A uuid is matched against the id rather than treated as text to find inside a
+ * title. The id is what `/organizer/abstracts/export` puts in its first column
+ * and what every organizer URL in this app ends with, so pasting one into the
+ * search box is the ordinary way back to a row you already have a handle on.
+ */
+function organizerConditions(filters: OrganizerFilters): SQL[] {
+  const conditions: SQL[] = [];
+
+  const q = filters.q?.trim();
+  if (q) {
+    const pattern = `%${q}%`;
+    const match = UUID.test(q)
+      ? eq(submissions.id, q)
+      : or(
+          ilike(submissions.title, pattern),
+          ilike(submissions.abstract, pattern),
+          ilike(users.name, pattern),
+          ilike(users.email, pattern),
+        );
+    if (match) conditions.push(match);
+  }
+  if (filters.status) conditions.push(eq(submissions.status, filters.status));
+  if (filters.trackId) conditions.push(eq(submissions.trackId, filters.trackId));
+  if (filters.content) conditions.push(eq(submissions.contentStatus, filters.content));
+
+  return conditions;
+}
+
+/**
+ * Every sort ends on the id. Without a total order Postgres is free to return
+ * tied rows in any order it likes on each query, and two rows tied across a page
+ * boundary is a row rendered twice on page 1 and never on page 2.
+ */
+const ORGANIZER_ORDER: Record<OrganizerSort, SQL[]> = {
+  grade: [
+    sql`avg(${reviews.score}) desc nulls last`,
+    asc(submissions.createdAt),
+    asc(submissions.id),
+  ],
+  newest: [desc(submissions.createdAt), asc(submissions.id)],
+  title: [asc(submissions.title), asc(submissions.id)],
+};
+
 /**
  * The organizer view. Unlike the review queue this one carries speaker identity
  * and average score, because deciding is exactly where both are needed. Sorted
- * by score descending so the strongest proposals are at the top of the page.
+ * by score descending by default, so the strongest proposals are at the top.
+ *
+ * Filtered, sorted and paged in SQL rather than in the page. The board used to
+ * read the whole call for papers and narrow it in JavaScript, which renders
+ * every row that has ever been filed on a screen whose job is to decide the next
+ * one: at 40 submissions that is 17,000 pixels of page and 2,500 DOM nodes, and
+ * the number only goes up.
  */
-export async function organizerSubmissions(): Promise<OrganizerRow[]> {
-  return db
+export async function organizerSubmissions(options: OrganizerQuery = {}): Promise<OrganizerRow[]> {
+  const conditions = organizerConditions(options);
+
+  const rows = db
     .select({
       id: submissions.id,
       title: submissions.title,
@@ -106,8 +190,75 @@ export async function organizerSubmissions(): Promise<OrganizerRow[]> {
     .leftJoin(tracks, eq(tracks.id, submissions.trackId))
     .leftJoin(reviews, eq(reviews.submissionId, submissions.id))
     .leftJoin(slots, eq(slots.submissionId, submissions.id))
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
     .groupBy(submissions.id, tracks.name, users.name, users.email)
-    .orderBy(sql`avg(${reviews.score}) desc nulls last`, asc(submissions.createdAt));
+    .orderBy(...ORGANIZER_ORDER[options.sort ?? 'grade']);
+
+  if (options.limit === undefined) return rows;
+  return rows.limit(options.limit).offset(options.offset ?? 0);
+}
+
+/** How many submissions the same filters match, for the pager. */
+export async function organizerSubmissionCount(filters: OrganizerFilters = {}): Promise<number> {
+  const conditions = organizerConditions(filters);
+
+  // `users` is joined whether or not the search needs it: the join is on a
+  // foreign key to a primary key, so it can neither add a row nor drop one.
+  const [row] = await db
+    .select({ matching: sql<number>`count(*)::int` })
+    .from(submissions)
+    .innerJoin(users, eq(users.id, submissions.speakerId))
+    .where(conditions.length > 0 ? and(...conditions) : undefined);
+
+  return row?.matching ?? 0;
+}
+
+export type OrganizerTotals = {
+  total: number;
+  submitted: number;
+  accepted: number;
+  rejected: number;
+  awaitingEmail: number;
+  draft: number;
+  pending: number;
+  approved: number;
+};
+
+const NO_SUBMISSIONS: OrganizerTotals = {
+  total: 0,
+  submitted: 0,
+  accepted: 0,
+  rejected: 0,
+  awaitingEmail: 0,
+  draft: 0,
+  pending: 0,
+  approved: 0,
+};
+
+/**
+ * The header counts, over the whole call for papers rather than the page.
+ *
+ * These are deliberately not derived from the rows on screen. "12 undecided"
+ * and "Send 3 decision email(s)" describe the work outstanding, and the button
+ * beside them acts on every decided row in the database, not on the 25 an
+ * organizer happens to be looking at. A count that shrank when a filter was
+ * applied would be a count of the wrong thing.
+ */
+export async function organizerTotals(): Promise<OrganizerTotals> {
+  const [row] = await db
+    .select({
+      total: sql<number>`count(*)::int`,
+      submitted: sql<number>`count(*) filter (where ${submissions.status} = 'submitted')::int`,
+      accepted: sql<number>`count(*) filter (where ${submissions.status} = 'accepted')::int`,
+      rejected: sql<number>`count(*) filter (where ${submissions.status} = 'rejected')::int`,
+      awaitingEmail: sql<number>`count(*) filter (where ${submissions.status} in ('accepted', 'rejected') and ${submissions.decisionEmailedAt} is null)::int`,
+      draft: sql<number>`count(*) filter (where ${submissions.contentStatus} = 'draft')::int`,
+      pending: sql<number>`count(*) filter (where ${submissions.contentStatus} = 'pending')::int`,
+      approved: sql<number>`count(*) filter (where ${submissions.contentStatus} = 'approved')::int`,
+    })
+    .from(submissions);
+
+  return row ?? NO_SUBMISSIONS;
 }
 
 export type AgendaEntry = {

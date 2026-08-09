@@ -222,7 +222,9 @@ test('a supporting document is private and a headshot is not', async ({ page }) 
   // The organizers are who it was sent to, and the board is where they find it.
   await signInVia(page, ORGANIZER);
   expect((await fetchFile(page, documentHref)).status, 'document, organizer').toBe(200);
-  await page.goto('/organizer/submissions');
+  // Searched by id: the board pages at 25 and this row is wherever its grade
+  // puts it.
+  await page.goto(`/organizer/submissions?q=${id}`);
   const panel = page.getByTestId(`organizer-documents-${id}`);
   // The list lives in the row's collapsed "Content and locks" panel, and a
   // closed `details` is out of the accessibility tree, so the link genuinely is

@@ -1,7 +1,7 @@
 # User roles and every user flow
 
 What each kind of person can do in this app, screen by screen, control by control.
-174 flows and 787 numbered steps across four roles, written 2026-08-08 by reading
+175 flows and 796 numbered steps across four roles, written 2026-08-08 by reading
 the code rather than by clicking around.
 
 `SCOPE.md` answers "is the requirement built". This answers "what does a person
@@ -17,7 +17,7 @@ it writes, and what the person sees next. Identifiers are verbatim from the
 source. Nothing was renamed to read better, because a renamed symbol is a symbol
 you cannot grep for.
 
-Flow ids are prefixed by part: `ORG-1` to `ORG-104`, `SPK-1` to `SPK-25`,
+Flow ids are prefixed by part: `ORG-1` to `ORG-105`, `SPK-1` to `SPK-25`,
 `REV-1` to `REV-45`. Cross-references inside a part use the same ids.
 
 ## The role model in one paragraph
@@ -928,7 +928,7 @@ Signed-in-but-wrong-role never 403s at the page level — it renders a `Notice` 
 
 ---
 
-## Part 2 — Organizer flows (ORG-1 to ORG-103)
+## Part 2 — Organizer flows (ORG-1 to ORG-105)
 
 Exhaustive enumeration of every organizer flow.
 
@@ -980,7 +980,9 @@ Times typed into any `datetime-local` are bare wall clock, read via
 Screen: `src/app/organizer/submissions/page.tsx`
 Client board: `.../SubmissionsBoard.tsx` · Actions: `.../actions.ts` · Mail: `.../mail.ts`
 
-Board rows come from `organizerSubmissions()` (`src/lib/queries.ts`), sorted by average grade.
+Board rows come from `organizerSubmissions(options)` (`src/lib/queries.ts`), which filters,
+sorts and pages in SQL; the screen renders 25 of them. `organizerSubmissionCount()` runs the
+same WHERE for the pager total and `organizerTotals()` counts the whole event for the header.
 `LOCKABLE_FIELDS` (`src/lib/content.ts`) is `title`, `abstract`, `keywords`, `format`,
 `audienceLevel`, `slidesUrl`, `recordingUrl`, `resourcesNote`.
 
@@ -988,12 +990,28 @@ Board rows come from `organizerSubmissions()` (`src/lib/queries.ts`), sorted by 
 - **Route:** `/organizer/submissions?content=<draft|pending|approved>`
 - **Precondition:** none.
 - **Steps:**
-  1. Click one of four filter links: `data-testid="filter-all"`, `filter-pending`, `filter-approved`, `filter-draft` (`CONTENT_FILTERS`, labels All / Awaiting review / Approved / Draft, each with its count).
+  1. Click one of four filter links: `data-testid="filter-all"`, `filter-pending`, `filter-approved`, `filter-draft` (`CONTENT_FILTERS`, labels All / Awaiting review / Approved / Draft, each with its count from `organizerTotals()` — the whole event, not the page).
   2. GET navigation only. `params.content` is validated against `contentStatusEnum.enumValues`; anything else falls back to `null` (no filter).
-  3. `board` is `rows.filter(row => !filter || (content.get(row.id)?.contentStatus ?? 'draft') === filter)`.
-  4. When `contentCounts.pending > 0` a `<Notice tone="accent">` renders with `data-testid="content-queue"`: "N submission(s) have content awaiting review."
-- **Error and refusal paths:** an unrecognised `?content=` value is silently treated as no filter. With no submissions at all: `<Empty>No submissions yet.</Empty>`. With submissions but none matching: `<Empty>Nothing with that content status.</Empty>`.
+  3. The chip href is `submissionsHref({ ...current, content, page: 1 })`, so it carries `q`, `status`, `track`, `sort` and `per` through and drops the page number.
+  4. `eq(submissions.contentStatus, filters.content)` joins the WHERE in `organizerConditions()`. It used to be a `rows.filter()` in the page over every submission in the event.
+  5. When `totals.pending > 0` a `<Notice tone="accent">` renders with `data-testid="content-queue"`: "N submission(s) have content awaiting review."
+- **Error and refusal paths:** an unrecognised `?content=` value is silently treated as no filter. With no submissions at all: `<Empty>No submissions yet.</Empty>`. With submissions but none matching: `<Empty>Nothing matches.</Empty>` and `pager-range` reads "No submissions match these filters."
 - **Ends:** no DB change. The moderation queue is this filter, not a separate screen.
+
+##### ORG-105. Search, filter, sort and page the board
+- **Route:** `/organizer/submissions?q=&status=&track=&content=&sort=&page=&per=`
+- **Precondition:** none.
+- **Steps:**
+  1. The filter card is a `<form method="get">` with `board-search` (name `q`), `board-status` (name `status`), `board-track` (name `track`), `board-sort` (name `sort`) and `board-apply`. `content` and `per` ride along as hidden inputs when set. It carries no `page`, which is what makes narrowing the filters land on the first page of the new result.
+  2. `q` matches `submissions.title`, `submissions.abstract`, `users.name` and `users.email` with `ilike '%q%'`. A `q` that matches the uuid shape is `eq(submissions.id, q)` instead, so an id from the CSV export or an organizer URL is a way back to one row.
+  3. `status` is validated against `submissionStatusEnum.enumValues`, `track` against `z.string().uuid()`, `content` against `contentStatusEnum.enumValues`, `sort` against `ORGANIZER_SORTS` (`grade` · `newest` · `title`). Every unrecognised value is the default rather than an error.
+  4. `organizerSubmissions()` applies all of it with `limit 25 offset (page - 1) * 25`. Every entry in `ORGANIZER_ORDER` ends on `asc(submissions.id)`: without a total order Postgres may return tied rows in a different order per query, which is a row rendered on both pages and another on neither.
+  5. The pager (`data-testid="pager"`) carries `pager-range` ("Showing 1–25 of 40"), `page-prev`, `page-of`, `page-next`, and `page-all` when the result is longer than one page. `?per=all` renders the whole result under `pager-range` "Showing all N" and offers `page-paged` back.
+  6. `page` is clamped to `[1, ceil(matching / 25)]`, so `?page=99` is the last page rather than an empty screen with the pager scrolled off it.
+  7. Every link back to this screen is built by `submissionsHref()`, which omits defaults, so the unfiltered board stays `/organizer/submissions`.
+  8. `contentRowsById()`, `recentRevisions()`, `lastEditBySubmission()` and `documentsFor()` are each scoped to the ids on the page. They used to read every submission, every document and the whole revision log on every render.
+- **Error and refusal paths:** a `?track=` that is not a uuid is no filter, because an unparseable uuid reaching Postgres is a 22P02 cast error and a 500. Nothing matching: `<Empty>Nothing matches. Try a shorter search than “…”.</Empty>`. No submissions at all: `<Empty>No submissions yet.</Empty>`.
+- **Ends:** no DB change. The address is the whole state, so a filtered board is linkable, reloadable and reachable with the back button.
 
 ##### ORG-3. Decide one submission (accept / reject / undecide)
 - **Route:** `/organizer/submissions`

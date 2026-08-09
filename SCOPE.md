@@ -42,11 +42,11 @@ Run from the project root, in this order, on 2026-08-08:
 
 ```
 pnpm typecheck     clean
-pnpm build         clean, 55 routes
-pnpm test          34 passed (1.0m)
+pnpm build         clean, 58 routes
+pnpm test          71 passed (1.7m)
 ```
 
-`pnpm test` is Playwright and there is no unit runner. Ten spec files, one
+`pnpm test` is Playwright and there is no unit runner. Seventeen spec files, one
 worker, no retries, a single database reset once in `globalSetup` and shared
 across the whole run. Every file puts back what it changed.
 

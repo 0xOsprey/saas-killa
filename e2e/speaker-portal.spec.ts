@@ -160,7 +160,9 @@ test('the portal separates what the organizers decided from what the speaker was
   const organizer = await asOrganizer(browser, baseURL);
 
   // 2. Decided, not yet sent ----------------------------------------------
-  await organizer.page.goto('/organizer/submissions');
+  // Searched for: the board pages at 25 and sorts by grade, so a proposal filed
+  // seconds ago with no reviews on it sorts last.
+  await organizer.page.goto(`/organizer/submissions?q=${encodeURIComponent(title)}`);
   const row = organizer.page.locator('[data-testid^="submission-"]').filter({ hasText: title });
   await expect(row).toHaveCount(1);
   await row.locator('[data-testid^="accept-"]').click();
@@ -440,7 +442,7 @@ test('withdrawing tells the organizers and shows on the grid', async ({
 
   // Hand it back. Accept restores the status with no guard on the current one,
   // which is why withdrawing does not ask for confirmation in the first place.
-  await organizer.page.goto('/organizer/submissions');
+  await organizer.page.goto(`/organizer/submissions?q=${submissionId}`);
   await organizer.page.getByTestId(`accept-${submissionId}`).click();
   // Wait for the row to say so before navigating. Leaving straight after the
   // click races the action: the schedule page then renders from a copy computed

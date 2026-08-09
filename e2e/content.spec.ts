@@ -47,7 +47,10 @@ async function contentCard(page: Page) {
  */
 async function approveContent(page: Page, id: string) {
   await signInVia(page, ORGANIZER);
-  await page.goto('/organizer/submissions');
+  // The board pages at 25, so a row is reached by searching for it. A uuid in
+  // the search box matches the row it names rather than being looked for inside
+  // a title.
+  await page.goto(`/organizer/submissions?q=${id}`);
   const row = page.getByTestId(`submission-${id}`);
   await row.getByText('Content and locks').click();
   await row.getByTestId(`content-approve-${id}`).click();
@@ -204,7 +207,7 @@ test('a returned draft carries the reason it was returned', async ({ page }) => 
   await expect(page.getByTestId(`content-status-${id}`)).toHaveText(/review/i);
 
   await signInVia(page, ORGANIZER);
-  await page.goto('/organizer/submissions');
+  await page.goto(`/organizer/submissions?q=${id}`);
   const row = page.getByTestId(`submission-${id}`);
   await row.getByText('Content and locks').click();
   await row.getByTestId(`return-reason-${id}`).fill(reason);
@@ -251,7 +254,10 @@ test('a returned draft carries the reason it was returned', async ({ page }) => 
  */
 test('the board counts the changes the history page lists', async ({ page }) => {
   await signInVia(page, ORGANIZER);
-  await page.goto('/organizer/submissions');
+  // `per=all` because the property is about every card, not the first 25. This
+  // is the pager's own escape hatch, the one an organizer presses when they want
+  // to scan or search the whole call for papers in the browser.
+  await page.goto('/organizer/submissions?per=all');
 
   const summaries = await page
     .locator('[data-testid^="last-edit-"]')
@@ -274,6 +280,6 @@ test('the board counts the changes the history page lists', async ({ page }) => 
     const logged = Number(/(\d+) logged change\(s\)/.exec(heading ?? '')?.[1] ?? -2);
     expect(shown, `board vs history for ${id}`).toBe(logged);
 
-    await page.goto('/organizer/submissions');
+    await page.goto('/organizer/submissions?per=all');
   }
 });

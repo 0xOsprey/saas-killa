@@ -100,9 +100,12 @@ export function SubmissionsBoard({
           onChange={() => setSelected(allSelected ? new Set() : new Set(rows.map((r) => r.id)))}
           data-testid="select-all"
           className="h-4 w-4 rounded border-line"
-          aria-label="Select every submission"
+          aria-label="Select every submission on this page"
         />
-        <span>{allSelected ? 'Clear selection' : `Select all ${rows.length}`}</span>
+        {/* "on this page", because that is what it is. The board is paged, and a
+            bulk edit reaches the rows in front of the organizer rather than the
+            whole call for papers. */}
+        <span>{allSelected ? 'Clear selection' : `Select all ${rows.length} on this page`}</span>
       </div>
 
       {rows.map((row) => (

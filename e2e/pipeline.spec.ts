@@ -88,7 +88,10 @@ test('a proposal travels from the CFP to the published agenda', async ({ page })
   await expect(card.locator('[data-testid^="my-score-"]')).toContainText('you scored 5');
 
   // 3. Accept ---------------------------------------------------------------
-  await page.goto('/organizer/submissions');
+  // Searched for rather than scrolled to. The board pages at 25 and sorts by
+  // average grade, so a proposal filed a minute ago carrying one review is not
+  // on the first page of a call for papers of any size.
+  await page.goto(`/organizer/submissions?q=${encodeURIComponent(TITLE)}`);
   const row = page.locator('[data-testid^="submission-"]').filter({ hasText: TITLE });
   await expect(row).toHaveCount(1);
   await expect(row).toContainText(SPEAKER_EMAIL);
@@ -184,7 +187,7 @@ test('an undecided proposal is not reachable from the public agenda', async ({ p
   await expect(page.getByTestId('submitted-confirmation')).toBeVisible();
 
   await signInVia(page, ORGANIZER_EMAIL);
-  await page.goto('/organizer/submissions');
+  await page.goto(`/organizer/submissions?q=${encodeURIComponent(title)}`);
   const row = page.locator('[data-testid^="submission-"]').filter({ hasText: title });
   const testId = await row.getAttribute('data-testid');
   const submissionId = testId!.replace('submission-', '');

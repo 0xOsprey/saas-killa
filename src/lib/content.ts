@@ -326,12 +326,18 @@ const REVISION_FIELDS = {
  * `distinct on` is what keeps this exact: one row per submission whatever the
  * log holds, so the "last edited by" line on a dashboard row is right for a
  * submission edited once in March and for one edited forty times this morning.
+ *
+ * `ids` narrows it to the rows a caller is about to render. Omitting it reads
+ * the whole log, which is only ever what a caller rendering the whole log wants.
  */
-export async function lastEditBySubmission(): Promise<Map<string, RevisionRow>> {
+export async function lastEditBySubmission(ids?: string[]): Promise<Map<string, RevisionRow>> {
+  if (ids && ids.length === 0) return new Map();
+
   const rows = await db
     .selectDistinctOn([submissionRevisions.submissionId], REVISION_FIELDS)
     .from(submissionRevisions)
     .innerJoin(users, eq(users.id, submissionRevisions.editorId))
+    .where(ids ? inArray(submissionRevisions.submissionId, ids) : undefined)
     .orderBy(asc(submissionRevisions.submissionId), desc(submissionRevisions.createdAt));
 
   return new Map(rows.map((row) => [row.submissionId, row]));
@@ -343,15 +349,24 @@ export async function lastEditBySubmission(): Promise<Map<string, RevisionRow>> 
  * which is the compromise a plain query can make: on a log longer than `limit`
  * the quietest submissions lose their panel entries, but never their last-edit
  * line, because that comes from `lastEditBySubmission` instead.
+ *
+ * Passing `ids` is what keeps that compromise cheap. Scoped to the 25 rows on
+ * one page of the board, the cap is reached only if those same 25 carry more
+ * than `limit` revisions between them, rather than by any busy submission
+ * anywhere in the event.
  */
 export async function recentRevisions(
+  ids?: string[],
   limit = 500,
   perSubmission = 5,
 ): Promise<Map<string, RevisionRow[]>> {
+  if (ids && ids.length === 0) return new Map();
+
   const rows = await db
     .select(REVISION_FIELDS)
     .from(submissionRevisions)
     .innerJoin(users, eq(users.id, submissionRevisions.editorId))
+    .where(ids ? inArray(submissionRevisions.submissionId, ids) : undefined)
     .orderBy(desc(submissionRevisions.createdAt))
     .limit(limit);
 
@@ -399,7 +414,9 @@ export type ContentRow = {
  * the board said "0 change(s) logged" beside a last-edit line it had just
  * rendered from the same table. The builder emits both sides qualified.
  */
-export async function contentRowsById(): Promise<Map<string, ContentRow>> {
+export async function contentRowsById(ids?: string[]): Promise<Map<string, ContentRow>> {
+  if (ids && ids.length === 0) return new Map();
+
   const revisionCount = db
     .select({ n: sql<number>`count(*)::int` })
     .from(submissionRevisions)
@@ -417,7 +434,8 @@ export async function contentRowsById(): Promise<Map<string, ContentRow>> {
       posterUrl: submissions.posterUrl,
       revisionCount: sql<number>`(${revisionCount})`,
     })
-    .from(submissions);
+    .from(submissions)
+    .where(ids ? inArray(submissions.id, ids) : undefined);
 
   return new Map(rows.map((row) => [row.id, row]));
 }
