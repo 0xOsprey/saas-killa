@@ -389,8 +389,22 @@ export type ContentRow = {
  * The revision count is a correlated subquery rather than a join: joining
  * `submission_revisions` would multiply the rows and quietly corrupt any count
  * computed alongside it.
+ *
+ * It is built with the query builder rather than written into the `sql` template
+ * by hand, because a column interpolated into a template renders *unqualified*.
+ * `where ${submissionRevisions.submissionId} = ${submissions.id}` came out as
+ * `where "submission_id" = "id"`, and inside the subquery `"id"` binds to
+ * `submission_revisions.id`, not to the outer submission. The predicate was a
+ * row comparing itself, so the count was 0 for every submission ever filed and
+ * the board said "0 change(s) logged" beside a last-edit line it had just
+ * rendered from the same table. The builder emits both sides qualified.
  */
 export async function contentRowsById(): Promise<Map<string, ContentRow>> {
+  const revisionCount = db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(submissionRevisions)
+    .where(eq(submissionRevisions.submissionId, submissions.id));
+
   const rows = await db
     .select({
       id: submissions.id,
@@ -401,10 +415,7 @@ export async function contentRowsById(): Promise<Map<string, ContentRow>> {
       recordingUrl: submissions.recordingUrl,
       resourcesNote: submissions.resourcesNote,
       posterUrl: submissions.posterUrl,
-      revisionCount: sql<number>`(
-        select count(*) from ${submissionRevisions}
-        where ${submissionRevisions.submissionId} = ${submissions.id}
-      )::int`,
+      revisionCount: sql<number>`(${revisionCount})`,
     })
     .from(submissions);
 

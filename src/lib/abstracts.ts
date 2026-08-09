@@ -574,6 +574,14 @@ export type AbstractFilters = {
  * `submission_revisions` here would multiply the submission rows and every
  * other count on the page with it.
  */
+/** One aggregate over the outer submission's revision log, correlated by id. */
+function revisionsOfOuterSubmission(aggregate: SQL) {
+  return db
+    .select({ value: aggregate })
+    .from(submissionRevisions)
+    .where(eq(submissionRevisions.submissionId, submissions.id));
+}
+
 export async function abstractIndex(filters: AbstractFilters = {}): Promise<AbstractIndexRow[]> {
   const conditions: SQL[] = [];
 
@@ -604,14 +612,14 @@ export async function abstractIndex(filters: AbstractFilters = {}): Promise<Abst
       speakerName: users.name,
       speakerEmail: users.email,
       createdAt: submissions.createdAt,
-      revisionCount: sql<number>`(
-        select count(*) from ${submissionRevisions}
-        where ${submissionRevisions.submissionId} = ${submissions.id}
-      )::int`,
-      lastEditedAt: sql<Date | null>`(
-        select max(${submissionRevisions.createdAt}) from ${submissionRevisions}
-        where ${submissionRevisions.submissionId} = ${submissions.id}
-      )`,
+      // Built with the query builder, not written into the template: a column
+      // interpolated into `sql` renders unqualified, so the correlation read
+      // `where "submission_id" = "id"` and bound `"id"` to the subquery's own
+      // table. See the note on `contentRowsById` in lib/content.ts.
+      revisionCount: sql<number>`(${revisionsOfOuterSubmission(sql`count(*)::int`)})`,
+      lastEditedAt: sql<Date | null>`(${revisionsOfOuterSubmission(
+        sql`max(${submissionRevisions.createdAt})`,
+      )})`,
     })
     .from(submissions)
     .innerJoin(users, eq(users.id, submissions.speakerId))

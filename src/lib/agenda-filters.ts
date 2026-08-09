@@ -148,17 +148,25 @@ export async function agendaSlots(
   timezone: string,
   viewerId: string | null = null,
 ): Promise<AgendaSlot[]> {
-  const bookmarkCount = sql<number>`(
-    select count(*) from ${bookmarks}
-    where ${bookmarks.submissionId} = ${slots.submissionId}
-  )::int`;
+  // Both of these are built with the query builder rather than written into an
+  // `sql` template, because a column interpolated into a template renders
+  // *unqualified*. `where ${bookmarks.submissionId} = ${slots.submissionId}`
+  // came out as `where "submission_id" = "submission_id"`, and inside the
+  // subquery both sides bound to `bookmarks.submission_id`. The predicate was
+  // always true: every talk on the agenda reported the site-wide bookmark
+  // total, and every talk looked starred to anyone who had starred anything.
+  const bookmarkCount = sql<number>`(${db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(bookmarks)
+    .where(eq(bookmarks.submissionId, slots.submissionId))})`;
 
   const bookmarkedByMe = viewerId
-    ? sql<boolean>`exists (
-        select 1 from ${bookmarks}
-        where ${bookmarks.submissionId} = ${slots.submissionId}
-          and ${bookmarks.userId} = ${viewerId}
-      )`
+    ? sql<boolean>`exists (${db
+        .select({ one: sql`1` })
+        .from(bookmarks)
+        .where(
+          and(eq(bookmarks.submissionId, slots.submissionId), eq(bookmarks.userId, viewerId)),
+        )})`
     : sql<boolean>`false`;
 
   // Only accepted work is public. A submission placed and later withdrawn would

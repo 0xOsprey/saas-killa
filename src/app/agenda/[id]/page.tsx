@@ -42,10 +42,14 @@ export default async function SubmissionDetailPage({
       startsAt: slots.startsAt,
       roomName: rooms.name,
       roomCapacity: rooms.capacity,
-      bookmarkCount: sql<number>`(
-        select count(*) from ${bookmarks}
-        where ${bookmarks.submissionId} = ${submissions.id}
-      )::int`,
+      // The query builder, not a hand-written template: an interpolated column
+      // renders unqualified, and this one only worked because `bookmarks` has
+      // no `id` column of its own for the bare `"id"` to bind to. See the note
+      // on `contentRowsById` in lib/content.ts for what that costs elsewhere.
+      bookmarkCount: sql<number>`(${db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(bookmarks)
+        .where(eq(bookmarks.submissionId, submissions.id))})`,
     })
     .from(submissions)
     .innerJoin(users, eq(users.id, submissions.speakerId))

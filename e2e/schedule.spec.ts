@@ -197,3 +197,66 @@ test('a view name and a day the schedule does not have fall back rather than err
     page.getByTestId('schedule-day-tabs').getByRole('link').first(),
   ).toHaveAttribute('aria-current', 'page');
 });
+
+/**
+ * The star on the agenda, against the star on the talk's own page.
+ *
+ * Both counts come from the same bookmarks table by two different routes, and
+ * the agenda's route was a correlated subquery written into an `sql` template.
+ * A drizzle column interpolated into a template renders *unqualified*, so
+ * `where ${bookmarks.submissionId} = ${slots.submissionId}` came out as
+ * `where "submission_id" = "submission_id"` and both sides bound to the
+ * subquery's own table. The predicate was always true: every talk on the agenda
+ * reported the site-wide bookmark total, and the `exists` beside it made every
+ * talk look starred to anyone who had starred anything at all.
+ *
+ * The detail page escaped only because `bookmarks` has no `id` column for its
+ * bare `"id"` to bind to, which makes it the honest number to compare against.
+ */
+test('a talk on the agenda carries its own star count, not the whole site', async ({ page }) => {
+  await signInVia(page, ORGANIZER);
+  await page.goto('/agenda');
+
+  const stars = await page
+    .locator('[data-testid^="star-"]')
+    .evaluateAll((nodes) =>
+      nodes.map((node) => ({
+        id: (node.getAttribute('data-testid') ?? '').replace('star-', ''),
+        count: (node.textContent ?? '').replace(/\D/g, ''),
+        pressed: node.getAttribute('aria-pressed') === 'true',
+      })),
+    );
+
+  expect(stars.length, 'starred talks on the agenda').toBeGreaterThan(1);
+
+  for (const star of stars) {
+    await page.goto(`/agenda/${star.id}`);
+    const own = await page.getByTestId(`star-${star.id}`).textContent();
+    expect(star.count, `star count for ${star.id}`).toBe((own ?? '').replace(/\D/g, ''));
+  }
+
+  // `bookmarkedByMe` had the same defect and shows as `aria-pressed`. Starring
+  // one talk has to leave the others alone, which is the assertion the broken
+  // `exists` failed: it pressed every star on the page at once.
+  await page.goto('/agenda');
+  const target = stars[0].id;
+  const wasPressed = stars[0].pressed;
+  await page.getByTestId(`star-${target}`).click();
+  await expect(page.getByTestId(`star-${target}`)).toHaveAttribute(
+    'aria-pressed',
+    String(!wasPressed),
+  );
+
+  const pressedNow = await page
+    .locator('[data-testid^="star-"][aria-pressed="true"]')
+    .evaluateAll((nodes) => nodes.length);
+  const expected = stars.filter((s) => s.pressed).length + (wasPressed ? -1 : 1);
+  expect(pressedNow, 'stars pressed after toggling exactly one').toBe(expected);
+
+  // Put it back: this file runs before smoke.spec.ts on the same database.
+  await page.getByTestId(`star-${target}`).click();
+  await expect(page.getByTestId(`star-${target}`)).toHaveAttribute(
+    'aria-pressed',
+    String(wasPressed),
+  );
+});

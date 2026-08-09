@@ -234,3 +234,46 @@ test('a returned draft carries the reason it was returned', async ({ page }) => 
 
   await clearContent(page);
 });
+
+/**
+ * The board's revision counter, against the audit trail it counts.
+ *
+ * Every card with a last-edit line read "0 change(s) logged" beside a line the
+ * page had just rendered from the same table, while the history page for the
+ * same submission listed the changes. One correlated subquery was the cause:
+ * a drizzle column interpolated into an `sql` template renders unqualified, so
+ * `where "submission_id" = "id"` bound `"id"` to the subquery's own table and
+ * compared a row to itself.
+ *
+ * The assertion is deliberately the contradiction rather than a fixed number:
+ * a count that matches the audit trail is the property, and it holds whatever
+ * the earlier files in this suite have edited by the time this runs.
+ */
+test('the board counts the changes the history page lists', async ({ page }) => {
+  await signInVia(page, ORGANIZER);
+  await page.goto('/organizer/submissions');
+
+  const summaries = await page
+    .locator('[data-testid^="last-edit-"]')
+    .evaluateAll((nodes) =>
+      nodes.map((node) => ({
+        id: (node.getAttribute('data-testid') ?? '').replace('last-edit-', ''),
+        text: node.textContent ?? '',
+      })),
+    );
+
+  // The seed writes four revisions, so the board has something to be wrong about.
+  expect(summaries.length, 'cards carrying a last-edit line').toBeGreaterThan(0);
+
+  for (const { id, text } of summaries) {
+    const shown = Number(/(\d+) change\(s\) logged/.exec(text)?.[1] ?? -1);
+    expect(shown, `count on the card for ${id}`).toBeGreaterThan(0);
+
+    await page.goto(`/organizer/abstracts/${id}/history`);
+    const heading = await page.getByText(/logged change\(s\), newest first/).textContent();
+    const logged = Number(/(\d+) logged change\(s\)/.exec(heading ?? '')?.[1] ?? -2);
+    expect(shown, `board vs history for ${id}`).toBe(logged);
+
+    await page.goto('/organizer/submissions');
+  }
+});
