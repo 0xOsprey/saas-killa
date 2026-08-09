@@ -236,6 +236,10 @@ test('a supporting document is private and a headshot is not', async ({ page }) 
   await signInVia(page, SPEAKER);
   await page.goto('/speaker/profile');
   await page.getByTestId('headshot-remove').click();
+  // Same wait the first removal above makes. Navigating straight off the click
+  // races the server action, and losing it leaves this speaker's headshot on the
+  // public gallery for every file that runs after this one, with nothing red.
+  await expect(page.getByTestId('headshot-file-meta')).toContainText('Upload an image');
   await page.goto('/speaker/content');
   await page.getByTestId(`document-remove-${documentHref.split('/')[2]}`).click();
   await expect(page.getByTestId('content-flash')).toContainText('Document removed');

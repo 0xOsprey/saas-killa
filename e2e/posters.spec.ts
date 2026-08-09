@@ -149,8 +149,13 @@ test('a co-author with can_edit reaches the poster page, and a credited one does
   await expect(page.getByTestId(`poster-url-${posterId}`)).toHaveValue(replacement);
 
   // Put the artwork back: the gallery renders it and smoke.spec.ts runs later.
+  // Wait for the save the same way the write above does. A bare click followed
+  // by `goto` races the server action, and losing it leaves the co-author's test
+  // URL on a poster the public gallery renders — which reads as a failure here
+  // and, on a slower machine, as a failure in `smoke.spec.ts` instead.
   await page.getByTestId(`poster-url-${posterId}`).fill(original);
   await page.getByRole('button', { name: 'Save poster' }).click();
+  await expect(page.getByText('Poster saved.')).toBeVisible();
   await page.goto('/speaker/posters');
   await expect(page.getByTestId(`poster-url-${posterId}`)).toHaveValue(original);
 
