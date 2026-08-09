@@ -1,5 +1,5 @@
 import { runById } from '@/lib/accelevents';
-import { NotAuthorised, requireRole } from '@/lib/auth';
+import { guardRoute } from '@/lib/auth';
 
 /**
  * One run as JSON: every request it made, with the response.
@@ -15,14 +15,8 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
-  try {
-    await requireRole('organizer');
-  } catch (error) {
-    if (error instanceof NotAuthorised) {
-      return new Response('Organizer access only.\n', { status: 403 });
-    }
-    throw error;
-  }
+  const gate = await guardRoute('organizer');
+  if (gate instanceof Response) return gate;
 
   const { id } = await params;
   const run = await runById(id);

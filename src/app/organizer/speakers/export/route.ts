@@ -1,4 +1,4 @@
-import { NotAuthorised, requireRole } from '@/lib/auth';
+import { guardRoute } from '@/lib/auth';
 import { isRosterFilter, rosterCsv, speakerRoster } from '@/lib/speakers';
 
 /**
@@ -11,14 +11,8 @@ import { isRosterFilter, rosterCsv, speakerRoster } from '@/lib/speakers';
  * looking at" is the link on that page and needs no second set of controls.
  */
 export async function GET(request: Request): Promise<Response> {
-  try {
-    await requireRole('organizer');
-  } catch (error) {
-    if (error instanceof NotAuthorised) {
-      return new Response('Organizer access only.\n', { status: 403 });
-    }
-    throw error;
-  }
+  const gate = await guardRoute('organizer');
+  if (gate instanceof Response) return gate;
 
   const params = new URL(request.url).searchParams;
   const filterParam = params.get('filter');

@@ -175,6 +175,37 @@ export async function requireUser(): Promise<CurrentUser> {
   return user;
 }
 
+/**
+ * The role gate for a route handler. Returns the user, or the Response to send
+ * back instead:
+ *
+ *     const gate = await guardRoute('organizer');
+ *     if (gate instanceof Response) return gate;
+ *
+ * `requireRole` is wrong here because it throws, and a thrown authorisation
+ * error in a route handler is a 500 that reads like an outage. Each handler
+ * used to catch it and answer for itself, and the three of them drifted apart:
+ * two returned 403 for a signed-out caller and one returned 401. Both codes
+ * live here now so there is one place to disagree with.
+ *
+ * The split is the ordinary one. 401 says the caller is nobody and signing in
+ * would fix it; 403 says we know exactly who they are and the answer is still
+ * no. Deliberately no `WWW-Authenticate` header on the 401, which RFC 9110
+ * asks for: there is no HTTP auth scheme to name here, and sending one makes
+ * the browser raise a username-and-password dialog for an app whose only way
+ * in is a link in an email.
+ */
+export async function guardRoute(...allowed: Role[]): Promise<CurrentUser | Response> {
+  const user = await currentUser();
+  if (!user) {
+    return new Response('Sign in first.\n', { status: 401 });
+  }
+  if (!allowed.some((role) => user.roles.includes(role))) {
+    return new Response(`Access is limited to: ${allowed.join(', ')}.\n`, { status: 403 });
+  }
+  return user;
+}
+
 export async function grantRole(userId: string, role: Role): Promise<void> {
   await db.insert(userRoles).values({ userId, role }).onConflictDoNothing();
 }

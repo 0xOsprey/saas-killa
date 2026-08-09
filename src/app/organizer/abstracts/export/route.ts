@@ -1,4 +1,4 @@
-import { currentUser } from '@/lib/auth';
+import { guardRoute } from '@/lib/auth';
 import { exportRows, toCsv } from '@/lib/abstracts';
 import { answersByQuestion, editorQuestions } from '@/lib/question-queries';
 import { displayAnswer } from '@/lib/questions';
@@ -29,14 +29,13 @@ function score(value: number | null): string {
  * the grades that decided them.
  *
  * `requireRole` is not used here: it throws, and a thrown authorisation error in
- * a route handler is a 500 that reads like an outage. A 403 is the answer.
+ * a route handler is a 500 that reads like an outage. `guardRoute` hands back
+ * the refusal as a Response instead, and holds the 401-versus-403 split that
+ * the three export handlers used to each answer differently.
  */
 export async function GET(): Promise<Response> {
-  const user = await currentUser();
-  if (!user) return new Response('Sign in first.', { status: 401 });
-  if (!user.roles.includes('organizer')) {
-    return new Response('Organizer access only.', { status: 403 });
-  }
+  const gate = await guardRoute('organizer');
+  if (gate instanceof Response) return gate;
 
   const rows = await exportRows();
 
