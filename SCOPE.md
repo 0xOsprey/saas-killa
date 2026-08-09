@@ -3,8 +3,8 @@
 What is built, what is deliberately not, and which test covers each. Written
 2026-08-08, revised the same day against commit `73f4c00`.
 
-The spec this is measured against is the "Kill My SaaS" brief, not the
-sessionboard.com marketing pages. An earlier gap audit in this repository's
+The spec this is measured against is the "Kill My SaaS" brief, not the cloned
+product's own marketing pages. An earlier gap audit in this repository's
 history was built the second way and is superseded.
 
 ## Four of the nine requirements are struck through in the brief

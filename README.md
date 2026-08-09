@@ -1,4 +1,4 @@
-# sessionboard-clone
+# Conf Mgmt
 
 Running at https://saas-killa.0xosprey.com. Sign-in is a magic link, so use an
 address you can read mail at. A new address gets the speaker role and lands in

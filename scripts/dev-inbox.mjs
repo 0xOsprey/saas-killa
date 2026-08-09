@@ -46,7 +46,7 @@ function messages() {
 
 const PAGE = (body) => `<!doctype html><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Sessionboard dev inbox</title>
+<title>Conf Mgmt dev inbox</title>
 <style>
  body{font:15px/1.5 ui-sans-serif,system-ui,sans-serif;margin:0;background:#f8fafc;color:#0f172a}
  header{padding:1rem 1.25rem;background:#fff;border-bottom:1px solid #e2e8f0}
@@ -97,7 +97,7 @@ createServer((req, res) => {
   res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
   res.end(
     PAGE(
-      `<header><h1>Sessionboard dev inbox</h1>
+      `<header><h1>Conf Mgmt dev inbox</h1>
        <p class="hint">Every message the app would have sent. Links expire 15 minutes after they are asked for.</p></header>${body}`,
     ),
   );

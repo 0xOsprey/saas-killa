@@ -12,7 +12,7 @@ const schema = z.object({
     .min(32, 'SESSION_SECRET must be at least 32 characters'),
   APP_URL: z.string().url().default('http://127.0.0.1:9140'),
   RESEND_API_KEY: z.string().optional(),
-  MAIL_FROM: z.string().default('Sessionboard <cfp@example.com>'),
+  MAIL_FROM: z.string().default('Conf Mgmt <cfp@example.com>'),
   BOOTSTRAP_ORGANIZER_EMAIL: z.string().email().optional(),
 
   // The Accelevents push. All three unset means dry run, which is the mode this

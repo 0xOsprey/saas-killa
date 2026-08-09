@@ -1,4 +1,4 @@
-# CLAUDE.md — sessionboard-clone
+# CLAUDE.md — Conf Mgmt
 
 Anything that names this machine's paths, hostnames or tailnet ports lives in
 `CLAUDE.local.md`, which is gitignored. This file is published with the repo, so

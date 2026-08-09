@@ -21,7 +21,7 @@ export default function GlobalError({
     <html lang="en">
       <body style={{ fontFamily: 'system-ui, sans-serif', margin: 0, padding: '3rem 1.5rem' }}>
         <div style={{ margin: '0 auto', maxWidth: '32rem' }}>
-          <h1 style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>Sessionboard is down</h1>
+          <h1 style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>Conf Mgmt is down</h1>
           <p style={{ color: '#475569', lineHeight: 1.6 }} data-testid="global-error">
             The site failed to start rendering, so this is all there is. Try again shortly, and
             tell an organizer if it persists.

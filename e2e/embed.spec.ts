@@ -179,7 +179,7 @@ test('an unknown widget name and a malformed filter both fail soft', async ({ pa
 
   const unknown = page.locator('[data-sessionboard="sponsors"]');
   await expect(unknown).toHaveAttribute('data-sessionboard-state', 'error');
-  await expect(unknown).toContainText('Unknown Sessionboard widget "sponsors"');
+  await expect(unknown).toContainText('Unknown Conf Mgmt widget "sponsors"');
 
   // One bad div does not take the rest of the host page's widgets with it.
   await expect(page.locator('[data-sessionboard="agenda"]')).toHaveAttribute(

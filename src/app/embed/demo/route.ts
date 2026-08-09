@@ -30,7 +30,7 @@ export async function GET(): Promise<Response> {
 <main>
   <h1>${esc(event.name)}</h1>
   <p class="lede">A stand-in for an organizer's own website. Everything below the
-  headings is drawn by the Sessionboard embed script.</p>
+  headings is drawn by the Conf Mgmt embed script.</p>
 
   <h2>Our speakers</h2>
   <div data-sessionboard="speakers"></div>

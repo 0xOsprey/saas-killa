@@ -4,7 +4,7 @@ import { Nav } from '@/components/Nav';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Sessionboard',
+  title: 'Conf Mgmt',
   description: 'Call for papers, grading, scheduling and the public agenda for one conference.',
 };
 
@@ -18,9 +18,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body className="min-h-screen antialiased">
         <Nav />
         <main className="mx-auto max-w-6xl px-4 py-8">{children}</main>
-        <footer className="mx-auto max-w-6xl px-4 pb-10 pt-4 text-xs text-muted">
-          Running on Sessionboard.
-        </footer>
       </body>
     </html>
   );

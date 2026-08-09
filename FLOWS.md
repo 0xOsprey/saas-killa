@@ -4731,11 +4731,11 @@ The nav an anonymous visitor sees (`src/components/Nav.tsx`): the event name, th
 - **Precondition:** the host page has e.g. `<div data-sessionboard="posters"></div>`.
 - **Steps:** `mount` resolves `render` as `name === 'speakers' ? renderSpeakers : name ===
   'agenda' ? renderAgenda : null`. Null → `fail(node, ...)` with the message text, verbatim:
-  `Unknown Sessionboard widget "posters". Use data-sessionboard="speakers" or
+  `Unknown Conf Mgmt widget "posters". Use data-sessionboard="speakers" or
   data-sessionboard="agenda".` The node's `data-sessionboard-state` becomes `error`, and the
   console gets `[sessionboard] unknown widget: posters`.
 - **Empty name** (`<div data-sessionboard>`): `(node.getAttribute(...) || '').trim()` is `''`,
-  which also hits the `null` branch, producing `Unknown Sessionboard widget "".`
+  which also hits the `null` branch, producing `Unknown Conf Mgmt widget "".`
 - **No fetch is issued** in either case.
 - **Ends:** no write.
 
