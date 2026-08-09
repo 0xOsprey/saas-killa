@@ -15,6 +15,12 @@ dist/
 # key lands here, so it holds live sign-in links and speaker addresses.
 .mail/
 
+# Agent notes for one machine: absolute paths, a tailnet hostname and that
+# node's inbound port allowlist. The published CLAUDE.md holds everything
+# portable, and this holds the rest so a public repo does not carry a map of
+# somebody's private network.
+CLAUDE.local.md
+
 # Playwright
 /test-results/
 /playwright-report/
