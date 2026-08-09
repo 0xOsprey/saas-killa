@@ -113,6 +113,52 @@ test('the public pages render for a signed-out visitor', async ({ page }) => {
   await visit(page, await firstHref(page, new RegExp(`^/speakers/${UUID}$`)));
 });
 
+/**
+ * A keyword nobody can break, on a phone.
+ *
+ * `/speakers` measured 439px of content against a 390px viewport with one
+ * unbroken 58-character keyword on a card, which gives the whole page a
+ * horizontal scrollbar. `parseKeywords` in `src/lib/abstracts.ts` — the one the
+ * organizer and speaker edit forms use, as opposed to the CFP's, which caps at
+ * 40 — imposes no length limit at all, so this is ordinary input rather than an
+ * attack. The fix is `wrap-anywhere` on `Badge`; `break-words` was measured and
+ * does not do it, because it leaves the word's min-content width intact.
+ */
+test('an unbreakable keyword does not widen a phone-width page', async ({ page }) => {
+  const LONG = 'distributedconsensusunderpartitionlossandclockskewrecovery';
+  await signInVia(page, ORGANIZER);
+
+  // Any talk on the public agenda is accepted, which is what puts its speaker
+  // in the directory this test measures.
+  await page.goto('/agenda');
+  const id = (await firstHref(page, new RegExp(`^/agenda/${UUID}$`))).split('/').pop()!;
+
+  await page.goto(`/organizer/abstracts/${id}`);
+  const before = await page.getByLabel('Keywords').inputValue();
+  await page.getByLabel('Keywords').fill(before ? `${before}, ${LONG}` : LONG);
+  await page.getByTestId('save-abstract').click();
+  await expect(page.getByText(/Saved\./)).toBeVisible();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/speakers');
+  await expect(page.locator('body')).toContainText(LONG);
+  const [scrollWidth, clientWidth] = await page.evaluate(() => [
+    document.documentElement.scrollWidth,
+    document.documentElement.clientWidth,
+  ]);
+  expect(scrollWidth, 'content width against the viewport').toBe(clientWidth);
+
+  // Put the keywords back: this file shares its database with the two speaker
+  // files that run after it.
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto(`/organizer/abstracts/${id}`);
+  await page.getByLabel('Keywords').fill(before);
+  await page.getByTestId('save-abstract').click();
+  await expect(page.getByText(/Saved\./)).toBeVisible();
+  await page.goto('/speakers');
+  await expect(page.locator('body')).not.toContainText(LONG);
+});
+
 test('the organizer console renders every tab', async ({ page }) => {
   await signInVia(page, ORGANIZER);
 

@@ -1,6 +1,6 @@
 import { Button, Field, Select } from '@/components/ui';
 import type { ScheduleEntry } from '@/lib/schedule-views';
-import { clearSlot, placeSubmission } from './actions';
+import { clearSlot, placeSubmissionFromForm } from './actions';
 
 export type FallbackTalk = { id: string; title: string; speakerName: string | null };
 
@@ -23,9 +23,14 @@ export function ScheduleFallback({
 }) {
   const filled = slots.filter((slot) => slot.submissionId !== null || slot.label !== null);
 
+  // An occupied slot stays on offer, because putting a talk where another one is
+  // is how a schedule gets rearranged. It says "taken by" rather than naming the
+  // occupant alone: with script off there is no notice after the press, so the
+  // warning has to be in the option the organizer reads before it.
   function slotLabel(slot: ScheduleEntry): string {
-    const occupant = slot.title ?? slot.label;
-    return `${slot.dayLabel} ${slot.time} · ${slot.roomName}${occupant ? ` — ${occupant}` : ''}`;
+    const where = `${slot.dayLabel} ${slot.time} · ${slot.roomName}`;
+    if (slot.title) return `${where} — taken by ${slot.title}`;
+    return slot.label ? `${where} — ${slot.label}` : where;
   }
 
   return (
@@ -33,7 +38,7 @@ export function ScheduleFallback({
       <summary className="cursor-pointer text-muted">Place or clear a slot from a form</summary>
 
       <div className="mt-3 grid gap-4 lg:grid-cols-2">
-        <form action={placeSubmission} className="flex flex-wrap items-end gap-3">
+        <form action={placeSubmissionFromForm} className="flex flex-wrap items-end gap-3">
           <Field label="Talk">
             <Select name="submissionId" required className="w-64" data-testid="fallback-talk">
               <option value="">Choose a talk</option>
@@ -45,7 +50,10 @@ export function ScheduleFallback({
               ))}
             </Select>
           </Field>
-          <Field label="Slot">
+          <Field
+            label="Slot"
+            hint="A slot marked “taken by” already holds a talk. Placing into it sends that one back to the unscheduled pool."
+          >
             <Select name="slotId" required className="w-72" data-testid="fallback-slot">
               <option value="">Choose a slot</option>
               {slots.map((slot) => (

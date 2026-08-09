@@ -24,6 +24,17 @@ const placeSchema = z.object({
 });
 
 /**
+ * The talk that was sitting in the target slot, if the placement displaced one.
+ *
+ * Returned rather than blocked. Dropping onto an occupied box is a normal move
+ * while an organizer rearranges, and the grid's whole design is to report
+ * rather than refuse; what it must not do is happen in silence, which is what
+ * it did — the sitting talk went back to the unscheduled pool with no trace on
+ * screen and nothing to say which one had moved.
+ */
+export type PlacementResult = { evicted: { id: string; title: string } | null };
+
+/**
  * Put an accepted submission into a slot.
  *
  * Two writes in one transaction. The first clears any slot the submission
@@ -32,7 +43,7 @@ const placeSchema = z.object({
  * target. Both in a transaction so a failure between them cannot leave the
  * submission unscheduled.
  */
-export async function placeSubmission(formData: FormData): Promise<void> {
+export async function placeSubmission(formData: FormData): Promise<PlacementResult> {
   await requireRole('organizer');
   const input = placeSchema.parse({
     slotId: formData.get('slotId'),
@@ -44,7 +55,16 @@ export async function placeSubmission(formData: FormData): Promise<void> {
   });
   // Only accepted work goes on the schedule. Scheduling something still under
   // review would publish a decision that has not been made.
-  if (!target || target.status !== 'accepted') return;
+  if (!target || target.status !== 'accepted') return { evicted: null };
+
+  // Read before the write: after it, the slot holds the new talk and there is
+  // no way back to who was in it.
+  const [occupant] = await db
+    .select({ id: submissions.id, title: submissions.title })
+    .from(slots)
+    .innerJoin(submissions, eq(submissions.id, slots.submissionId))
+    .where(eq(slots.id, input.slotId))
+    .limit(1);
 
   await db.transaction(async (tx) => {
     await tx
@@ -61,6 +81,19 @@ export async function placeSubmission(formData: FormData): Promise<void> {
   });
 
   revalidateSchedule();
+  // A talk dragged back onto its own box displaces itself, which is not news.
+  return { evicted: occupant && occupant.id !== input.submissionId ? occupant : null };
+}
+
+/**
+ * The same placement for a plain form.
+ *
+ * `<form action={...}>` types the action as returning nothing, and the eviction
+ * a script can render into a notice has nowhere to go on a page with scripting
+ * off. The fallback form warns before the press instead, in the slot list.
+ */
+export async function placeSubmissionFromForm(formData: FormData): Promise<void> {
+  await placeSubmission(formData);
 }
 
 /** Empty a slot. Also drops a label, so one control clears whatever is in the box. */

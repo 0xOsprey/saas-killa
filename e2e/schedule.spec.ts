@@ -260,3 +260,35 @@ test('a talk on the agenda carries its own star count, not the whole site', asyn
     String(wasPressed),
   );
 });
+
+/**
+ * Placing onto an occupied box is allowed and always was. What it did was
+ * happen in silence: the talk that had been sitting there went back to the
+ * unscheduled pool with nothing on screen to say so, and on a grid taller than
+ * the viewport the pool is not where an organizer is looking.
+ */
+test('placing onto an occupied box says which talk it displaced', async ({ page }) => {
+  await signInVia(page, ORGANIZER);
+  await page.goto('/organizer/schedule');
+
+  const sitting = await placeFirstFromPool(page);
+  const box = page.locator('[data-testid^="slot-"]').filter({ hasText: sitting });
+  const boxId = (await box.getAttribute('data-testid'))!;
+
+  const moving = await page
+    .locator('[data-testid^="pool-"]')
+    .first()
+    .locator('span')
+    .first()
+    .innerText();
+  await page.locator('[data-testid^="pool-"]').first().click();
+  await page.locator(`[data-testid="${boxId}"]`).click();
+
+  await expect(page.getByTestId('eviction-notice')).toContainText(sitting);
+  await expect(page.locator(`[data-testid="${boxId}"]`)).toContainText(moving);
+  await expect(page.locator('[data-testid^="pool-"]').filter({ hasText: sitting })).toHaveCount(1);
+
+  // Put both back in the pool, which is where this file found them.
+  await page.locator(`[data-testid="${boxId}"]`).getByText('remove').click();
+  await expect(page.locator('[data-testid^="slot-"]').filter({ hasText: moving })).toHaveCount(0);
+});

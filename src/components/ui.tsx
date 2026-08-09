@@ -94,7 +94,14 @@ export function Badge({
   return (
     <span
       className={cn(
-        'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
+        // `wrap-anywhere`, not `break-words`: a badge holds user text — a
+        // keyword, a track name — and one unbroken 58-character token widened
+        // the card past a 390px viewport, giving the whole page a horizontal
+        // scrollbar. `overflow-wrap: break-word` does not fix that, because it
+        // leaves the min-content width of the word intact and the card sizes to
+        // it anyway. Measured at 439px against a 390px client either way;
+        // `anywhere` is what brought it back to 390.
+        'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium wrap-anywhere',
         BADGE_TONES[tone],
         className,
       )}

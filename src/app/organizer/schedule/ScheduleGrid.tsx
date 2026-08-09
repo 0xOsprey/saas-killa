@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { cn } from '@/components/ui';
-import { clearSlot, placeSubmission } from './actions';
+import { Notice, cn } from '@/components/ui';
+import { clearSlot, placeSubmission, type PlacementResult } from './actions';
 
 export type PoolItem = {
   id: string;
@@ -77,6 +77,7 @@ export function ScheduleGrid({
 }) {
   const [held, setHeld] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
+  const [evicted, setEvicted] = useState<PlacementResult['evicted']>(null);
   const [pending, startTransition] = useTransition();
 
   function place(slotId: string, submissionId: string) {
@@ -84,7 +85,10 @@ export function ScheduleGrid({
     data.set('slotId', slotId);
     data.set('submissionId', submissionId);
     startTransition(async () => {
-      await placeSubmission(data);
+      const result = await placeSubmission(data);
+      // Cleared on every placement, so the notice always describes the move
+      // just made rather than one from five drags ago.
+      setEvicted(result.evicted);
       setHeld(null);
     });
   }
@@ -139,7 +143,17 @@ export function ScheduleGrid({
         ))}
       </aside>
 
-      <div className="overflow-x-auto">
+      <div className="space-y-3">
+        {evicted ? (
+          <Notice tone="warn">
+            <span data-testid="eviction-notice">
+              That box was taken. “{evicted.title}” is back in the unscheduled pool, on the left.
+              Nothing was emailed.
+            </span>
+          </Notice>
+        ) : null}
+
+        <div className="overflow-x-auto">
         <div className={cn('schedule-grid', pending && 'opacity-60')} style={gridStyle}>
           <div />
           {rooms.map((room) => (
@@ -293,6 +307,7 @@ export function ScheduleGrid({
               </div>
             );
           })}
+        </div>
         </div>
       </div>
     </div>

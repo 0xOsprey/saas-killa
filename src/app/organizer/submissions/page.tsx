@@ -141,7 +141,12 @@ export default async function OrganizerSubmissionsPage({
             ) : null}
             <form action={notifyDecided}>
               <Button type="submit" disabled={awaitingEmail === 0} data-testid="notify-decided">
-                Send {awaitingEmail} decision email(s)
+                {/* At zero this has always been disabled, but it still read
+                    "Send 0 decision email(s)", which is an instruction to press
+                    a control that does nothing. Say the state instead. */}
+                {awaitingEmail === 0
+                  ? 'Everyone decided has been told'
+                  : `Send ${awaitingEmail} decision email(s)`}
               </Button>
             </form>
           </div>

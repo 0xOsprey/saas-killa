@@ -442,6 +442,11 @@ test('withdrawing tells the organizers and shows on the grid', async ({
   // which is why withdrawing does not ask for confirmation in the first place.
   await organizer.page.goto('/organizer/submissions');
   await organizer.page.getByTestId(`accept-${submissionId}`).click();
+  // Wait for the row to say so before navigating. Leaving straight after the
+  // click races the action: the schedule page then renders from a copy computed
+  // before the status change landed, and the banner it reads is a true one
+  // about a stale row.
+  await expect(organizer.page.getByTestId(`submission-${submissionId}`)).toContainText('Accepted');
   await organizer.page.goto('/organizer/schedule');
   await expect(organizer.page.getByTestId('withdrawn-warning')).toHaveCount(0);
 

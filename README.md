@@ -138,7 +138,7 @@ its rubric breakdown through a tool call rather than parseable prose. Without
 pnpm test          # Playwright; resets the database first
 ```
 
-Sixteen specs, 62 tests, no unit runner. `pipeline.spec.ts` walks one proposal the
+Sixteen specs, 64 tests, no unit runner. `pipeline.spec.ts` walks one proposal the
 length of the pipeline: submit, grade, accept, notify, schedule, publish, then
 read it as a signed-out visitor, checking the acceptance email actually landed.
 `smoke.spec.ts` opens every route the nav leads to, reading the tab list off the
