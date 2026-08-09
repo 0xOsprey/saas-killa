@@ -90,13 +90,15 @@ one still stands:
   `src/app/speaker/availability/actions.ts:85`). The scope is the caller's own
   rows, so a miss means the row was already gone, and "removed" is what the
   person wanted either way.
-- **Still open.** `addAuthorByEmail` (`src/lib/abstracts.ts:466`) takes
-  `canEdit` from its caller and gates only on `ownedSubmission(..., writableBy)`,
-  and `addMyAuthor` passes `canEdit: formData.get('canEdit') !== null`
-  unconditionally. The checkbox is hidden from a co-author, so the UI does not
-  offer it, but a hand-built POST from a `can_edit` co-author adds a fourth
-  person with `can_edit = true`. `setAuthorAccess` is carefully filer-only;
-  this is the back door round it. See B4.
+- **Closed.** `addAuthorByEmail` used to take `canEdit` from its caller and gate
+  only on `ownedSubmission(..., writableBy)`, which admits a co-author, so a
+  hand-built POST from a `can_edit` co-author added a fourth person with
+  `can_edit = true` through the door `setAuthorAccess` guards. It now computes
+  `mayGrantAccess` (`src/lib/abstracts.ts:491`) and forces `canEdit` to `false`
+  for anyone but the filer, and leaves `can_edit` out of the conflict update in
+  that case rather than overwriting it. Covered by `e2e/features.spec.ts`, which
+  appends the omitted field to the real form so the request carries a genuine
+  action id and session cookie. See B4.
 
 `reviewQueue()` deserves its own line because it is not a defect and reads like
 one. It is dead code with no call site, and three documents named it as the
@@ -2989,13 +2991,17 @@ speaker's side the action is irreversible — only an organizer can move the sta
    name, affiliation, isPresenter: formData.get('isPresenter') !== null,
    canEdit: formData.get('canEdit') !== null })`:
    - `ownedSubmission(submissionId, ownerId)` uses `writableBy`, so a `canEdit` co-author passes.
+   - `mayGrantAccess` = `ownerId === undefined || ownerId === owned.speakerId`. A co-author's
+     `canEdit` is forced to `false` here, whatever they posted, because crediting somebody is
+     theirs to do and granting access is the filer's. See B4.
    - `upsertUserByEmail(email, name)` — creates the account and the speaker role if new.
    - `ensureFilerIsAuthorZero(submissionId, speakerId)` inserts the filer at `position 0` with
      `can_edit = true`, `onConflictDoNothing`. Rows that predate the table get their author 0 here.
    - `position` = `coalesce(max(position),0) + 1`.
    - Insert into `submission_authors` with `onConflictDoUpdate` on `(submission_id, user_id)`
-     setting `affiliation`, `is_presenter`, `can_edit` — re-adding someone edits them and does
-     **not** reshuffle their position.
+     setting `affiliation` and `is_presenter`, plus `can_edit` only when `mayGrantAccess` —
+     re-adding someone edits them and does **not** reshuffle their position, and a co-author
+     correcting an affiliation cannot revoke access on the way past either.
    - `logAuthorChange` writes a `submission_revisions` row with `field='authors'` and the
      comma-joined email list before and after, skipped when they are equal.
 6. Notice: `` `${email} is credited on this submission.` ``
@@ -3005,9 +3011,10 @@ speaker's side the action is irreversible — only an organizer can move the sta
 - `'Enter a valid email address'`; zod defaults for name > 120, affiliation > 200.
 - `'Submission not found.'` from `ownedSubmission` — no write access, or a bad id.
 - `'Unknown submission.'` when `submissionId` is not a uuid.
-- A co-author adding another co-author cannot grant `canEdit`: the checkbox is not rendered and
-  a forged `canEdit` field **would** be honoured by `addAuthorByEmail`, because `addMyAuthor`
-  reads it unconditionally and `ownedSubmission` only checks `writableBy`. See Bug B4.
+- A co-author adding another co-author cannot grant `canEdit`: the checkbox is not rendered, and
+  a forged `canEdit` field is dropped by `addAuthorByEmail`'s `mayGrantAccess` test. The new
+  author is credited with `can_edit = false`; there is no error, because crediting was allowed
+  and only the access half was refused. See Bug B4.
 
 **Ends:** a `submission_authors` row (and possibly a `users` row, a `user_roles` row, and the
 filer's author-0 row); one `submission_revisions` row of field `authors`.
@@ -3596,9 +3603,9 @@ the reader most likely to open this section is looking for whether a wall is rea
 
 #### Bugs and sharp edges found while tracing
 
-Seven of the eight are closed. Each keeps its original description, because the description is
-what makes the fix legible, with a closing line naming what fixed it. B4 is the one still
-standing.
+All eight are closed. Each keeps its original description, because the description is
+what makes the fix legible, with a closing line naming what fixed it. B6 closed as a decision
+rather than a change; the other seven are code.
 
 **B1 — CLOSED — a co-author's content edits are silently discarded.** `/speaker/content` admits a
 co-author with `can_edit = true` at every gate: `myContent` and `loadOwned` both use
@@ -3635,14 +3642,21 @@ new content publishes immediately with no organizer pass.
 *Closed:* `saveContentDraft` calls `setContentStatus(row, user.id, 'draft')`
 (`src/app/speaker/content/actions.ts:205`), so the promise the screen makes is the behaviour.
 
-**B4 — STILL OPEN — a co-author can grant themselves nothing, but can grant a stranger everything.**
+**B4 — CLOSED — a co-author can grant themselves nothing, but can grant a stranger everything.**
 `addMyAuthor` reads `canEdit: formData.get('canEdit') !== null` unconditionally, and
 `addAuthorByEmail`'s only gate is `ownedSubmission(..., writableBy)`. The checkbox is hidden from
 a co-author (`accessAction ? … : null`), so the UI does not offer it, but a hand-built POST from
 a `can_edit` co-author would add a fourth person with `can_edit = true`. `setAuthorAccess` is
 carefully filer-only; `addAuthorByEmail` is the back door round it.
-*Still true.* The narrowest fix is for `addAuthorByEmail` to ignore `canEdit` unless
-`opts.ownerId === owned.speakerId`, which is the rule `setAuthorAccess` already enforces.
+*Closed:* `addAuthorByEmail` computes `mayGrantAccess = opts.ownerId === undefined ||
+opts.ownerId === owned.speakerId` (`src/lib/abstracts.ts:491`) and forces `canEdit` to `false`
+otherwise, which is the rule `setAuthorAccess` already enforces. `undefined` is the organizer
+path, which has no owner to compare and is gated by `requireRole('organizer')` instead. The
+conflict branch omits `can_edit` from its `set` in the refused case, so a co-author correcting an
+affiliation neither grants access nor revokes it. The test in `e2e/features.spec.ts` appends the
+hidden field to the page's own form, so the escalation attempt travels with a genuine action id
+and session cookie rather than a reconstructed POST; it was red on the old code at the
+`not.toContainText('can edit')` assertion.
 
 **B5 — CLOSED — an uploaded deck on a `'draft'` submission is advertised publicly and 404s.**
 `contentIsPublic` and the agenda detail page's `showMaterial` both publish a populated field at

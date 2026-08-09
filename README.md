@@ -88,6 +88,16 @@ runs, and neither selects a speaker column or joins `users`, so the identity
 cannot leak through a stray render. The end-to-end test asserts the speaker's
 name is absent from the whole reviewer page.
 
+**Crediting a co-author and admitting one are two different decisions.**
+`writableBy(userId)` in `src/lib/abstracts.ts` is the one predicate that answers
+"may this person write to this submission", composed into the WHERE clause of
+every query that writes, so a forged submission id updates zero rows rather than
+being caught by a check somebody could forget to call. Access itself stays with
+the filer: a co-author may add a name to the author list but never `can_edit`
+alongside it, and because the checkbox is merely hidden from them, the rule is
+enforced in `addAuthorByEmail` and tested by appending the missing field to the
+real form and posting it.
+
 **Deciding and emailing are separate actions.** An organizer flips statuses and
 changes their mind freely; nothing leaves the building until they press send.
 `decisionEmailedAt` is the idempotency key, written per row right after that
@@ -155,7 +165,7 @@ its rubric breakdown through a tool call rather than parseable prose. Without
 pnpm test          # Playwright; resets the database first
 ```
 
-Seventeen specs, 76 tests, no unit runner. `pipeline.spec.ts` walks one proposal the
+Seventeen specs, 77 tests, no unit runner. `pipeline.spec.ts` walks one proposal the
 length of the pipeline: submit, grade, accept, notify, schedule, publish, then
 read it as a signed-out visitor, checking the acceptance email actually landed.
 `smoke.spec.ts` opens every route the nav leads to, reading the tab list off the

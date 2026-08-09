@@ -9,10 +9,10 @@ wrong, and the pass that produced this list asserted two things the code
 contradicted. Both are at the bottom under *Checked and not missing*, rather than
 quietly dropped.
 
-Eleven of the twelve items are now built. Each is kept with the wall it described
-and the thing that removed it, because a list of solved problems is how the next
-reader tells a deliberate absence from an unfinished one. **Two walls remain**,
-and they are §2 and §3 below.
+Thirteen of the fifteen items are now built. Each is kept with the wall it
+described and the thing that removed it, because a list of solved problems is how
+the next reader tells a deliberate absence from an unfinished one. **Two walls
+remain**, and they are §1 and §2 below.
 
 This is a different list from the one in `SCOPE.md`. That one is measured against
 the brief and says what was declined. This one is measured against the app's own
@@ -76,7 +76,10 @@ Listed so nobody files them twice.
 - **`isPresenter` grants nothing.** It renders a badge. `canEdit`, its neighbour
   in the same table, is the real capability.
 - **A co-author cannot withdraw the proposal or grant access onward.** Answering
-  for the talk and handing out access stay with the person who filed it.
+  for the talk and handing out access stay with the person who filed it. Both are
+  enforced in the action rather than by hiding the control: `addAuthorByEmail`
+  drops a forged `canEdit` from anyone but the filer, and `e2e/features.spec.ts`
+  posts one to prove it.
 - **The embed feeds read without a session.** Stated at `src/lib/embed.ts:29-31`
   and gated on `agenda_published` alone, on purpose.
 
@@ -100,11 +103,11 @@ are kept here because a corrected claim is more useful than a deleted one.
 
 ---
 
-## One defect left open
+## No defects left open
 
-`FLOWS.md` keeps the defect register. Seven of its eight entries are closed; B4
-is not. `addAuthorByEmail` takes `canEdit` from its caller and gates only on
-`writableBy`, so a hand-built POST from a `can_edit` co-author can credit a
-stranger with `can_edit = true`. The UI never offers it, and the narrowest fix is
-to ignore `canEdit` unless the caller is the filer, which is the rule
-`setAuthorAccess` already enforces.
+`FLOWS.md` keeps the defect register, and all eight entries are now closed. B4
+was the last: `addAuthorByEmail` took `canEdit` from its caller and gated only on
+`writableBy`, so a hand-built POST from a `can_edit` co-author could credit a
+stranger with `can_edit = true`. It now ignores `canEdit` unless the caller is
+the filer, which is the rule `setAuthorAccess` already enforced. B6 closed as a
+documented decision rather than a code change; the other seven are code.

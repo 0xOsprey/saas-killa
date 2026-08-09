@@ -38,12 +38,12 @@ further effort goes: requirements 1 to 6 are the judged list.
 
 ## Verification
 
-Run from the project root, in this order, on 2026-08-08:
+Run from the project root, in this order, on 2026-08-09:
 
 ```
 pnpm typecheck     clean
 pnpm build         clean, 58 routes
-pnpm test          76 passed (1.9m)
+pnpm test          77 passed (1.9m)
 ```
 
 `pnpm test` is Playwright and there is no unit runner. Seventeen spec files, one

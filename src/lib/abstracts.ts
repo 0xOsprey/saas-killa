@@ -476,6 +476,21 @@ export async function addAuthorByEmail(opts: {
   const owned = await ownedSubmission(opts.submissionId, opts.ownerId);
   if (!owned) return { error: 'Submission not found.' };
 
+  // Crediting somebody is a co-author's to do. Granting access is not.
+  //
+  // `ownedSubmission` runs `writableBy`, which admits a co-author with
+  // `can_edit`, and that is the right gate for the author list itself. It is the
+  // wrong gate for this one column: a co-author who could grant access could
+  // grant it to anyone, which is the sentence `setAuthorAccess` is built around
+  // and the reason it compares against `speakerId` rather than using
+  // `writableBy`. Without this the two disagreed, and `addAuthorByEmail` was the
+  // way round the stricter one.
+  //
+  // No `ownerId` means the organizer path, which `requireRole('organizer')` has
+  // already gated; they may grant.
+  const mayGrantAccess = opts.ownerId === undefined || opts.ownerId === owned.speakerId;
+  const canEdit = mayGrantAccess ? (opts.canEdit ?? false) : false;
+
   const person = await upsertUserByEmail(opts.email, opts.name ?? undefined);
   await ensureFilerIsAuthorZero(opts.submissionId, owned.speakerId);
 
@@ -496,16 +511,21 @@ export async function addAuthorByEmail(opts: {
       position: seat?.next ?? 1,
       affiliation: opts.affiliation,
       isPresenter: opts.isPresenter,
-      canEdit: opts.canEdit ?? false,
+      canEdit,
     })
     // Re-adding someone already credited edits their affiliation rather than
     // failing; their position is theirs and is not reshuffled by a re-add.
+    //
+    // A caller who may not grant access does not touch `can_edit` here either.
+    // Re-adding is how an affiliation gets corrected, and a correction that
+    // silently revoked somebody's access would be `setAuthorAccess` by the back
+    // door in the other direction.
     .onConflictDoUpdate({
       target: [submissionAuthors.submissionId, submissionAuthors.userId],
       set: {
         affiliation: opts.affiliation,
         isPresenter: opts.isPresenter,
-        canEdit: opts.canEdit ?? false,
+        ...(mayGrantAccess ? { canEdit } : {}),
       },
     });
 

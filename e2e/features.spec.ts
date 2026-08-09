@@ -16,6 +16,8 @@ const ORGANIZER = 'organizer@example.com';
 const SPEAKER = 'speaker1@example.com';
 const REVIEWER = 'reviewer1@example.com';
 const CO_AUTHOR = 'co-author-under-test@example.com';
+const ESCALATOR = 'co-author-who-tries-it-on@example.com';
+const STRANGER = 'stranger-they-tried-to-let-in@example.com';
 
 async function signInVia(page: Page, email: string) {
   await page.goto('/login');
@@ -190,4 +192,72 @@ test('a co-author granted access can edit the proposal but not withdraw it', asy
   await signInVia(page, CO_AUTHOR);
   const denied = await page.goto(editUrl!);
   expect(denied?.status(), editUrl!).toBe(404);
+});
+
+/**
+ * Access is the filer's to hand out, including through the door the UI does not
+ * draw.
+ *
+ * `setAuthorAccess` is carefully filer-only. `addAuthorByEmail` was not: it took
+ * `canEdit` from its caller and gated on `writableBy`, which admits a co-author.
+ * The checkbox is hidden from a co-author, so the UI never offered it, and that
+ * is exactly the shape of hole a test has to reach past the UI to find.
+ *
+ * The field is added to the real form rather than posted by hand. A server
+ * action's arguments are the form's own fields, so appending the input the page
+ * omits is the same request a crafted POST would make, and it goes through the
+ * genuine action id and session cookie instead of a reconstruction of them.
+ */
+test('a co-author cannot grant edit access onward, even by adding the field the UI omits', async ({
+  page,
+}) => {
+  await signInVia(page, SPEAKER);
+  await page.goto('/speaker');
+  const card = page.locator('[data-testid^="submission-card-"]').first();
+  const editUrl = await card.locator('[data-testid^="edit-"]').first().getAttribute('href');
+  expect(editUrl, 'no edit link on the speaker hub').toBeTruthy();
+
+  await page.goto(editUrl!);
+  await page.getByLabel('Co-author email').fill(ESCALATOR);
+  await page.getByLabel('Name', { exact: true }).fill('Ash Escalator');
+  await page.getByTestId('grant-edit').check();
+  await page.getByRole('button', { name: 'Add co-author' }).click();
+  await expect(page.locator('li', { hasText: ESCALATOR })).toContainText('can edit');
+
+  await signInVia(page, ESCALATOR);
+  await page.goto(editUrl!);
+  // The control is not on their page, which is the UI's half of the rule.
+  await expect(page.getByTestId('grant-edit')).toHaveCount(0);
+
+  await page.evaluate(() => {
+    const form = document.querySelector('form input[name="email"]')?.closest('form');
+    const field = document.createElement('input');
+    field.type = 'hidden';
+    field.name = 'canEdit';
+    field.value = 'on';
+    form?.appendChild(field);
+  });
+  await page.getByLabel('Co-author email').fill(STRANGER);
+  await page.getByLabel('Name', { exact: true }).fill('Sam Stranger');
+  await page.getByRole('button', { name: 'Add co-author' }).click();
+
+  // Credited, which a co-author may do. Not admitted, which they may not.
+  const row = page.locator('li', { hasText: STRANGER });
+  await expect(row).toHaveCount(1);
+  await expect(row).not.toContainText('can edit');
+
+  await signInVia(page, STRANGER);
+  const denied = await page.goto(editUrl!);
+  expect(denied?.status(), editUrl!).toBe(404);
+  await page.goto('/speaker');
+  await expect(page.getByTestId(/^submission-card-/)).toHaveCount(0);
+
+  // Both rows off again: this file runs before every other spec that reads an
+  // author list.
+  await signInVia(page, SPEAKER);
+  await page.goto(editUrl!);
+  for (const email of [STRANGER, ESCALATOR]) {
+    await page.locator('li', { hasText: email }).getByRole('button', { name: 'Remove' }).click();
+    await expect(page.locator('li', { hasText: email })).toHaveCount(0);
+  }
 });
