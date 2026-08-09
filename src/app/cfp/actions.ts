@@ -14,7 +14,7 @@ import {
   alertOrganizers,
   magicLinkMail,
   sendAndLog,
-  sendMail,
+  sendSignInMail,
   submissionAlertMail,
   submissionReceivedMail,
 } from '@/lib/email';
@@ -186,7 +186,7 @@ export async function submitProposal(_prev: CfpState, formData: FormData): Promi
   // is not stranded behind an account they never created.
   if (!signedIn) {
     const token = await issueMagicLink(speaker.id);
-    await sendMail(magicLinkMail(speaker.email, token, event.name));
+    await sendSignInMail(magicLinkMail(speaker.email, token, event.name));
     await startSession(speaker.id);
   }
 

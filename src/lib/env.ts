@@ -15,6 +15,13 @@ const schema = z.object({
   MAIL_FROM: z.string().default('Conf Mgmt <cfp@example.com>'),
   BOOTSTRAP_ORGANIZER_EMAIL: z.string().email().optional(),
 
+  // The kill switch for notification mail on a box that does have a key. `off`
+  // routes every notification to `.mail/` instead of Resend, which is how the
+  // organizer screens get clicked through without buying a send per press. A
+  // typo must not read as `off`, so this is an enum rather than a truthy
+  // string: `MAIL_NOTIFICATIONS=false` is a boot failure, not silent sending.
+  MAIL_NOTIFICATIONS: z.enum(['on', 'off']).default('on'),
+
   // The Accelevents push. All three unset means dry run, which is the mode this
   // app reaches unless someone deliberately configures otherwise, and the only
   // mode any test has ever run in. See `src/lib/accelevents.ts`.
@@ -54,4 +61,28 @@ export function env(): z.infer<typeof schema> {
   if (cached) return cached;
   cached = parseEnv(process.env);
   return cached;
+}
+
+/**
+ * Where a notification actually goes, and why. Three states rather than a
+ * boolean, because the two ways mail does not leave the box are not the same
+ * fact and a screen that reports one while the other is true sends its reader
+ * to edit the wrong variable.
+ *
+ * This is about notifications only. The sign-in link is exempt by design and
+ * goes out whenever there is a key, so `notifications-off` is a live instance
+ * people can still sign in to: see `sendSignInMail` in `lib/email.ts`.
+ *
+ * It lives here rather than beside the sender because `lib/email.ts` imports
+ * the database and the Playwright specs cannot: `tsconfig.json` excludes `e2e`,
+ * so a spec has no `@/` alias and importing the sender would drag `@/db` in.
+ * Configuration is the whole input to this decision, so it is testable here.
+ */
+export type MailMode = 'live' | 'no-key' | 'notifications-off';
+
+export function mailMode(
+  config: Pick<z.infer<typeof schema>, 'RESEND_API_KEY' | 'MAIL_NOTIFICATIONS'> = env(),
+): MailMode {
+  if (!config.RESEND_API_KEY) return 'no-key';
+  return config.MAIL_NOTIFICATIONS === 'off' ? 'notifications-off' : 'live';
 }

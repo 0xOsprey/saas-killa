@@ -4,7 +4,7 @@ import { Resend } from 'resend';
 import { desc, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { emailLog, submissions, userRoles, users } from '@/db/schema';
-import { env } from './env';
+import { env, mailMode } from './env';
 
 /**
  * A file that rides along with the message. Text only, because the one thing
@@ -25,16 +25,50 @@ export type Mail = {
 };
 
 /**
- * Send, or in development record. With RESEND_API_KEY unset every message is
- * printed and written to .mail/ instead of leaving the box, so the magic-link
- * flow and the accept/reject flow are both exercisable offline and by the
- * Playwright suite. A missing key is never a silent no-op: the file is the
- * receipt.
+ * Send, or record. With RESEND_API_KEY unset every message is printed and
+ * written to .mail/ instead of leaving the box, so the magic-link flow and the
+ * accept/reject flow are both exercisable offline and by the Playwright suite.
+ * A missing key is never a silent no-op: the file is the receipt.
+ *
+ * `MAIL_NOTIFICATIONS=off` takes the same door on a box that does have a key.
+ * That is a cost control for testing: pressing "notify" against a seeded board
+ * is one send per speaker, and against a fixture full of `@example.com`
+ * addresses it is also one bounce per speaker, on a domain whose reputation is
+ * worth more than the test.
+ *
+ * What it does not do is change the app around the send. The receipt is still
+ * written, `email_log` still gets its row reading `not sent`, and
+ * `decisionEmailedAt` is still stamped. An organizer's board says "speaker
+ * notified" either way, so this is a switch about egress, not an undo.
  */
 export async function sendMail(mail: Mail): Promise<{ delivered: boolean; path?: string }> {
+  return deliver(mail, mailMode() === 'notifications-off');
+}
+
+/**
+ * The sign-in link, and the one message `MAIL_NOTIFICATIONS=off` does not
+ * touch.
+ *
+ * A magic link is authentication rather than correspondence, which is already
+ * why it is the one send that writes no `email_log` row. It is also why it is
+ * exempt here: an instance with a real key and notifications off has to stay an
+ * instance somebody can log in to, and a cost control that locks the organizer
+ * out of the box it is set on is a lock, not a control.
+ */
+export async function sendSignInMail(mail: Mail): Promise<{ delivered: boolean; path?: string }> {
+  return deliver(mail, false);
+}
+
+async function deliver(
+  mail: Mail,
+  suppressed: boolean,
+): Promise<{ delivered: boolean; path?: string }> {
   const { RESEND_API_KEY, MAIL_FROM } = env();
 
-  if (!RESEND_API_KEY) {
+  // Two ways to take the disk door: no key at all, or a key this message is not
+  // allowed to spend. The second test also narrows `RESEND_API_KEY` for the
+  // send below, which is why it is here and not only at the call sites.
+  if (suppressed || !RESEND_API_KEY) {
     const dir = join(process.cwd(), '.mail');
     mkdirSync(dir, { recursive: true });
     const path = join(dir, `${Date.now()}-${mail.to.replace(/[^a-z0-9]/gi, '_')}.txt`);
@@ -144,10 +178,10 @@ export type EmailLogEntry = {
 /**
  * The correspondence log, newest first.
  *
- * Every send but one is here: the sign-in link goes out through `sendMail`
- * alone, because a magic link is authentication rather than correspondence and
- * an organizer reading a list of who was mailed what does not want it padded
- * with one row per page load.
+ * Every send but one is here: the sign-in link goes out through
+ * `sendSignInMail` alone, because a magic link is authentication rather than
+ * correspondence and an organizer reading a list of who was mailed what does
+ * not want it padded with one row per page load.
  *
  * Capped rather than paginated. The screen answers "did that go out", which is
  * always a question about a recent send, and an uncapped select on a table that
@@ -171,11 +205,6 @@ export async function recentEmails(limit = 200): Promise<EmailLogEntry[]> {
     .leftJoin(submissions, eq(submissions.id, emailLog.submissionId))
     .orderBy(desc(emailLog.sentAt))
     .limit(limit);
-}
-
-/** Whether mail is really leaving the box, so the screen can say which. */
-export function mailIsLive(): boolean {
-  return Boolean(env().RESEND_API_KEY);
 }
 
 /**

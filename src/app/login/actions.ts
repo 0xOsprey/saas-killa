@@ -2,7 +2,7 @@
 
 import { z } from 'zod';
 import { issueMagicLink, upsertUserByEmail } from '@/lib/auth';
-import { magicLinkMail, sendMail } from '@/lib/email';
+import { magicLinkMail, sendSignInMail } from '@/lib/email';
 import { getEvent } from '@/lib/queries';
 
 const schema = z.object({
@@ -28,7 +28,7 @@ export async function requestMagicLink(
   const event = await getEvent();
   const user = await upsertUserByEmail(parsed.data.email);
   const token = await issueMagicLink(user.id);
-  await sendMail(magicLinkMail(user.email, token, event.name));
+  await sendSignInMail(magicLinkMail(user.email, token, event.name));
 
   return { sent: parsed.data.email };
 }

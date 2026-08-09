@@ -126,7 +126,10 @@ test('a proposal travels from the CFP to the published agenda', async ({ page })
   await expect(receipt).toContainText('decision_accepted');
   await expect(receipt).toContainText(SPEAKER_EMAIL);
   await expect(receipt).toContainText('not sent'); // RESEND_API_KEY is unset under test.
-  await expect(page.getByTestId('mail-not-live')).toBeVisible();
+  // Which reason, not just that there is one. The notice has two branches now
+  // and the other one names MAIL_NOTIFICATIONS, so a screen that reported the
+  // wrong cause would send its reader to edit a variable that is already right.
+  await expect(page.getByTestId('mail-not-live')).toContainText('RESEND_API_KEY');
 
   // 5. Schedule -------------------------------------------------------------
   await page.goto('/organizer/schedule');

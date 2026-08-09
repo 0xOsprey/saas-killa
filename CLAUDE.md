@@ -144,7 +144,7 @@ agenda renders; they are still submissions.
 
 ## Tests
 
-Seventeen spec files, 78 tests, one worker, no retries, one shared database
+Eighteen spec files, 84 tests, one worker, no retries, one shared database
 seeded once in `globalSetup`. Every file puts back what it changed, so a test
 that leaves a talk on the grid breaks four later files for a reason none of them
 can see. If you add a test, restore state in a `finally`.
@@ -161,7 +161,12 @@ strict typecheck. Use `= any(${array}::uuid[])` instead.
 
 `.env.local`, gitignored. `SESSION_SECRET` is required and at least 32
 characters. `RESEND_API_KEY` unset means every email is written to `.mail/`
-instead of sent, which is how the tests read magic links. `ANTHROPIC_API_KEY`
+instead of sent, which is how the tests read magic links. `MAIL_NOTIFICATIONS`
+is `on` or `off` and nothing else parses; `off` takes the same `.mail/` door on
+a box that does have a key, so notifications cost nothing while you click
+through the organizer screens. The sign-in link ignores it, via `sendSignInMail`
+rather than `sendMail`, so an instance with notifications off is still one you
+can log in to. `ANTHROPIC_API_KEY`
 unset means the AI evaluator is off and the organizer screen says so.
 `ACCELEVENTS_BASE_URL`, `ACCELEVENTS_API_KEY` and `ACCELEVENTS_EVENT_ID` unset
 means every export is a dry run against fixtures. The suite never sets them.
@@ -177,10 +182,17 @@ Never reset the live database. `pnpm test` and `pnpm db:reset` both act on
 whatever `.env.local` names, and the live one names a different database from the
 dev one, so check which directory you are in before running either.
 
-Never press the decision-email send button on the live board. `notifyDecided` is
-bulk with no per-row option, and the seeded speakers are at the reserved domain
-`@example.com`, so one press mails every decided-but-unnotified row into a wall
-of bounces. The seed needs addresses somebody controls before that is safe.
+Never press the decision-email send button on the live board with
+`MAIL_NOTIFICATIONS=on`. `notifyDecided` is bulk with no per-row option, and the
+seeded speakers are at the reserved domain `@example.com`, so one press mails
+every decided-but-unnotified row into a wall of bounces. Either reseed with
+addresses somebody controls, or set `MAIL_NOTIFICATIONS=off` first and read the
+receipts out of `.mail/`.
+
+Setting it off makes the press free, not reversible. `decisionEmailedAt` is
+still stamped on every row it touches, the board still reads "speaker notified"
+and the button still disables, because the switch governs egress and nothing
+else. There is no un-notify.
 
 ## How the submission is scored
 

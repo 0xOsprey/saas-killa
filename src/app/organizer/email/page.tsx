@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { Badge, Card, Empty, Notice, PageHeader } from '@/components/ui';
-import { mailIsLive, recentEmails } from '@/lib/email';
+import { recentEmails } from '@/lib/email';
+import { mailMode } from '@/lib/env';
 import { inEventZone } from '@/lib/format';
 import { getEvent } from '@/lib/queries';
 
@@ -37,7 +38,7 @@ const KIND_LABELS: Record<string, string> = {
 
 export default async function EmailLogScreen() {
   const [event, sent] = await Promise.all([getEvent(), recentEmails()]);
-  const live = mailIsLive();
+  const mode = mailMode();
   const delivered = sent.filter((row) => row.delivered).length;
 
   return (
@@ -47,12 +48,26 @@ export default async function EmailLogScreen() {
         description="Every message but the sign-in link, which is authentication rather than correspondence."
       />
 
-      {live ? null : (
+      {/* Which of the two reasons, named exactly, because the fix is a
+          different line of `.env.local` for each and a notice that guesses
+          sends its reader to edit the wrong one. */}
+      {mode === 'live' ? null : (
         <Notice tone="warn">
           <span data-testid="mail-not-live">
-            <code className="rounded bg-amber-100 px-1">RESEND_API_KEY</code> is unset, so nothing
-            has left this machine and every row below reads as undelivered. The messages are in{' '}
-            <code className="rounded bg-amber-100 px-1">.mail/</code>, one file each.
+            {mode === 'no-key' ? (
+              <>
+                <code className="rounded bg-amber-100 px-1">RESEND_API_KEY</code> is unset, so
+                nothing has left this machine and every row below reads as undelivered.
+              </>
+            ) : (
+              <>
+                <code className="rounded bg-amber-100 px-1">MAIL_NOTIFICATIONS=off</code>, so
+                notifications are being written to disk instead of sent and every row below reads as
+                undelivered. Sign-in links are exempt and still go out.
+              </>
+            )}{' '}
+            The messages are in <code className="rounded bg-amber-100 px-1">.mail/</code>, one file
+            each.
           </span>
         </Notice>
       )}
