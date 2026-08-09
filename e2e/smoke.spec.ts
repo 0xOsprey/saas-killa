@@ -185,6 +185,20 @@ test('a reviewer reaches the queue and the award ballot', async ({ page }) => {
   await visit(page, '/awards/judge');
 });
 
+test('the health check answers for a signed-out probe and names what it checked', async ({
+  page,
+}) => {
+  // A load balancer is not signed in, so this route is deliberately open. It
+  // may therefore name only which check failed and never a host, a connection
+  // string or a stack.
+  const response = await page.goto('/healthz');
+  expect(response?.status()).toBe(200);
+
+  const body = JSON.parse(await page.locator('body').innerText());
+  expect(body.status).toBe('ok');
+  expect(body.checks.map((check: { name: string }) => check.name)).toEqual(['env', 'database']);
+});
+
 test('an id that is not a uuid gets a 404, not a database error', async ({ page }) => {
   // Each of these handed the raw segment to a `where id = $1` on a uuid column,
   // so Postgres raised 22P02 and the route 500'd with the query in the server

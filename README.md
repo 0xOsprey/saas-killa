@@ -67,7 +67,12 @@ withdrawing.
 in the dependency graph. Tokens are stored as SHA-256 hashes, expire in 15
 minutes and are single use; the session cookie is `httpOnly` and carries an
 HMAC over the session id. `SESSION_SECRET` has no default, so a misconfigured
-deploy fails at boot instead of shipping a forgeable cookie.
+deploy fails at boot instead of shipping a forgeable cookie. "At boot" is
+`src/instrumentation.ts`, which reads the environment before the server binds
+and exits non-zero when it is wrong. The check used to be lazy, and lazy meant
+the process printed `✓ Ready`, took the port, and then returned 500 to every
+request with the reason only in its own log — a deploy any port-based health
+check calls green.
 
 **Sign-out is POST-only.** As a GET route it was a live bug, not a style point:
 `next/link` prefetches links in the viewport, so the nav's "Sign out" link fired
@@ -156,6 +161,11 @@ the gesture picks up whichever cell arrives at the point.
 Any Postgres connection string works: Supabase, Neon, or your own. Point
 `DATABASE_URL` at it, run `pnpm db:migrate`, and set `SESSION_SECRET`, `APP_URL`,
 `RESEND_API_KEY` and `MAIL_FROM`. `ANTHROPIC_API_KEY` is optional.
+
+Point the platform's health check at `GET /healthz`. It returns 200 with
+`{"status":"ok"}` when the environment parses and the database answers, and 503
+naming the failed check otherwise. A bad `SESSION_SECRET` never gets that far —
+the process exits at boot — so 503 in practice means Postgres.
 
 ## Not built
 
