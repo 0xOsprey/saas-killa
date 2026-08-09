@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { runById } from '@/lib/accelevents';
 import { guardRoute } from '@/lib/auth';
 
@@ -19,7 +20,10 @@ export async function GET(
   if (gate instanceof Response) return gate;
 
   const { id } = await params;
-  const run = await runById(id);
+  const parsed = z.string().uuid().safeParse(id);
+  if (!parsed.success) return new Response('No such run.\n', { status: 404 });
+
+  const run = await runById(parsed.data);
   if (!run) return new Response('No such run.\n', { status: 404 });
 
   // `baseUrl` is in here and the key is not, because the key was never written

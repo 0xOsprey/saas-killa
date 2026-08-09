@@ -1,5 +1,6 @@
 import { and, eq, sql } from 'drizzle-orm';
 import { notFound } from 'next/navigation';
+import { z } from 'zod';
 import { db } from '@/db';
 import { awards, bookmarks, rooms, slots, submissions, tracks, users } from '@/db/schema';
 import { Badge, Card, LinkButton, PageHeader } from '@/components/ui';
@@ -15,6 +16,9 @@ export default async function SubmissionDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const parsed = z.string().uuid().safeParse(id);
+  if (!parsed.success) notFound();
+
   const [event, user] = await Promise.all([getEvent(), currentUser()]);
   const isOrganizer = user?.roles.includes('organizer') ?? false;
 
@@ -48,7 +52,7 @@ export default async function SubmissionDetailPage({
     .leftJoin(tracks, eq(tracks.id, submissions.trackId))
     .leftJoin(slots, eq(slots.submissionId, submissions.id))
     .leftJoin(rooms, eq(rooms.id, slots.roomId))
-    .where(eq(submissions.id, id))
+    .where(eq(submissions.id, parsed.data))
     .limit(1);
 
   // A detail page for a rejected or still-under-review proposal would leak a

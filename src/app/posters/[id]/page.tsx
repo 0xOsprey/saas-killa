@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { z } from 'zod';
 import { Badge, Card, Notice, PageHeader } from '@/components/ui';
 import { currentUser } from '@/lib/auth';
 import { inEventZone } from '@/lib/format';
@@ -23,6 +24,9 @@ export default async function PosterDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const [{ id }, event, user] = await Promise.all([params, getEvent(), currentUser()]);
+  const parsed = z.string().uuid().safeParse(id);
+  if (!parsed.success) notFound();
+
   const isOrganizer = user?.roles.includes('organizer') ?? false;
 
   const gate = posterGalleryGate(event, isOrganizer);
@@ -46,7 +50,10 @@ export default async function PosterDetailPage({
     );
   }
 
-  const poster = await posterById(id, { userId: user?.id ?? null, includeHidden: isOrganizer });
+  const poster = await posterById(parsed.data, {
+    userId: user?.id ?? null,
+    includeHidden: isOrganizer,
+  });
   if (!poster || !poster.posterUrl) notFound();
 
   const byline = poster.authors

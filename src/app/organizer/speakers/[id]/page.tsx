@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { z } from 'zod';
 import { Badge, Button, Card, Empty, Notice, PageHeader } from '@/components/ui';
 import { FORMAT_LABELS, STATUS_LABELS, dayLabel, timeOfDay } from '@/lib/format';
 import { getEvent } from '@/lib/queries';
@@ -20,7 +21,14 @@ export default async function SpeakerDetailPage({
   searchParams: Promise<{ confirmTask?: string }>;
 }) {
   const { id } = await params;
-  const [event, detail, query] = await Promise.all([getEvent(), speakerDetail(id), searchParams]);
+  const parsed = z.string().uuid().safeParse(id);
+  if (!parsed.success) notFound();
+
+  const [event, detail, query] = await Promise.all([
+    getEvent(),
+    speakerDetail(parsed.data),
+    searchParams,
+  ]);
   if (!detail) notFound();
 
   const { user, roles, submissions, tasks, availability } = detail;

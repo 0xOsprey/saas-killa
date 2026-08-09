@@ -185,6 +185,19 @@ test('a reviewer reaches the queue and the award ballot', async ({ page }) => {
   await visit(page, '/awards/judge');
 });
 
+test('an id that is not a uuid gets a 404, not a database error', async ({ page }) => {
+  // Each of these handed the raw segment to a `where id = $1` on a uuid column,
+  // so Postgres raised 22P02 and the route 500'd with the query in the server
+  // log. The `notFound()` below the query never ran: nothing reached it. The
+  // guard belongs above the query, which is where the pages under
+  // /organizer/abstracts already put it.
+  for (const path of ['/agenda/nope', '/speakers/nope', '/posters/nope']) {
+    const response = await page.goto(path);
+    expect(response?.status(), `GET ${path}`).toBe(404);
+    await expect(page.getByTestId('not-found'), `not-found page on ${path}`).toBeVisible();
+  }
+});
+
 test('an address that is not a page gets our 404, not the framework default', async ({ page }) => {
   const response = await page.goto('/not-a-real-page');
 

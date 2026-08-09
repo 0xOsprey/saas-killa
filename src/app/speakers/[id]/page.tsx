@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { z } from 'zod';
 import { Badge, Card, PageHeader } from '@/components/ui';
 import { currentUser } from '@/lib/auth';
 import { FORMAT_LABELS, dayLabel, timeOfDay } from '@/lib/format';
@@ -18,11 +19,14 @@ export default async function SpeakerProfilePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const parsed = z.string().uuid().safeParse(id);
+  if (!parsed.success) notFound();
+
   const [event, user] = await Promise.all([getEvent(), currentUser()]);
   const isOrganizer = user?.roles.includes('organizer') ?? false;
   if (!event.agendaPublished && !isOrganizer) notFound();
 
-  const speaker = await speakerProfile(id);
+  const speaker = await speakerProfile(parsed.data);
   if (!speaker) notFound();
 
   return (
