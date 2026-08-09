@@ -1,11 +1,27 @@
-'use client';
+import { Notice, PageHeader } from '@/components/ui';
+import { LoginForm } from './LoginForm';
 
-import { useActionState } from 'react';
-import { Button, Card, Field, Input, Notice, PageHeader } from '@/components/ui';
-import { requestMagicLink, type LoginState } from './actions';
+/**
+ * Why the last sign-in attempt did not work. `/auth/verify` cannot render, it
+ * can only redirect, so it hands the reason over on the query string. Before
+ * this existed the page read only its own form state and threw both codes away:
+ * a speaker whose link had expired landed on a login form that looked exactly
+ * like a fresh one and had no idea the link was the problem.
+ */
+const SIGN_IN_ERRORS: Record<string, string> = {
+  missing:
+    'That sign-in link arrived without its token, so there was nothing to check. Some mail clients cut long links in half. Ask for a fresh one below and click it rather than retyping it.',
+  expired:
+    'That sign-in link has expired or has already been used. Links last 15 minutes and work once. Ask for another below.',
+};
 
-export default function LoginPage() {
-  const [state, action, pending] = useActionState<LoginState, FormData>(requestMagicLink, {});
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = await searchParams;
+  const error = typeof params.error === 'string' ? SIGN_IN_ERRORS[params.error] : undefined;
 
   return (
     <div className="mx-auto max-w-md space-y-4">
@@ -14,34 +30,13 @@ export default function LoginPage() {
         description="We email you a link. There is no password to remember or lose."
       />
 
-      {state.sent ? (
-        <Notice tone="good">
-          <span data-testid="magic-link-sent">
-            If {state.sent} is a valid address, a sign-in link is on its way. It works once and
-            expires in 15 minutes.
-          </span>
+      {error ? (
+        <Notice tone="bad">
+          <span data-testid="login-error">{error}</span>
         </Notice>
       ) : null}
 
-      {state.error ? <Notice tone="bad">{state.error}</Notice> : null}
-
-      <Card>
-        <form action={action} className="space-y-4">
-          <Field label="Email">
-            <Input
-              name="email"
-              type="email"
-              required
-              autoComplete="email"
-              placeholder="you@example.com"
-              data-testid="login-email"
-            />
-          </Field>
-          <Button type="submit" disabled={pending} data-testid="login-submit">
-            {pending ? 'Sending…' : 'Email me a link'}
-          </Button>
-        </form>
-      </Card>
+      <LoginForm />
     </div>
   );
 }
