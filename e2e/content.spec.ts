@@ -182,3 +182,55 @@ test('an organizer can freeze the poster artwork, which nothing could set before
     'false',
   );
 });
+
+/**
+ * A returned draft says why, on the screen it was returned to.
+ *
+ * `returnContent` has always parsed a reason and always passed it to
+ * `contentReturnedMail`, and stored it nowhere. So a speaker opened this page,
+ * found a draft they thought they had submitted, and had to go and find the
+ * email to learn what to change.
+ *
+ * Puts the content back to empty and draft on the way out, like the two above.
+ */
+test('a returned draft carries the reason it was returned', async ({ page }) => {
+  const reason = 'The recording link is behind a login. Please post a public one.';
+
+  await signInVia(page, FILER);
+  await page.goto('/speaker/content');
+  const { card, id } = await contentCard(page);
+  await card.getByLabel('Resources').fill('Handout is on the way.');
+  await card.getByTestId(`submit-review-${id}`).click();
+  await expect(page.getByTestId(`content-status-${id}`)).toHaveText(/review/i);
+
+  await signInVia(page, ORGANIZER);
+  await page.goto('/organizer/submissions');
+  const row = page.getByTestId(`submission-${id}`);
+  await row.getByText('Content and locks').click();
+  await row.getByTestId(`return-reason-${id}`).fill(reason);
+  await row.getByTestId(`content-return-${id}`).click();
+
+  // The mail still carries it. Storing it is an addition, not a replacement:
+  // the speaker who reads their inbox and the speaker who opens the app have to
+  // be told the same thing.
+  const returned = await waitForMail((m) => m.subject.startsWith('Changes needed:'));
+  expect(returned.body).toContain(reason);
+
+  await signInVia(page, FILER);
+  await page.goto('/speaker/content');
+  await expect(page.getByTestId(`content-status-${id}`)).toHaveText(/draft/i);
+  await expect(page.getByTestId(`content-returned-${id}`)).toHaveText(reason);
+
+  // Resubmitting clears it, and pulling back out of review must not bring it
+  // back. `setContentStatus` is the second writer of the status column and the
+  // one that would have left a stale note describing a draft nobody returned.
+  const { card: returnedCard } = await contentCard(page);
+  await returnedCard.getByTestId(`submit-review-${id}`).click();
+  await expect(page.getByTestId(`content-status-${id}`)).toHaveText(/review/i);
+
+  await page.getByRole('button', { name: 'Pull back out of review' }).click();
+  await expect(page.getByTestId(`content-status-${id}`)).toHaveText(/draft/i);
+  await expect(page.getByTestId(`content-returned-${id}`)).toHaveCount(0);
+
+  await clearContent(page);
+});

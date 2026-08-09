@@ -137,6 +137,14 @@ function refuse(reason: string): never {
   redirect(`/speaker/content?error=${encodeURIComponent(reason)}`);
 }
 
+/**
+ * The speaker's half of the status column, and the second of its two writers.
+ * `moveContent` on the organizer's side is the other, and both clear
+ * `contentReturnReason` for the same reason: it describes the draft an organizer
+ * sent back, and this one is what moves that draft on. Without the clear here,
+ * a speaker who resubmits and then pulls it back out of review is shown the old
+ * note as though the organizers had just returned it a second time.
+ */
 async function setContentStatus(
   row: OwnedRow,
   speakerId: string,
@@ -145,7 +153,7 @@ async function setContentStatus(
   if (row.contentStatus === next) return;
   await db
     .update(submissions)
-    .set({ contentStatus: next, updatedAt: new Date() })
+    .set({ contentStatus: next, contentReturnReason: null, updatedAt: new Date() })
     .where(and(eq(submissions.id, row.id), writableBy(speakerId)));
   await logRevisions([
     {

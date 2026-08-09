@@ -286,6 +286,22 @@ export const submissions = pgTable(
     resourcesNote: text('resources_note'),
     /** Gate on the four fields above. Nothing publishes until an organizer approves. */
     contentStatus: contentStatusEnum('content_status').notNull().default('draft'),
+    /**
+     * Why an organizer last sent this content back, in their own words.
+     *
+     * A property of the current draft rather than a line in the history, which
+     * is what the speaker's question is: they open the screen and see a draft
+     * they thought they had submitted, and need to know what to change. Every
+     * status move clears it and only `returnContent` writes it, so it can never
+     * describe a state the content has since left — the case that matters is
+     * approved content edited back into a draft, where a surviving reason would
+     * read as an organizer having just sent it back.
+     *
+     * The move itself is still logged to `submission_revisions` by
+     * `moveContent`, so the audit trail keeps every return; this column keeps
+     * the one that is still outstanding.
+     */
+    contentReturnReason: text('content_return_reason'),
     /** Free-text topics, used for gallery filtering and reviewer matching. */
     keywords: text('keywords').array().notNull().default([]),
     /**

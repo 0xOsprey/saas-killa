@@ -157,6 +157,27 @@ export default async function SpeakerContentPage({
               </Notice>
             ) : null}
 
+            {/*
+              The reason lived only in the email, so this screen showed a draft
+              the speaker thought they had submitted and said nothing about why.
+              Gated on 'draft' as well as on the column being set: the column is
+              cleared by every status move, and the pair means a reason can only
+              ever describe the draft actually in front of them.
+            */}
+            {row.contentStatus === 'draft' && row.contentReturnReason ? (
+              <Notice tone="warn">
+                <p className="font-medium">The organizers sent this back for changes.</p>
+                {/* Not `return-reason-`: the organizer board already uses that
+                    for the textarea this text came out of. */}
+                <p className="mt-1 whitespace-pre-line" data-testid={`content-returned-${row.id}`}>
+                  {row.contentReturnReason}
+                </p>
+                <p className="mt-1 text-xs">
+                  Make the changes below and submit it for review again.
+                </p>
+              </Notice>
+            ) : null}
+
             {row.contentStatus === 'approved' ? (
               <Notice tone="good">
                 Approved and live on the agenda. Editing it below moves it back to a draft you

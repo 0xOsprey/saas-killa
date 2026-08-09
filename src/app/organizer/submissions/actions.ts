@@ -221,6 +221,13 @@ function readIds(formData: FormData): string[] {
  * Move content to a new status and log the move. Approval and send-back are the
  * two ends of the same transition, so they share one writer and differ only in
  * the mail that follows.
+ *
+ * Every move clears `contentReturnReason`, `returnContent` included: it writes
+ * its own reason immediately afterwards. The rule is "any status move clears
+ * it", applied at both of the two writers that move the column — this one and
+ * `setContentStatus` on the speaker's side. Clearing only on the transitions
+ * that are not returns is the version that misses one, and the miss shows a
+ * speaker a note about a draft they have since resubmitted.
  */
 async function moveContent(
   ids: string[],
@@ -234,7 +241,7 @@ async function moveContent(
 
   await db
     .update(submissions)
-    .set({ contentStatus: next, updatedAt: new Date() })
+    .set({ contentStatus: next, contentReturnReason: null, updatedAt: new Date() })
     .where(inArray(submissions.id, ids));
 
   await logRevisions(
@@ -272,6 +279,11 @@ const returnSchema = z.object({
  * Send content back for changes. The status drops to 'draft' before the mail is
  * built, so a send that fails leaves the speaker able to edit rather than stuck
  * in a review queue nobody is looking at.
+ *
+ * The reason is stored as well as mailed, in the same write order and for the
+ * same reason: it used to exist only in the email, so a speaker opened
+ * `/speaker/content`, found a draft they thought they had submitted, and had to
+ * go and find the message to learn what to change.
  */
 export async function returnContent(formData: FormData): Promise<void> {
   const editor = await requireRole('organizer');
@@ -284,6 +296,12 @@ export async function returnContent(formData: FormData): Promise<void> {
   if (!recipient) return;
 
   await moveContent([input.submissionId], 'draft', editor.id);
+  // After the move, which clears the column. The speaker's screen reads this
+  // and the mail below carries the same words, so the two cannot disagree.
+  await db
+    .update(submissions)
+    .set({ contentReturnReason: input.reason })
+    .where(eq(submissions.id, input.submissionId));
 
   const event = await getEvent();
   await sendAndLog(

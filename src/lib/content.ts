@@ -457,6 +457,8 @@ export type SpeakerContentRow = {
   format: SubmissionFormat;
   contentStatus: ContentStatus;
   lockedFields: string[];
+  /** What an organizer said when they sent it back. Null unless it is a returned draft. */
+  contentReturnReason: string | null;
   slidesUrl: string | null;
   recordingUrl: string | null;
   resourcesNote: string | null;
@@ -481,6 +483,7 @@ export async function myContent(speakerId: string): Promise<SpeakerContentRow[]>
       format: submissions.format,
       contentStatus: submissions.contentStatus,
       lockedFields: submissions.lockedFields,
+      contentReturnReason: submissions.contentReturnReason,
       slidesUrl: submissions.slidesUrl,
       recordingUrl: submissions.recordingUrl,
       resourcesNote: submissions.resourcesNote,
