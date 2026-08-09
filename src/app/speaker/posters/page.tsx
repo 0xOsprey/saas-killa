@@ -11,6 +11,7 @@ import {
   PageHeader,
 } from '@/components/ui';
 import { currentUser } from '@/lib/auth';
+import { isLocked } from '@/lib/content';
 import { STATUS_LABELS } from '@/lib/format';
 import { myPosters } from '@/lib/poster-queries';
 import { getEvent } from '@/lib/queries';
@@ -76,7 +77,10 @@ export default async function SpeakerPostersPage({
       ) : null}
 
       {mine.map((row) => {
-        const locked = row.lockedFields.includes('posterUrl');
+        // `isLocked`, not `includes`. Locks compare on a flattened key, so a
+        // row holding `poster_url` still holds when read as `posterUrl`, and a
+        // lock that silently does not hold is worse than no lock at all.
+        const locked = isLocked(row.lockedFields, 'posterUrl');
         return (
           <Card key={row.id} className="space-y-4">
             <div className="flex flex-wrap items-start justify-between gap-3">

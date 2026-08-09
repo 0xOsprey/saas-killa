@@ -140,3 +140,45 @@ test('editing approved content sends it back to draft, as the screen promises', 
   await clearContent(page);
   await expect(page.getByTestId(`content-status-${id}`)).toHaveText(/draft/i);
 });
+
+/**
+ * The poster artwork lock is settable.
+ *
+ * /speaker/posters has always refused an edit while `posterUrl` is in
+ * `lockedFields`, but `posterUrl` was not in `LOCKABLE_FIELDS`, and both halves
+ * of this form validate against that list. So the reader was live and there was
+ * no writer: an organizer could not set the lock the speaker page was checking
+ * for. This asserts the button is there and that pressing it lands.
+ *
+ * It unlocks again on the way out. `submissions.locked_fields` is seeded empty
+ * and eight files run after this one.
+ */
+test('an organizer can freeze the poster artwork, which nothing could set before', async ({
+  page,
+}) => {
+  await signInVia(page, ORGANIZER);
+  await page.goto('/organizer/submissions');
+
+  const row = page.getByTestId(/^submission-[0-9a-f]{8}-/).first();
+  const rowId = (await row.getAttribute('data-testid'))!.replace('submission-', '');
+  await row.getByText('Content and locks').click();
+
+  const toggle = row.getByTestId(`lock-${rowId}-posterUrl`);
+  await expect(toggle, 'the artwork lock is offered at all').toHaveCount(1);
+  await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+
+  await toggle.click();
+  await expect(page.getByTestId(`lock-${rowId}-posterUrl`)).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+
+  // Back off, for the files that run after this one. No second click on the
+  // summary: the disclosure survives the server action, so clicking it again
+  // closes the panel and the toggle stops being reachable.
+  await toggle.click();
+  await expect(page.getByTestId(`lock-${rowId}-posterUrl`)).toHaveAttribute(
+    'aria-pressed',
+    'false',
+  );
+});

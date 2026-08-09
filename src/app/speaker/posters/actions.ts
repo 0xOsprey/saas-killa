@@ -28,6 +28,13 @@ const posterSchema = z.object({
  *
  * Both doors into the column go through here, so an upload cannot quietly
  * acquire a weaker rule than a pasted link.
+ *
+ * The lock test is SQL rather than `isLocked`, and stays that way: reading the
+ * row first and comparing in JavaScript reopens the gap between the read and
+ * the update that putting it in the WHERE clause exists to close. It is safe
+ * against the spelling problem `lockKey` guards, because `withLock` is the only
+ * writer of this column and always stores the canonical `posterUrl` from
+ * `LOCKABLE_FIELDS`.
  */
 async function writePosterUrl(
   submissionId: string,

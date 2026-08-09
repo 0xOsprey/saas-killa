@@ -67,6 +67,13 @@ export const LOCKABLE_FIELDS = [
   'slidesUrl',
   'recordingUrl',
   'resourcesNote',
+  // `posterUrl` was read before it could be written. /speaker/posters has
+  // always refused an edit while the lock is present, and both halves of the
+  // organizer's lock form validate against this list, so there was no way to
+  // set the lock that page was already checking for. Freezing the artwork is
+  // the case the feature is most obviously for: once the boards are at the
+  // printer, a replacement file is a poster nobody will ever see.
+  'posterUrl',
 ] as const;
 
 export type LockableField = (typeof LOCKABLE_FIELDS)[number];
@@ -82,6 +89,7 @@ const FIELD_LABELS: Record<string, string> = {
   slidesUrl: 'Slides URL',
   recordingUrl: 'Recording URL',
   resourcesNote: 'Resources',
+  posterUrl: 'Poster artwork',
   contentStatus: 'Content status',
   trackId: 'Track',
   status: 'Status',
