@@ -184,6 +184,9 @@ test('a view name and a day the schedule does not have fall back rather than err
   const response = await page.goto('/organizer/schedule?view=gantt&day=tuesday');
   expect(response?.status()).toBe(200);
   await expect(page.getByTestId('view-grid')).toHaveAttribute('aria-current', 'page');
+  // The testid, not just the string: src/app/error.tsx means our own boundary
+  // renders in place of Next's default and the literal text never appears.
+  await expect(page.getByTestId('error-boundary')).toHaveCount(0);
   await expect(page.locator('body')).not.toContainText('Application error');
 
   // `view=day` with a day nothing is scheduled on falls back to the first day

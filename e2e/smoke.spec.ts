@@ -35,6 +35,12 @@ async function visit(page: Page, path: string) {
   expect(status, `GET ${path}`).toBeLessThan(400);
   // A server component that throws after streaming has begun returns 200 and
   // then swaps in the error boundary, so status alone does not cover it.
+  //
+  // Both checks, and the testid is the load-bearing one. Since src/app/error.tsx
+  // exists our own boundary renders instead of Next's, so the literal string
+  // stopped appearing and a check for it alone would pass on every broken page.
+  // The string still catches a failure early enough that no boundary renders.
+  await expect(page.getByTestId('error-boundary'), `error boundary on ${path}`).toHaveCount(0);
   await expect(page.locator('body'), `error boundary on ${path}`).not.toContainText(
     'Application error',
   );
@@ -177,4 +183,14 @@ test('a reviewer reaches the queue and the award ballot', async ({ page }) => {
   await signInVia(page, REVIEWER);
   await visit(page, '/review');
   await visit(page, '/awards/judge');
+});
+
+test('an address that is not a page gets our 404, not the framework default', async ({ page }) => {
+  const response = await page.goto('/not-a-real-page');
+
+  expect(response?.status()).toBe(404);
+  await expect(page.getByTestId('not-found')).toBeVisible();
+  // The nav is in the root layout, so a not-found.tsx that renders inside it
+  // leaves the reader somewhere to go. Next's own 404 does not.
+  await expect(page.getByRole('link', { name: 'Agenda' }).first()).toBeVisible();
 });
