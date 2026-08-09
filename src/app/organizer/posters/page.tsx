@@ -14,8 +14,12 @@ import { autoNumberBoards, setBoardNumber } from './actions';
  * honest silence — a bookmark is a deliberate act by a named account, so it
  * carries a meaning a hit count does not.
  */
-export default async function OrganizerPostersPage() {
-  const [event, rows] = await Promise.all([getEvent(), organizerPosters()]);
+export default async function OrganizerPostersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ confirmRenumber?: string }>;
+}) {
+  const [event, rows, params] = await Promise.all([getEvent(), organizerPosters(), searchParams]);
 
   const numbered = rows.filter((row) => row.boardNumber).length;
   const withoutArtwork = rows.filter((row) => !row.posterUrl).length;
@@ -40,6 +44,30 @@ export default async function OrganizerPostersPage() {
           </form>
         }
       />
+
+      {params.confirmRenumber ? (
+        <Notice tone="bad">
+          <div className="space-y-2" data-testid="confirm-renumber">
+            <p>
+              Auto-numbering replaces all {numbered} board number{numbered === 1 ? '' : 's'} that
+              are already set, including any typed in by hand to match what the venue printed.
+              Every accepted poster is renumbered 1 to {rows.length} in track order. There is no
+              undo.
+            </p>
+            <div className="flex items-center gap-3">
+              <form action={autoNumberBoards}>
+                <input type="hidden" name="confirm" value="yes" />
+                <Button type="submit" variant="danger" data-testid="confirm-renumber-submit">
+                  Renumber every board
+                </Button>
+              </form>
+              <Link href="/organizer/posters" className="text-sm text-accent hover:underline">
+                Leave them alone
+              </Link>
+            </div>
+          </div>
+        </Notice>
+      ) : null}
 
       {!gate.open ? (
         <Notice>

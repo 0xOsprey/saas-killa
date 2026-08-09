@@ -97,13 +97,27 @@ export async function setPagePublished(formData: FormData): Promise<void> {
 }
 
 /**
- * Delete a page. No confirmation screen, because a page is recoverable from
- * nothing but its author's memory and the honest mitigation is that unpublish
- * is one press away and does what most deletes mean.
+ * Delete a page, on the second press.
+ *
+ * This used to happen on the first, reasoning that unpublish is one press away
+ * and does what most deletes mean. That is a good argument for why an organizer
+ * rarely needs delete, and no argument at all for what happens when they press
+ * it by accident: the body is recoverable from nothing but its author's memory.
+ * Unpublish being the better button is a reason to make delete ask, not a
+ * reason to let it fire.
+ *
+ * `?confirmDelete=<id>` and then a second press carrying `confirm=yes`, the
+ * shape `deleteAward` uses. Checked server-side, because the button on the page
+ * is not the only thing that can POST here.
  */
 export async function deletePage(formData: FormData): Promise<void> {
   await requireRole('organizer');
   const id = z.string().uuid().parse(formData.get('id'));
+
+  if (formData.get('confirm') !== 'yes') {
+    redirect(`/organizer/pages?confirmDelete=${id}`);
+  }
+
   const [row] = await db
     .delete(portalPages)
     .where(eq(portalPages.id, id))

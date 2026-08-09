@@ -14,11 +14,12 @@ import { deletePage, savePage, setPagePublished } from './actions';
 export default async function OrganizerPagesScreen({
   searchParams,
 }: {
-  searchParams: Promise<{ edit?: string; error?: string; saved?: string }>;
+  searchParams: Promise<{ edit?: string; error?: string; saved?: string; confirmDelete?: string }>;
 }) {
   const params = await searchParams;
   const pages = await allPages();
   const editing = params.edit ? await pageForEdit(params.edit) : null;
+  const toDelete = pages.find((page) => page.id === params.confirmDelete);
 
   return (
     <div className="space-y-5">
@@ -42,6 +43,35 @@ export default async function OrganizerPagesScreen({
       {params.saved ? (
         <Notice tone="good">
           <span data-testid="page-saved">Saved.</span>
+        </Notice>
+      ) : null}
+
+      {toDelete ? (
+        <Notice tone="bad">
+          {/* The testid goes on a child. `Notice` takes `tone` and `children`
+              and nothing else, and a hyphenated JSX attribute on a component is
+              the one kind TypeScript does not check. */}
+          <div className="space-y-2" data-testid="confirm-delete-page">
+            <p>
+              Deleting “{toDelete.title}” removes its text for good. Nobody wrote it down anywhere
+              else.{' '}
+              {toDelete.published
+                ? 'It is published, so speakers can see it now. Unpublishing hides it and keeps it.'
+                : 'It is already a draft, so no speaker can see it.'}
+            </p>
+            <div className="flex items-center gap-3">
+              <form action={deletePage}>
+                <input type="hidden" name="id" value={toDelete.id} />
+                <input type="hidden" name="confirm" value="yes" />
+                <Button type="submit" variant="danger" data-testid="confirm-delete-page-submit">
+                  Delete “{toDelete.title}”
+                </Button>
+              </form>
+              <Link href="/organizer/pages" className="text-sm text-accent hover:underline">
+                Keep it
+              </Link>
+            </div>
+          </div>
         </Notice>
       ) : null}
 

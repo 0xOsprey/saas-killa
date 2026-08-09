@@ -155,7 +155,10 @@ test('a new overdue task moves the figures, and finishing it moves them back', a
   expect(done.completed).toBe(before.completed + 1);
 
   await page.goto(href!);
+  // Two presses since deleting a task also destroys its deadline, its chase
+  // history and, for a finished one, the record that it was finished.
   await row.getByTestId('task-delete').click();
+  await page.getByTestId('confirm-delete-task-submit').click();
   await expect(row).toHaveCount(0);
 
   const after = await readDashboard(page);
@@ -213,6 +216,7 @@ test('the dashboard refreshes itself, and the toggle stops it', async ({ page, c
   await other.goto(href!);
   const otherRow = other.getByTestId(/^speaker-task-/).filter({ hasText: label });
   await otherRow.getByTestId('task-delete').click();
+  await other.getByTestId('confirm-delete-task-submit').click();
   await expect(otherRow).toHaveCount(0);
   await other.close();
 });

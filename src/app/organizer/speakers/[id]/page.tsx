@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { Badge, Button, Card, Empty, PageHeader } from '@/components/ui';
+import { Badge, Button, Card, Empty, Notice, PageHeader } from '@/components/ui';
 import { FORMAT_LABELS, STATUS_LABELS, dayLabel, timeOfDay } from '@/lib/format';
 import { getEvent } from '@/lib/queries';
 import { TASK_KIND_LABELS } from '@/lib/speaker-labels';
@@ -12,15 +12,22 @@ import { AvailabilityForm } from './AvailabilityForm';
 import { ProfileForm } from './ProfileForm';
 import { TaskForm } from './TaskForm';
 
-export default async function SpeakerDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function SpeakerDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ confirmTask?: string }>;
+}) {
   const { id } = await params;
-  const [event, detail] = await Promise.all([getEvent(), speakerDetail(id)]);
+  const [event, detail, query] = await Promise.all([getEvent(), speakerDetail(id), searchParams]);
   if (!detail) notFound();
 
   const { user, roles, submissions, tasks, availability } = detail;
   const open = tasks.filter((task) => task.completedAt === null);
   const done = tasks.filter((task) => task.completedAt !== null);
   const hasAccepted = submissions.some((submission) => submission.status === 'accepted');
+  const taskToDelete = tasks.find((task) => task.id === query.confirmTask);
 
   return (
     <div className="space-y-5">
@@ -46,6 +53,38 @@ export default async function SpeakerDetailPage({ params }: { params: Promise<{ 
           </div>
         }
       />
+
+      {taskToDelete ? (
+        <Notice tone="bad">
+          {/* The testid goes on a child. `Notice` takes `tone` and `children`
+              and nothing else, and a hyphenated JSX attribute on a component is
+              the one kind TypeScript does not check. */}
+          <div className="space-y-2" data-testid="confirm-delete-task">
+            <p>
+              Deleting “{taskToDelete.label}” removes its deadline and its chase history too.{' '}
+              {taskToDelete.completedAt
+                ? 'It is marked done, so this also erases the record that they did it.'
+                : 'It is still outstanding.'}
+            </p>
+            <div className="flex items-center gap-3">
+              <form action={deleteSpeakerTaskAction}>
+                <input type="hidden" name="taskId" value={taskToDelete.id} />
+                <input type="hidden" name="userId" value={user.id} />
+                <input type="hidden" name="confirm" value="yes" />
+                <Button type="submit" variant="danger" data-testid="confirm-delete-task-submit">
+                  Delete the task
+                </Button>
+              </form>
+              <Link
+                href={`/organizer/speakers/${user.id}`}
+                className="text-sm text-accent hover:underline"
+              >
+                Keep it
+              </Link>
+            </div>
+          </div>
+        </Notice>
+      ) : null}
 
       <Card className="space-y-4">
         <div className="flex items-center gap-3">

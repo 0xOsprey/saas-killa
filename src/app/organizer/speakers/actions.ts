@@ -2,6 +2,7 @@
 
 import { and, eq, isNull } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { db } from '@/db';
 import {
@@ -171,6 +172,16 @@ export async function completeSpeakerTaskAction(formData: FormData): Promise<voi
   revalidatePath('/speaker');
 }
 
+/**
+ * Delete a task, on the second press.
+ *
+ * The row carries its label, its deadline, when it was last chased and, for a
+ * finished one, the fact that the speaker did it. None of that is anywhere
+ * else, and the button sits inches from "Mark done" in a list that can run to
+ * a dozen rows, so the accident this guards against is a real one rather than
+ * a theoretical one. `?confirmTask=<id>` and a second press carrying
+ * `confirm=yes`, the shape `deleteAward` and `deletePage` use.
+ */
 export async function deleteSpeakerTaskAction(formData: FormData): Promise<void> {
   await requireRole('organizer');
   const input = taskIdSchema.parse({
@@ -178,10 +189,15 @@ export async function deleteSpeakerTaskAction(formData: FormData): Promise<void>
     userId: formData.get('userId'),
   });
 
+  if (formData.get('confirm') !== 'yes') {
+    redirect(`/organizer/speakers/${input.userId}?confirmTask=${input.taskId}`);
+  }
+
   await db.delete(speakerTasks).where(eq(speakerTasks.id, input.taskId));
 
   refreshSpeakerScreens(input.userId);
   revalidatePath('/speaker');
+  redirect(`/organizer/speakers/${input.userId}`);
 }
 
 export type BulkTaskState = { error?: string; created?: number; skipped?: number };

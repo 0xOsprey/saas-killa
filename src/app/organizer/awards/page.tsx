@@ -62,7 +62,13 @@ function toggleHref(current: Set<string>, awardId: string): string {
 export default async function OrganizerAwardsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ finalists?: string | string[]; confirmAward?: string; award?: string }>;
+  searchParams: Promise<{
+    finalists?: string | string[];
+    confirmAward?: string;
+    award?: string;
+    confirmWithdraw?: string;
+    confirmWithdrawAward?: string;
+  }>;
 }) {
   const [params, event, everyAward, accepted] = await Promise.all([
     searchParams,
@@ -76,6 +82,13 @@ export default async function OrganizerAwardsPage({
   const archived = everyAward.filter((d) => d.award.archivedAt !== null);
   const finalistsOnly = finalistSet(params.finalists);
   const toDelete = everyAward.find((d) => d.award.id === params.confirmAward);
+
+  const withdrawFrom = everyAward.find((d) => d.award.id === params.confirmWithdrawAward);
+  const toWithdraw = withdrawFrom?.nominees.find(
+    (nominee) => nominee.submissionId === params.confirmWithdraw,
+  );
+  const withdrawBallots =
+    withdrawFrom?.ballots.filter((b) => b.submissionId === params.confirmWithdraw).length ?? 0;
   // What the button will actually do, not how many winners exist: a second
   // press after a send has nothing to send, and it should say so.
   const unmailed = (await winnersAwaitingNotification(event.name)).length;
@@ -117,6 +130,32 @@ export default async function OrganizerAwardsPage({
             That category has ballots in it, so it was not deleted. Archive it instead: it leaves
             every list and the committee&apos;s judging survives.
           </span>
+        </Notice>
+      ) : null}
+
+      {toWithdraw && withdrawFrom ? (
+        <Notice tone="bad">
+          <div className="space-y-2" data-testid="confirm-withdraw-nominee">
+            <p>
+              {withdrawBallots} ballot{withdrawBallots === 1 ? ' has' : 's have'} been cast for “
+              {toWithdraw.title}” in {withdrawFrom.award.name}. Removing it takes the talk out of
+              every tally. The ballots themselves are kept, and nominating it again counts them
+              all over.
+            </p>
+            <div className="flex items-center gap-3">
+              <form action={withdrawNomination}>
+                <input type="hidden" name="awardId" value={withdrawFrom.award.id} />
+                <input type="hidden" name="submissionId" value={toWithdraw.submissionId} />
+                <input type="hidden" name="confirm" value="yes" />
+                <Button type="submit" variant="danger" data-testid="confirm-withdraw-submit">
+                  Remove “{toWithdraw.title}”
+                </Button>
+              </form>
+              <Link href="/organizer/awards" className="text-sm text-accent hover:underline">
+                Leave it in
+              </Link>
+            </div>
+          </div>
         </Notice>
       ) : null}
 
@@ -208,7 +247,10 @@ export default async function OrganizerAwardsPage({
               {detail.nominees.length === 0 ? (
                 <p className="text-xs text-muted">Nothing nominated yet.</p>
               ) : (
-                <ul className="space-y-1.5">
+                // Named because the two tallies below render the same titles in
+                // their own <li>s, so an unscoped row lookup finds three of
+                // everything.
+                <ul className="space-y-1.5" data-testid={`nominee-list-${award.id}`}>
                   {detail.nominees.map((nominee) => (
                     <li
                       key={nominee.submissionId}

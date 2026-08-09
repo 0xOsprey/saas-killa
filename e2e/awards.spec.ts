@@ -176,3 +176,89 @@ test('a category with a ballot in it refuses to delete, archives, and restores i
   await card.getByTestId('archive-award-submit').click();
   await expect(page.getByTestId(AWARD_CARD).filter({ hasText: name })).toHaveCount(0);
 });
+
+/**
+ * Withdrawing a nominee somebody has voted for asks first; withdrawing one
+ * nobody has voted for does not.
+ *
+ * The asymmetry is the point. `remove` sits inline in a list that can run to a
+ * dozen names, and a confirmation on every one of them is friction that teaches
+ * an organizer to click straight through the one that mattered. With no ballots
+ * the act undoes itself by nominating again.
+ *
+ * The ballots are never destroyed either way: `award_votes` has no foreign key
+ * to `award_nominees`, so withdrawing takes the talk out of the tally and
+ * re-nominating counts every vote again. That is what the banner claims and
+ * what the last third of this test checks.
+ *
+ * Leaves behind: one more archived category, for the same reason as the test
+ * above.
+ */
+test('withdrawing a nominee asks first only once a ballot exists', async ({ page }) => {
+  const name = 'Throwaway, withdrawn';
+  await signInVia(page, ORGANIZER);
+  await page.goto('/organizer/awards');
+
+  await page.getByTestId('award-name').fill(name);
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
+  const card = page.getByTestId(AWARD_CARD).filter({ hasText: name });
+  const awardId = (await card.getAttribute('data-testid'))!.replace('award-', '');
+
+  // Every row lookup goes through the nominee list rather than the card at
+  // large: the committee and community tallies render the same titles in their
+  // own <li>s, so an unscoped filter finds three of everything.
+  const row = (title: string) =>
+    card.getByTestId(`nominee-list-${awardId}`).locator('li').filter({ hasText: title });
+
+  // The submission id comes back with the title because re-nominating has to
+  // pick the same talk, and the option label carries a speaker name this test
+  // never learns.
+  const nominate = async () => {
+    const picker = card.getByLabel(/^Nominate/);
+    const option = picker.locator('option').nth(1);
+    const title = (await option.textContent())!.split(' — ')[0]!.trim();
+    const id = (await option.getAttribute('value'))!;
+    await picker.selectOption(id);
+    await card.getByRole('button', { name: 'Add' }).click();
+    await expect(row(title)).toHaveCount(1);
+    return { title, id };
+  };
+
+  // A nominee nobody has voted for goes straight out, because adding it back is
+  // the whole undo.
+  const unvoted = await nominate();
+  await row(unvoted.title).getByText('remove').click();
+  await expect(row(unvoted.title)).toHaveCount(0);
+  await expect(page.getByTestId('confirm-withdraw-nominee')).toHaveCount(0);
+
+  // Now one with a ballot against it.
+  const voted = await nominate();
+  await page.goto('/awards/judge');
+  const judge = page.getByTestId(`judge-award-${awardId}`);
+  await judge.getByRole('button', { name: 'vote' }).first().click();
+  await expect(judge).toContainText('Your ballot:');
+
+  await page.goto('/organizer/awards');
+  await row(voted.title).getByText('remove').click();
+  const banner = page.getByTestId('confirm-withdraw-nominee');
+  await expect(banner).toContainText('1 ballot has been cast');
+  // Asking is not doing: the nominee is still in the list behind the banner.
+  await expect(row(voted.title)).toHaveCount(1);
+
+  await banner.getByTestId('confirm-withdraw-submit').click();
+  await expect(row(voted.title)).toHaveCount(0);
+
+  // The ballot survived. Nominating the same talk again counts it, which is
+  // only possible if the vote row was never deleted.
+  await card.getByLabel(/^Nominate/).selectOption(voted.id);
+  await card.getByRole('button', { name: 'Add' }).click();
+  await expect(row(voted.title)).toHaveCount(1);
+  await page.goto('/awards/judge');
+  await expect(page.getByTestId(`judge-award-${awardId}`)).toContainText('Your ballot:');
+
+  // Out of the way of the files that run after this one.
+  await page.goto('/organizer/awards');
+  await card.getByText('Retire this category').click();
+  await card.getByTestId('archive-award-submit').click();
+  await expect(page.getByTestId(AWARD_CARD).filter({ hasText: name })).toHaveCount(0);
+});

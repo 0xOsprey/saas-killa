@@ -193,12 +193,43 @@ export async function nominate(formData: FormData): Promise<void> {
   revalidateAwards();
 }
 
+/**
+ * Take a nominee back out of the running.
+ *
+ * Asks first, but only when somebody has voted for this nominee. With no
+ * ballots, nominating the same talk again undoes it, and a confirmation on
+ * every `remove` in a list of a dozen names is friction that teaches an
+ * organizer to click straight through the one that mattered.
+ *
+ * With ballots it is worth a stop, and the banner has to be exact about what
+ * happens, because it is not what it looks like: `award_votes` carries no
+ * foreign key to `award_nominees`, so nothing is deleted. The votes stop being
+ * counted, because every tally joins the nominee list, and re-nominating
+ * brings all of them back. Losing a standing and losing the ballots behind it
+ * are different losses, and the copy says which one this is.
+ */
 export async function withdrawNomination(formData: FormData): Promise<void> {
   await requireRole('organizer');
   const input = nomineeSchema.parse({
     awardId: formData.get('awardId'),
     submissionId: formData.get('submissionId'),
   });
+
+  if (formData.get('confirm') !== 'yes') {
+    const [ballot] = await db
+      .select({ judgeId: awardVotes.judgeId })
+      .from(awardVotes)
+      .where(
+        and(eq(awardVotes.awardId, input.awardId), eq(awardVotes.submissionId, input.submissionId)),
+      )
+      .limit(1);
+    if (ballot) {
+      redirect(
+        `/organizer/awards?confirmWithdraw=${input.submissionId}&confirmWithdrawAward=${input.awardId}`,
+      );
+    }
+  }
+
   await db
     .delete(awardNominees)
     .where(

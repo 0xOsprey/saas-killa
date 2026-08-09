@@ -54,7 +54,12 @@ async function publish(page: Page, slug: string) {
 
 async function removePage(page: Page, slug: string) {
   await page.goto('/organizer/pages');
+  // Two presses. The first only asks: a page's body exists nowhere but the
+  // page, so `deletePage` round-trips through `?confirmDelete=` rather than
+  // destroying it on a misclick.
   await page.getByTestId(`page-delete-${slug}`).click();
+  await expect(page.getByTestId('confirm-delete-page')).toBeVisible();
+  await page.getByTestId('confirm-delete-page-submit').click();
   await expect(page.getByTestId(`page-delete-${slug}`)).toHaveCount(0);
 }
 
