@@ -208,7 +208,7 @@ export function embedScript(): string {
     if (!render) {
       fail(
         node,
-        'Unknown Conf Mgmt widget "' + name + '". Use data-sessionboard="speakers" or data-sessionboard="agenda".',
+        'Unknown Saas Killa widget "' + name + '". Use data-sessionboard="speakers" or data-sessionboard="agenda".',
         'unknown widget: ' + name
       );
       return;

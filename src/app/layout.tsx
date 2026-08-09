@@ -4,7 +4,7 @@ import { Nav } from '@/components/Nav';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Conf Mgmt',
+  title: 'Saas Killa',
   description: 'Call for papers, grading, scheduling and the public agenda for one conference.',
 };
 

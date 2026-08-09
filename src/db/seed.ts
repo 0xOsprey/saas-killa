@@ -219,7 +219,7 @@ async function main() {
   const [event] = await db
     .insert(events)
     .values({
-      name: 'Conf Mgmt Conf',
+      name: 'AI Conference',
       tagline: 'One track of hard problems, two days, no keynote about culture.',
       timezone: 'Europe/London',
       startsOn,

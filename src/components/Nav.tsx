@@ -44,7 +44,7 @@ export async function Nav() {
     <header className="border-b border-line bg-white">
       <nav className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-5 gap-y-2 px-4 py-3">
         <Link href="/" className="text-sm font-semibold tracking-tight text-ink">
-          {event?.name ?? 'Conf Mgmt'}
+          {event?.name ?? 'Saas Killa'}
         </Link>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
           {links.map((link) => (

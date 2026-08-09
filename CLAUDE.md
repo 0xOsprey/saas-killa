@@ -1,4 +1,4 @@
-# CLAUDE.md — Conf Mgmt
+# CLAUDE.md — Saas Killa
 
 Anything that names this machine's paths, hostnames or tailnet ports lives in
 `CLAUDE.local.md`, which is gitignored. This file is published with the repo, so
@@ -61,7 +61,7 @@ before filing a gap. Both were written 2026-08-08.
 | `page` | an organizer-authored wiki page in the speaker portal, addressed by slug |
 | `run` | one push of the programme to Accelevents, dry or live, with its request log |
 | `event name` | the organizer's own conference, `events.name`, one row of data, edited at `/organizer/settings` |
-| `product name` | this software's name, `Conf Mgmt`, hardcoded in `src/`, never in the database |
+| `product name` | this software's name, `Saas Killa`, hardcoded in `src/`, never in the database |
 
 "Session" alone is never used for conference content, because it collides with
 the login session. Accepted submissions placed in a slot are what the public
@@ -71,7 +71,7 @@ agenda renders; they are still submissions.
 confused.** The test is whether two different conferences running this software
 would show different text: if yes it is the event name, if no it is the product
 name. The nav is where they look identical and are not. `Nav.tsx` renders
-`event?.name ?? 'Conf Mgmt'`, and because `getEvent()` throws only on an
+`event?.name ?? 'Saas Killa'`, and because `getEvent()` throws only on an
 unseeded or unreachable database, that fallback never renders on a working
 instance. The word in the top left of every page is the event name, always.
 Changing it is one organizer edit and no deploy. Changing the product name is
