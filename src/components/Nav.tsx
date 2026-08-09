@@ -23,6 +23,10 @@ export async function Nav() {
   if (user) {
     links.push({ href: '/speaker', label: 'My submissions' });
     links.push({ href: '/speaker/pages', label: 'Speaker info' });
+    // Account-level rather than per-submission, so it has nowhere on the
+    // submission cards to hang. Without a link the only route to it is a typed
+    // URL, which is how the organizer stayed the table's only writer.
+    links.push({ href: '/speaker/availability', label: 'Availability' });
     links.push({ href: '/speaker/profile', label: 'Profile' });
   }
   if (user?.roles.includes('reviewer')) {

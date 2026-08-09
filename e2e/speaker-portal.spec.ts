@@ -2,20 +2,21 @@ import { expect, test, type Browser, type Page } from '@playwright/test';
 import { extractMagicLink, waitForMail } from './mailbox';
 
 /**
- * What the speaker portal says the speaker has been *told*, as against what the
- * organizers have *decided*.
+ * The speaker's own side of the portal: what they have been told, what they can
+ * answer, and what they can write down about themselves.
  *
- * The two are separate columns on purpose — an organizer flips a status while
- * deciding and moves a talk four times while building the grid, and nothing
- * leaves the building until they press send — so the portal has to be able to
- * say which of the two it is showing. Every assertion below is about that
- * distinction rather than about the decision or the placement, both of which
- * already have their own tests.
+ * Each test here is about a place the app modelled something for organizers and
+ * gave the speaker no way to act on it. What they were told is separate from
+ * what was decided, because an organizer flips a status while deciding and moves
+ * a talk four times while building the grid and nothing leaves the building
+ * until they press send. Declining is separate from withdrawing, because one is
+ * about the speaker and the other takes the talk off the programme. Availability
+ * is the table the scheduler reads and the organizer used to be its only writer.
  *
  * Runs after `speaker-calendar.spec.ts` and before `uploads.spec.ts` on the
- * shared database. The talk it files is its own, and it hands back the box it
- * borrows and settles the notice before it finishes, so the next file finds the
- * grid and the send button as it left them.
+ * shared database, so everything borrowed is handed back: the talk filed below
+ * is its own, the slot it takes is returned and its notice settled, the speaker
+ * who declines re-confirms, and the availability block removed is replaced.
  */
 
 const ORGANIZER = 'organizer@example.com';
@@ -27,6 +28,15 @@ const ORGANIZER = 'organizer@example.com';
  * uploads.
  */
 const DECLINER = 'speaker3@example.com';
+
+/**
+ * Seeded with an availability block that overlaps their own placed talk, so the
+ * organizer's grid is already warning about them before anything is touched and
+ * the warning is a real read of the table rather than a fixture that never
+ * fires. `speaker3` has the same overlap, which is what keeps the warning on
+ * screen while this one's block is away.
+ */
+const BLOCKER = 'speaker1@example.com';
 
 async function signInVia(page: Page, email: string) {
   await page.goto('/login');
@@ -281,6 +291,90 @@ test('a speaker who cannot come says so without withdrawing the talk', async ({
 
   await organizer.page.goto('/organizer/schedule');
   await expect(organizer.page.getByTestId('declined-warning')).toHaveCount(0);
+
+  await organizer.context.close();
+});
+
+/**
+ * A wall-clock `datetime-local` value, moved by whole hours.
+ *
+ * Parsed as UTC and reformatted, which is right precisely because a
+ * `datetime-local` carries no zone: the server reads it as wall clock in the
+ * event's timezone, so the arithmetic here has to stay in the same naive frame
+ * rather than being converted into and back out of one.
+ */
+function plusHours(wallClock: string, hours: number): string {
+  const at = new Date(`${wallClock}:00Z`);
+  at.setUTCHours(at.getUTCHours() + hours);
+  return at.toISOString().slice(0, 16);
+}
+
+test('a speaker writes the availability the scheduler reads', async ({
+  page,
+  browser,
+  baseURL,
+}) => {
+  await signInVia(page, BLOCKER);
+  await page.goto('/speaker');
+
+  // Read the title off the page rather than naming a fixture row. The seeded
+  // block for this speaker overlaps this talk, which is why the organizer's
+  // grid is already warning about it before the test touches anything.
+  const placed = page
+    .locator('[data-testid^="submission-card-"]')
+    .filter({ has: page.locator('[data-testid^="placement-"]') })
+    .first();
+  const title = ((await placed.locator('h2').first().textContent()) ?? '').trim();
+  expect(title).not.toBe('');
+
+  const organizer = await asOrganizer(browser, baseURL);
+  await organizer.page.goto('/organizer/schedule');
+  await expect(organizer.page.getByTestId('availability-warning')).toContainText(title);
+
+  // The event's own start, in the wall clock the form posts. The seeded block
+  // and the first time band both begin here, so a window opened at this time
+  // covers the talk and the grid has something to warn about.
+  const eventStart = await organizer.page.getByTestId('band-start').inputValue();
+  expect(eventStart).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/);
+
+  // 1. Remove what an organizer typed --------------------------------------
+  // Editable by the speaker on purpose. The rows are keyed by the person they
+  // are about rather than by whoever typed them, and a speaker whose flight
+  // moves has to be able to fix the block that flight produced.
+  await page.goto('/speaker/availability');
+  await expect(page.getByTestId('availability-list')).toBeVisible();
+  await page.locator('[data-testid^="availability-remove-"]').first().click();
+  await expect(page.getByTestId('availability-flash')).toBeVisible();
+  await expect(page.getByTestId('availability-list')).toHaveCount(0);
+
+  // The warning itself stays, because a second seeded speaker has an
+  // overlapping block of their own. It is this talk that has to leave it.
+  await organizer.page.goto('/organizer/schedule');
+  await expect(organizer.page.getByTestId('availability-warning')).not.toContainText(title);
+
+  // 2. A window that ends before it starts is refused ------------------------
+  await page.getByTestId('availability-from').fill(eventStart);
+  await page.getByTestId('availability-until').fill(eventStart);
+  await page.getByTestId('availability-add').click();
+  await expect(page.getByTestId('availability-error')).toHaveText(
+    'The block has to end after it starts.',
+  );
+
+  // 3. Write one, and the scheduler reads it --------------------------------
+  await page.getByTestId('availability-from').fill(eventStart);
+  await page.getByTestId('availability-until').fill(plusHours(eventStart, 1));
+  await page.getByTestId('availability-note').fill('Added by the speaker, not the organizer');
+  await page.getByTestId('availability-add').click();
+  await expect(page.getByTestId('availability-saved')).toBeVisible();
+  await expect(page.getByTestId('availability-list')).toContainText(
+    'Added by the speaker, not the organizer',
+  );
+
+  // The whole point of the screen. `speaker_availability` had one writer and it
+  // was the organizer's; this row came from the speaker and the conflict checker
+  // cannot tell the difference, which is what it means for the gap to be closed.
+  await organizer.page.goto('/organizer/schedule');
+  await expect(organizer.page.getByTestId('availability-warning')).toContainText(title);
 
   await organizer.context.close();
 });
