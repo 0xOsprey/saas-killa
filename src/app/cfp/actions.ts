@@ -4,6 +4,11 @@ import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { db } from '@/db';
 import { audienceLevelEnum, submissionFormatEnum, submissions, users } from '@/db/schema';
+import {
+  duplicateTitleMessage,
+  isDuplicateTitleError,
+  titleAlreadyFiled,
+} from '@/lib/abstracts';
 import { currentUser, issueMagicLink, startSession, upsertUserByEmail } from '@/lib/auth';
 import {
   alertOrganizers,
@@ -135,6 +140,17 @@ export async function submitProposal(_prev: CfpState, formData: FormData): Promi
 
   const speaker = signedIn ?? (await upsertUserByEmail(input.email, input.name));
 
+  // The back button, not a race. With scripting off, filing a proposal and
+  // pressing back leaves the form populated, and pressing submit again filed a
+  // second identical proposal with nothing said. The reviewers then graded the
+  // same talk twice.
+  //
+  // Checked before the profile update below, so a resubmission does not rewrite
+  // the speaker's bio on its way to being refused.
+  if (await titleAlreadyFiled(speaker.id, input.title)) {
+    return { error: duplicateTitleMessage(input.title) };
+  }
+
   // Keep the speaker profile current from the newest submission. This is the
   // whole of "speaker management" on the speaker's side: one profile, reused.
   await db
@@ -142,19 +158,28 @@ export async function submitProposal(_prev: CfpState, formData: FormData): Promi
     .set({ name: input.name, bio: input.bio ?? speaker.bio })
     .where(eq(users.id, speaker.id));
 
-  const [created] = await db
-    .insert(submissions)
-    .values({
-      speakerId: speaker.id,
-      trackId: input.trackId,
-      title: input.title,
-      abstract: input.abstract,
-      format: input.format,
-      audienceLevel: input.audienceLevel,
-      posterUrl: input.posterUrl,
-      keywords: parseKeywords(formData.get('keywords')),
-    })
-    .returning({ id: submissions.id });
+  let created: { id: string } | undefined;
+  try {
+    [created] = await db
+      .insert(submissions)
+      .values({
+        speakerId: speaker.id,
+        trackId: input.trackId,
+        title: input.title,
+        abstract: input.abstract,
+        format: input.format,
+        audienceLevel: input.audienceLevel,
+        posterUrl: input.posterUrl,
+        keywords: parseKeywords(formData.get('keywords')),
+      })
+      .returning({ id: submissions.id });
+  } catch (error) {
+    // Two tabs, submitted close enough together that both passed the check
+    // above. The index caught it; this turns that into the same sentence rather
+    // than a 500.
+    if (isDuplicateTitleError(error)) return { error: duplicateTitleMessage(input.title) };
+    throw error;
+  }
   if (created) await saveAnswers(created.id, checked.answers);
 
   // A first-time submitter has no session. Email them a link so the submission

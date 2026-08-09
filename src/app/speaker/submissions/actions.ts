@@ -9,7 +9,10 @@ import {
   applyAbstractEdit,
   canWriteSubmission,
   currentValues,
+  duplicateTitleMessage,
+  DuplicateTitleError,
   fieldLabel,
+  isDuplicateTitleError,
   isFieldLocked,
   parseKeywords,
   removeAuthor,
@@ -126,12 +129,22 @@ export async function saveMyAbstract(
     return { error: parsed.error.issues[0]?.message ?? 'Check the form and try again.' };
   }
 
-  const changed = await applyAbstractEdit({
-    submissionId: submission.id,
-    editorId: user.id,
-    ownerId: user.id,
-    next: { ...parsed.data, keywords: parseKeywords(keywords) },
-  });
+  let changed: EditableField[];
+  try {
+    changed = await applyAbstractEdit({
+      submissionId: submission.id,
+      editorId: user.id,
+      ownerId: user.id,
+      next: { ...parsed.data, keywords: parseKeywords(keywords) },
+    });
+  } catch (error) {
+    // Renaming onto a title this speaker already holds: the same collision the
+    // CFP form refuses, reached from the edit screen instead.
+    if (error instanceof DuplicateTitleError || isDuplicateTitleError(error)) {
+      return { error: duplicateTitleMessage(parsed.data.title) };
+    }
+    throw error;
+  }
 
   revalidateSubmission(submission.id);
 

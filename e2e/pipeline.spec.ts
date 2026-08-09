@@ -181,3 +181,68 @@ test('the review queue refuses a signed-out visitor', async ({ page }) => {
   await page.goto('/review');
   await expect(page).toHaveURL(/\/login/);
 });
+
+/**
+ * The back button, filed twice.
+ *
+ * Verified end to end with scripting off before the fix: file a proposal from
+ * /cfp, press browser back, find the form still populated, press submit again,
+ * and /organizer/abstracts showed two submissions with one title from one
+ * speaker. Reviewers then graded the same talk twice with no sign the two rows
+ * were one.
+ *
+ * Driven with `javaScriptEnabled: false` deliberately. It is the configuration
+ * the defect was found in — a scripted form disables its own button on submit,
+ * so the client hides the case the server has to handle anyway — and this app
+ * supports the whole CFP without script.
+ *
+ * The failure has to reach `CfpState.error` rather than throwing, because that
+ * is what CfpForm renders.
+ */
+test('filing the same title twice is refused in the form, not filed twice', async ({ browser }) => {
+  const title = `Pressing back and submitting again ${RUN}`;
+  const email = `e2e-doubler-${RUN}@example.com`;
+  const abstract =
+    'The browser back button restores a submitted form intact when scripting is off, so the ' +
+    'second press of Submit posts exactly the payload the first one did. A conference gets ' +
+    'this from real people on bad hotel wifi more often than anyone expects, and the answer ' +
+    'has to be a sentence in the form rather than a second row in the database.';
+
+  const context = await browser.newContext({ javaScriptEnabled: false });
+  const page = await context.newPage();
+
+  async function fileIt() {
+    await page.getByTestId('cfp-email').fill(email);
+    await page.getByTestId('cfp-name').fill(`Back Button ${RUN}`);
+    await page.getByTestId('cfp-title').fill(title);
+    await page.getByTestId('cfp-abstract').fill(abstract);
+    await page
+      .getByTestId('custom-questions')
+      .getByLabel('What will the audience be able to do afterwards? *')
+      .fill(`Dedupe their own CFP ${RUN}`);
+    await page.getByTestId('cfp-submit').click();
+    await page.waitForLoadState('domcontentloaded');
+  }
+
+  await page.goto('/cfp');
+  await fileIt();
+  await expect(page.getByTestId('submitted-confirmation')).toBeVisible();
+
+  // Back, and the form is still holding everything it just sent.
+  await page.goBack({ waitUntil: 'domcontentloaded' });
+  await expect(page.getByTestId('cfp-title')).toHaveValue(title);
+
+  await page.getByTestId('cfp-submit').click();
+  await page.waitForLoadState('domcontentloaded');
+  await expect(page.getByText('is already filed under this speaker')).toBeVisible();
+  await context.close();
+
+  // One row, not two. Read from the organizer's own list rather than from the
+  // speaker's, because the list the reviewers work off is the one that mattered.
+  const organizer = await browser.newContext();
+  const check = await organizer.newPage();
+  await signInVia(check, ORGANIZER_EMAIL);
+  await check.goto(`/organizer/abstracts?q=${encodeURIComponent(title)}`);
+  await expect(check.getByText(title, { exact: false })).toHaveCount(1);
+  await organizer.close();
+});

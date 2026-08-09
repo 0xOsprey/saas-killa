@@ -8,10 +8,14 @@ import {
   addAuthorByEmail,
   applyAbstractEdit,
   currentValues,
+  duplicateTitleMessage,
+  DuplicateTitleError,
+  isDuplicateTitleError,
   parseKeywords,
   removeAuthor,
   submissionForEdit,
   type AbstractActionState,
+  type EditableField,
 } from '@/lib/abstracts';
 
 /**
@@ -76,14 +80,24 @@ export async function saveAbstract(
   }
 
   const keywordsField = formData.get('keywords');
-  const changed = await applyAbstractEdit({
-    submissionId: row.id,
-    editorId: organizer.id,
-    next: {
-      ...parsed.data,
-      keywords: keywordsField === null ? current.keywords : parseKeywords(String(keywordsField)),
-    },
-  });
+  let changed: EditableField[];
+  try {
+    changed = await applyAbstractEdit({
+      submissionId: row.id,
+      editorId: organizer.id,
+      next: {
+        ...parsed.data,
+        keywords: keywordsField === null ? current.keywords : parseKeywords(String(keywordsField)),
+      },
+    });
+  } catch (error) {
+    // A rename onto a title this speaker already uses. The form says so; the
+    // unique index behind it would otherwise show an organizer a 500 for a typo.
+    if (error instanceof DuplicateTitleError || isDuplicateTitleError(error)) {
+      return { error: duplicateTitleMessage(parsed.data.title) };
+    }
+    throw error;
+  }
 
   revalidateAbstract(row.id);
   if (changed.length === 0) return { notice: 'No changes to save.' };

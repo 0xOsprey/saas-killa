@@ -1,3 +1,4 @@
+import { sql, type SQL } from 'drizzle-orm';
 import {
   boolean,
   index,
@@ -10,7 +11,13 @@ import {
   timestamp,
   uniqueIndex,
   uuid,
+  type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
+
+/** `lower(col)`, for an index that has to be case-insensitive. */
+function lower(column: AnyPgColumn): SQL {
+  return sql`lower(${column})`;
+}
 
 /**
  * Vocabulary, fixed once so nothing in this codebase drifts into a synonym:
@@ -316,6 +323,23 @@ export const submissions = pgTable(
   (t) => [
     index('submissions_status_idx').on(t.status),
     index('submissions_speaker_idx').on(t.speakerId),
+    /**
+     * One title per speaker, case-insensitively.
+     *
+     * The defect this closes is not a race, it is the browser back button: file
+     * a proposal with scripting off, press back, find the form still populated,
+     * press submit, and the CFP holds two identical proposals from one person.
+     * `submitProposal` checks for that before it inserts and reports it in the
+     * form, which is the half a speaker sees.
+     *
+     * This index is the half a check cannot cover. A check and an insert are
+     * two statements with a window between them, and two tabs are enough to
+     * find it.
+     *
+     * Case-insensitive because a duplicate is a duplicate to every reader, and
+     * "Rethinking Our Pipeline" is not a second talk.
+     */
+    uniqueIndex('submissions_speaker_title_idx').on(t.speakerId, lower(t.title)),
   ],
 );
 

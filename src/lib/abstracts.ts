@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, exists, ilike, inArray, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, exists, ilike, inArray, ne, or, sql, type SQL } from 'drizzle-orm';
 import { db } from '@/db';
 import {
   reviews,
@@ -197,6 +197,75 @@ export async function canWriteSubmission(submissionId: string, userId: string): 
   return row !== undefined;
 }
 
+/**
+ * The name of the unique index that keeps one title per speaker, and the one
+ * message every caller shows when it fires.
+ *
+ * Both are here rather than in each action so the wording cannot drift: a
+ * speaker who trips it from the CFP form and an organizer who trips it while
+ * renaming an abstract are being told about the same rule.
+ */
+export const DUPLICATE_TITLE_INDEX = 'submissions_speaker_title_idx';
+
+export function duplicateTitleMessage(title: string): string {
+  return `“${title}” is already filed under this speaker. Open it from the list rather than filing it twice.`;
+}
+
+/** True when a Postgres unique violation on that index caused this error. */
+export function isDuplicateTitleError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const candidate = error as { code?: unknown; constraint_name?: unknown; message?: unknown };
+  if (candidate.code !== '23505') return false;
+  return (
+    candidate.constraint_name === DUPLICATE_TITLE_INDEX ||
+    (typeof candidate.message === 'string' && candidate.message.includes(DUPLICATE_TITLE_INDEX))
+  );
+}
+
+/**
+ * Does this speaker already have a proposal under this title?
+ *
+ * `exceptId` is the row being edited, which must not count as its own
+ * duplicate. Withdrawn proposals count: the title is still theirs, and an
+ * organizer restores a withdrawn talk with one press, so allowing a second copy
+ * would leave two live rows behind that press.
+ *
+ * This is the readable half of the guard. The unique index on the same pair is
+ * the half that survives two tabs, and callers catch it with
+ * `isDuplicateTitleError`.
+ */
+export async function titleAlreadyFiled(
+  speakerId: string,
+  title: string,
+  exceptId?: string,
+): Promise<boolean> {
+  const conditions = [
+    eq(submissions.speakerId, speakerId),
+    sql`lower(${submissions.title}) = lower(${title})`,
+  ];
+  if (exceptId) conditions.push(ne(submissions.id, exceptId));
+
+  const [hit] = await db
+    .select({ id: submissions.id })
+    .from(submissions)
+    .where(and(...conditions))
+    .limit(1);
+  return hit !== undefined;
+}
+
+/**
+ * Thrown when an edit would rename a proposal onto a title its speaker already
+ * uses. Both callers of `applyAbstractEdit` return a form state rather than a
+ * page, so this is caught and turned into that state; letting the unique index
+ * surface would give an organizer a 500 for a typo.
+ */
+export class DuplicateTitleError extends Error {
+  constructor(readonly title: string) {
+    super(duplicateTitleMessage(title));
+    this.name = 'DuplicateTitleError';
+  }
+}
+
 export async function applyAbstractEdit(opts: {
   submissionId: string;
   editorId: string;
@@ -210,6 +279,7 @@ export async function applyAbstractEdit(opts: {
   return db.transaction(async (tx) => {
     const [current] = await tx
       .select({
+        speakerId: submissions.speakerId,
         title: submissions.title,
         abstract: submissions.abstract,
         keywords: submissions.keywords,
@@ -222,8 +292,15 @@ export async function applyAbstractEdit(opts: {
       .for('update');
     if (!current) return [];
 
-    const changed = changedFields(current, opts.next);
+    const { speakerId, ...editable } = current;
+    const changed = changedFields(editable, opts.next);
     if (changed.length === 0) return [];
+
+    // Renaming onto a title this speaker already has is the same collision the
+    // CFP form refuses, reached from the other direction.
+    if (changed.includes('title') && (await titleAlreadyFiled(speakerId, opts.next.title, opts.submissionId))) {
+      throw new DuplicateTitleError(opts.next.title);
+    }
 
     await tx
       .update(submissions)
@@ -235,7 +312,7 @@ export async function applyAbstractEdit(opts: {
         submissionId: opts.submissionId,
         editorId: opts.editorId,
         field,
-        oldValue: asText(current[field]),
+        oldValue: asText(editable[field]),
         newValue: asText(opts.next[field]),
       })),
     );
