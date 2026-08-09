@@ -43,12 +43,15 @@ Run from the project root, in this order, on 2026-08-08:
 ```
 pnpm typecheck     clean
 pnpm build         clean, 58 routes
-pnpm test          71 passed (1.7m)
+pnpm test          76 passed (1.9m)
 ```
 
 `pnpm test` is Playwright and there is no unit runner. Seventeen spec files, one
 worker, no retries, a single database reset once in `globalSetup` and shared
-across the whole run. Every file puts back what it changed.
+across the whole run. Every file puts back what it changed. Two of them reach the
+database directly through `e2e/db.ts`, one to prove a row that has already expired
+is deleted and one to restore a content status the screens offer no way back to;
+everything else drives the browser.
 
 ## The nine requirements
 

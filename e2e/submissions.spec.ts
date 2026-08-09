@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { withDb } from './db';
 import { extractMagicLink, waitForMail } from './mailbox';
 
 /**
@@ -10,8 +11,9 @@ import { extractMagicLink, waitForMail } from './mailbox';
  * title or its speaker. An organizer looking for one proposal scrolled for it,
  * and a real event's several hundred would have scaled linearly.
  *
- * Everything here is read-only. The filters are a GET form and the pager is a
- * set of links, so this file changes nothing and puts nothing back.
+ * Every test but the last is read-only: the filters are a GET form and the pager
+ * is a set of links. The last one drives the bulk bar, which writes, and it puts
+ * the rows it touched back exactly.
  */
 
 const ORGANIZER = 'organizer@example.com';
@@ -200,4 +202,137 @@ test('show all is still there for the organizer who wants the whole board', asyn
   await expect(page.getByTestId(ROWS)).toHaveCount(total);
   // And a way back, because the whole point is that this is the exception.
   await expect(page.getByTestId('page-paged')).toBeVisible();
+});
+
+/** Tick the checkbox on each row and wait for the bar that only a selection shows. */
+async function select(page: Page, ids: string[]) {
+  for (const id of ids) await page.getByTestId(`select-${id}`).check();
+  await expect(page.getByTestId('bulk-bar')).toContainText(`${ids.length} selected`);
+}
+
+/**
+ * The four bulk actions, which had no coverage at all: deciding, tracking,
+ * approving content and freezing a field across a selection.
+ *
+ * Each one is the same shape — a selection, a control, one write per row — and
+ * each clears the selection afterwards, so the rows are ticked again between
+ * actions. The fourth row is the control: it sits in the same filter and is
+ * never selected, so an action that quietly widened to the whole filter would
+ * show up as the row that should not have moved.
+ *
+ * The restore is a database write and is the only one in the suite. Three of the
+ * four have a way back on screen and `bulkApproveContent` does not: content goes
+ * draft to pending to approved, an organizer can send it back but only to draft
+ * with a reason attached, and a row returning to 'pending' is not a state this
+ * app offers. The choice was a restore that lands where the seed was, or three
+ * actions instead of four.
+ */
+test('the bulk bar acts on the selection, and leaves the rest of the filter alone', async ({
+  page,
+}) => {
+  await signInVia(page, ORGANIZER);
+
+  // Undecided rows: the least entangled slice of the board. They are not on the
+  // agenda, not in the calendar feeds and not scheduled.
+  await page.goto('/organizer/submissions?status=submitted&sort=title');
+  const onScreen = await rowIds(page);
+  expect(onScreen.length, 'undecided rows to act on').toBeGreaterThan(3);
+  const ids = onScreen.slice(0, 3);
+  const untouched = onScreen[3]!;
+
+  const before = await withDb(
+    async (sql) =>
+      await sql`
+        select id, status, track_id, content_status, locked_fields
+        from submissions
+        where id = any(${[...ids, untouched]}::uuid[])`,
+  );
+  expect(before.length, 'rows read back for the restore').toBe(4);
+
+  try {
+    await select(page, ids);
+    await page.getByTestId('bulk-status').selectOption('rejected');
+    await page.getByTestId('bulk-status-apply').click();
+    // The filter is `status=submitted`, so the three rejected rows leave the
+    // page and the fourth stays. That is the strongest form of the assertion:
+    // the selection moved and its neighbour did not.
+    for (const id of ids) await expect(page.getByTestId(`submission-${id}`)).toHaveCount(0);
+    await expect(page.getByTestId(`submission-${untouched}`)).toContainText('Under review');
+
+    await page.goto('/organizer/submissions?status=rejected&sort=title');
+    for (const id of ids) {
+      await expect(page.getByTestId(`submission-${id}`)).toContainText('Not accepted');
+    }
+
+    // A track none of them is in already, so the assertion cannot pass by
+    // accident on a row that was there to begin with.
+    await select(page, ids);
+    const options = await page
+      .getByTestId('bulk-track')
+      .locator('option')
+      .evaluateAll((nodes) =>
+        nodes.map((node) => ({
+          value: node.getAttribute('value') ?? '',
+          label: (node.textContent ?? '').trim(),
+        })),
+      );
+    const rowsNow = await page.getByTestId(ROWS).allInnerTexts();
+    const track = options.find(
+      (option) => option.value !== '' && !rowsNow.some((text) => text.includes(option.label)),
+    );
+    expect(track, 'a track none of the selected rows is in').toBeTruthy();
+    await page.getByTestId('bulk-track').selectOption(track!.value);
+    await page.getByTestId('bulk-track-apply').click();
+    for (const id of ids) {
+      await expect(page.getByTestId(`submission-${id}`)).toContainText(track!.label);
+    }
+
+    await select(page, ids);
+    await page.getByTestId('bulk-approve-content').click();
+    for (const id of ids) {
+      await expect(page.getByTestId(`submission-${id}`)).toContainText('Content: Approved');
+    }
+
+    // Locking is the one that reads back on the speaker's own screen, so the
+    // badge is the organizer's half of it. Unlock is asserted too: a lock with
+    // no way off is a support ticket.
+    await select(page, ids);
+    const field = await page.getByTestId('bulk-lock-field').inputValue();
+    const fieldLabel = (
+      await page
+        .getByTestId('bulk-lock-field')
+        .locator(`option[value="${field}"]`)
+        .innerText()
+    ).trim();
+    await page.getByTestId('bulk-lock').click();
+    for (const id of ids) {
+      // Scoped to the line rather than the card. The field name also appears in
+      // the lock controls further down every row, so a card-wide match would
+      // pass on a row nothing had been locked on.
+      const line = page
+        .getByTestId(`submission-${id}`)
+        .locator('p', { hasText: 'Locked to the speaker' });
+      await expect(line).toContainText(fieldLabel);
+    }
+
+    await select(page, ids);
+    await page.getByTestId('bulk-unlock').click();
+    for (const id of ids) {
+      await expect(page.getByTestId(`submission-${id}`)).not.toContainText('Locked to the speaker');
+    }
+  } finally {
+    await withDb(async (sql) => {
+      for (const row of before) {
+        // Both status columns are Postgres enums, and a bare parameter arrives
+        // as text, so each one is cast by name rather than left to inference.
+        await sql`
+          update submissions
+          set status = ${row.status}::submission_status,
+              track_id = ${row.track_id},
+              content_status = ${row.content_status}::content_status,
+              locked_fields = ${sql.json(row.locked_fields)}
+          where id = ${row.id}`;
+      }
+    });
+  }
 });

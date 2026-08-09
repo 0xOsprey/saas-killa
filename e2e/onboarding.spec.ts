@@ -165,6 +165,60 @@ test('a new overdue task moves the figures, and finishing it moves them back', a
   expect(after).toEqual(before);
 });
 
+/**
+ * The undo for the one-way button.
+ *
+ * `completed_at` is a single timestamp column and "Mark done" is one click with
+ * no confirmation, so a mis-click used to be permanent: the only route back was
+ * Delete, which also destroys the deadline and the chase history, and then
+ * retyping the task from memory. Reopening writes the column back to null and
+ * nothing else, which is why the dashboard has to come back to exactly the
+ * figures it had before the mistake.
+ */
+test('a task marked done by mistake goes back on the outstanding list', async ({ page }) => {
+  await signIn(page, ORGANIZER);
+
+  const before = await readDashboard(page);
+
+  const href = await page
+    .getByTestId('stuck-list')
+    .locator('li')
+    .first()
+    .getByRole('link')
+    .first()
+    .getAttribute('href');
+  expect(href).toBeTruthy();
+
+  const label = `e2e reopen ${Date.now()}`;
+  const row = await addTask(page, href!, label, 'bio');
+
+  await row.getByTestId('task-complete').click();
+  // The two controls are mutually exclusive by construction, so the presence of
+  // one is the absence of the other and both are worth asserting: a done task
+  // offering "Mark done" again is the state that made the first bug invisible.
+  await expect(row.getByTestId('task-complete')).toHaveCount(0);
+  await expect(row.getByTestId('task-reopen')).toHaveCount(1);
+  expect((await readDashboard(page)).completed).toBe(before.completed + 1);
+
+  await page.goto(href!);
+  await row.getByTestId('task-reopen').click();
+  await expect(row.getByTestId('task-reopen')).toHaveCount(0);
+  await expect(row.getByTestId('task-complete')).toHaveCount(1);
+
+  const reopened = await readDashboard(page);
+  expect(reopened.completed).toBe(before.completed);
+  expect(reopened.outstandingTasks).toBe(before.outstandingTasks + 1);
+  expect(reopened.overdueTasks).toBe(before.overdueTasks + 1);
+
+  await page.goto(href!);
+  await row.getByTestId('task-delete').click();
+  await page.getByTestId('confirm-delete-task-submit').click();
+  await expect(row).toHaveCount(0);
+
+  const after = await readDashboard(page);
+  expect(after).toEqual(before);
+});
+
 test('the dashboard refreshes itself, and the toggle stops it', async ({ page, context }) => {
   // Two full poll intervals plus a sign-in, so the budget is generous.
   test.setTimeout(120_000);

@@ -1,6 +1,6 @@
 'use server';
 
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNotNull, isNull } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
@@ -167,6 +167,35 @@ export async function completeSpeakerTaskAction(formData: FormData): Promise<voi
     .update(speakerTasks)
     .set({ completedAt: new Date() })
     .where(and(eq(speakerTasks.id, input.taskId), isNull(speakerTasks.completedAt)));
+
+  refreshSpeakerScreens(input.userId);
+  revalidatePath('/speaker');
+}
+
+/**
+ * Put a finished task back to outstanding.
+ *
+ * "Mark done" is one press in a list that runs to a dozen rows, and it was
+ * one-way: the column was only ever written forward and the button only ever
+ * rendered while the task was open. The only route back was Delete, which
+ * throws away the label, the deadline and the chase history to undo a misclick,
+ * and which is why that one asks first.
+ *
+ * No confirmation here, matching `completeSpeakerTaskAction`. This is the undo,
+ * and a confirmation on an undo is how a list teaches an organizer to click
+ * through confirmations.
+ */
+export async function reopenSpeakerTaskAction(formData: FormData): Promise<void> {
+  await requireRole('organizer');
+  const input = taskIdSchema.parse({
+    taskId: formData.get('taskId'),
+    userId: formData.get('userId'),
+  });
+
+  await db
+    .update(speakerTasks)
+    .set({ completedAt: null })
+    .where(and(eq(speakerTasks.id, input.taskId), isNotNull(speakerTasks.completedAt)));
 
   refreshSpeakerScreens(input.userId);
   revalidatePath('/speaker');

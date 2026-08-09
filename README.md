@@ -66,7 +66,10 @@ withdrawing.
 **Auth is magic-link, written in-app.** No password to leak and no auth vendor
 in the dependency graph. Tokens are stored as SHA-256 hashes, expire in 15
 minutes and are single use; the session cookie is `httpOnly` and carries an
-HMAC over the session id. `SESSION_SECRET` has no default, so a misconfigured
+HMAC over the session id. Expired sessions and expired links are deleted by
+`sweepExpiredAuth`, hung off signing in rather than off a cron: signing in is
+what puts rows in both tables, so the cleanup scales with the traffic that
+causes it and an instance nobody uses does none. `SESSION_SECRET` has no default, so a misconfigured
 deploy fails at boot instead of shipping a forgeable cookie. "At boot" is
 `src/instrumentation.ts`, which reads the environment before the server binds
 and exits non-zero when it is wrong. The check used to be lazy, and lazy meant
@@ -152,14 +155,20 @@ its rubric breakdown through a tool call rather than parseable prose. Without
 pnpm test          # Playwright; resets the database first
 ```
 
-Seventeen specs, 71 tests, no unit runner. `pipeline.spec.ts` walks one proposal the
+Seventeen specs, 76 tests, no unit runner. `pipeline.spec.ts` walks one proposal the
 length of the pipeline: submit, grade, accept, notify, schedule, publish, then
 read it as a signed-out visitor, checking the acceptance email actually landed.
 `smoke.spec.ts` opens every route the nav leads to, reading the tab list off the
 nav rather than from a copy that goes stale. The rest are one file per feature:
-uploads, portal pages, the schedule grid, calendar invitations, the decision
-board's filters and pager, the embeddable widgets, the Accelevents push, and the
-speaker onboarding tracker.
+uploads, portal pages, the schedule grid and its double-booking warning, calendar
+invitations, the decision board's filters, pager and bulk bar, the embeddable
+widgets, the Accelevents push, and the speaker onboarding tracker.
+
+One helper, `e2e/db.ts`, opens the database directly, and two tests use it. The
+sweep of expired sessions is the only claim in the app no screen can show, since
+its subject is a row that has already stopped being usable; and restoring a
+content status after the bulk-approve test is a state the screens offer no way
+back to. Everything else drives the browser.
 
 They share one database, seeded once in `globalSetup` and never between files,
 so they run in a fixed order with a single worker and each file puts back what

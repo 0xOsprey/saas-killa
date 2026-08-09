@@ -1,152 +1,68 @@
 # Missing
 
 Capabilities and guards that the flow tracing behind `FLOWS.md` found absent.
-Written 2026-08-08.
+Written 2026-08-08, revised the same day once the list had been worked through.
 
-Every absence below was checked against the source before it was written down.
-That matters more than it sounds: an absence is the easiest kind of claim to get
+Every absence was checked against the source before it was written down. That
+matters more than it sounds: an absence is the easiest kind of claim to get
 wrong, and the pass that produced this list asserted two things the code
-contradicted. Both are recorded at the bottom under *Checked and not missing*,
-rather than quietly dropped.
+contradicted. Both are at the bottom under *Checked and not missing*, rather than
+quietly dropped.
+
+Eleven of the twelve items are now built. Each is kept with the wall it described
+and the thing that removed it, because a list of solved problems is how the next
+reader tells a deliberate absence from an unfinished one. **Two walls remain**,
+and they are §2 and §3 below.
 
 This is a different list from the one in `SCOPE.md`. That one is measured against
 the brief and says what was declined. This one is measured against the app's own
 behaviour and says where a person hits a wall.
 
-Three defects, as opposed to absences, are already in `FLOWS.md` under *Defects
-found while tracing* and are not repeated here.
+---
+
+## Still standing
+
+### 1. No video upload
+
+`SNIFFED_TYPES` in `src/lib/uploads.ts` is `application/pdf`, `image/gif`,
+`image/jpeg`, `image/png` and `image/webp`. A recording is a pasted URL, and the
+poster screen's own hint says so: "A video has to be a link; there is no video
+upload."
+
+Deliberate for now. Video is the one upload where storing the bytes on the app
+server is the wrong answer, and object storage is out of scope by decision rather
+than by oversight — see `SCOPE.md`.
+
+### 2. No speaker or submission delete
+
+Withdrawal is the terminal state, which is the right default for a conference
+record: a programme that can lose its own history is not a record. It does leave
+no path for a genuine erasure request, which is the case worth revisiting if this
+ever holds real personal data.
 
 ---
 
-## 1. Deleting an award destroys every ballot, with no confirmation
+## Built since this list was written
 
-`deleteAward` in `src/app/organizer/awards/actions.ts` has no confirmation step,
-and `award_votes.award_id` carries `onDelete: 'cascade'`. One click removes the
-category, its nominees and every committee ballot ever cast in it. There is no
-archive column on `awards` and no undo.
+| Was missing | What closed it |
+|---|---|
+| Deleting an award destroyed every ballot with no confirmation | `?confirmAward=` plus a `confirm=yes` field, the shape `deleteRoom` uses (`src/app/organizer/awards/actions.ts:156`) |
+| Every refusal in `submitReview` was silent | `refuse('decided')`, `refuse('own')`, `refuse('no_round')` — a refusal vocabulary, the shape `castCommitteeVote` already had |
+| The fallback review queue offered a reviewer their own proposal | `openSubmissionQueue` adds `ne(submissions.speakerId, reviewerId)` (`src/lib/grading.ts:219`) |
+| A speaker could not set their own availability | `/speaker/availability`, with `src/app/speaker/availability/actions.ts` writing `speaker_availability` |
+| A speaker could not decline | `declineAttendance` (`src/app/speaker/actions.ts:64`), which also clears `speaker_confirmed_at`, so un-confirming is the same control |
+| Nothing told a speaker what they had already been told | `mySubmissions` selects `decision_emailed_at` and `schedule_notice_key` |
+| A returned content submission never said why | `submissions.content_return_reason`, rendered at `src/app/speaker/content/page.tsx:167` |
+| `/login` discarded the errors `/auth/verify` sent it | The page reads `searchParams` and renders `SIGN_IN_ERRORS[params.error]` |
+| No error boundary anywhere | `src/app/error.tsx`, `not-found.tsx`, `global-error.tsx`, and `guardRoute` holding one 401/403 split for all three organizer route handlers |
+| Nothing ever expired a session or a token row | `sweepExpiredAuth` (`src/lib/auth.ts:116`), called from `startSession`, deleting both tables past their expiry |
+| Four destructive actions had no confirmation | All four round-trip now: `?confirmTask=`, `?confirmAward=`, `?confirmDelete=` for a page, and `confirm=yes` on a nomination withdrawal and on `autoNumberBoards` |
+| A completed speaker task could not be un-completed | `reopenSpeakerTaskAction` and `data-testid="task-reopen"` on the organizer's speaker page (ORG-106). Still absent from the speaker's own screen |
+| A co-author could not touch poster artwork, and was linked to a page that told them they had none | `myPosters` and `writePosterUrl` both take `writableBy` |
 
-The repository holds the opposite principle elsewhere and states it: a retired
-form question sets `form_questions.archived_at` and a retired evaluator sets
-`evaluator_personas.active`, both so that work the committee already graded
-survives. Awards are graded work and are the exception.
-
-Rooms and tracks already show the shape of the fix. Both round-trip through
-`?confirmRoom=` / `?confirmTrack=` and a `confirm=yes` field, and the room
-confirmation even lists the talks the delete would unplace.
-
-## 2. Every refusal in `submitReview` is silent
-
-`src/app/review/actions.ts` refuses three ways and says nothing in all three:
-line 45 for a submission that is no longer `submitted`, line 48 for self-review,
-line 54 for no open round. Each is a bare `return` with no message, no redirect
-and no `revalidatePath`. The reviewer presses Grade, the page does not change,
-and the grade is gone.
-
-Compare `castCommitteeVote` one feature over, which redirects to
-`?ballot=closed`, `?ballot=not_nominated`, `?ballot=incomplete` or
-`?ballot=unknown` and renders a sentence for each. The award action has a refusal
-vocabulary. The review action has none.
-
-## 3. The fallback review queue offers a reviewer their own proposal
-
-`openSubmissionQueue` (`src/lib/grading.ts:188`) selects every
-`status = 'submitted'` row and does not exclude the reader's own. `planAssignments`
-does exclude `reviewer.id === submission.speakerId` when distributing, so the
-gap only opens on a committee that has not run the distributor, which is exactly
-a committee early in its first round.
-
-Combined with item 2 this is the worst instance of it: the card most likely to be
-pressed is the one whose refusal is silent.
-
-## 4. A speaker cannot set their own availability
-
-`speaker_availability` has exactly one writer, `src/app/organizer/speakers/actions.ts`,
-and its own comment says so. There is no speaker-facing route to see, add or
-remove a blackout window. The person who knows their flight times has to email
-them to somebody who will type them in.
-
-The schedule already reads this table: unavailability is one of the three warning
-classes on the grid. The data path exists and only the speaker's end of it is
-missing.
-
-## 5. A speaker cannot decline
-
-`/speaker` offers Confirm and nothing else. `speakerConfirmedAt` is written in
-`src/app/speaker/actions.ts:22` and never reset, so a speaker cannot un-confirm
-either. The only way out is `withdrawSubmission`, which sets
-`status = 'withdrawn'`, writes no revision row, mails nobody and cannot be
-reversed from the speaker side.
-
-Declining a talk you cannot give is an ordinary thing that happens to every
-conference. Right now it is indistinguishable from pulling the proposal.
-
-## 6. Nothing tells a speaker what they have already been told
-
-`/speaker` shows a status badge and a slot line the moment an organizer flips
-them. Whether the speaker has been *emailed* lives in `submissions.decision_emailed_at`
-and `submissions.schedule_notice_key`, and `mySubmissions` selects neither. So
-the app cannot distinguish "accepted and told" from "accepted and not yet told",
-and neither can the speaker looking at it.
-
-There is no notification surface, no read state, and no history of what was sent.
-`email_log` holds the record and nothing speaker-facing reads it.
-
-## 7. A returned content submission never says why
-
-An organizer sending content back writes a reason into `contentReturnedMail`.
-`/speaker/content` shows the status flipped back to Draft and no note. The reason
-exists only in the speaker's inbox, so it is lost the moment the mail is.
-
-## 8. `/login` discards the errors `/auth/verify` sends it
-
-`/auth/verify` redirects to `/login?error=missing` and `/login?error=expired`.
-`src/app/login/page.tsx` renders `state.error` from its own action state and
-never reads `searchParams`. A person clicking a link twice, or clicking one after
-the 15-minute expiry, lands on a clean sign-in form with nothing said. They will
-assume the link is broken rather than spent.
-
-## 9. There is no error boundary anywhere
-
-No `error.tsx`, `not-found.tsx` or `global-error.tsx` exists under `src/app`. A
-server action that throws `NotAuthorised` surfaces as Next's default unhandled
-error, which is a raw 500. Two route handlers catch it and answer 403; every
-other path does not.
-
-The three organizer route handlers also disagree with each other on the signed-out
-answer: `/organizer/abstracts/export` answers 401 then 403, while
-`/organizer/speakers/export` and `/organizer/integrations/[id]/bundle` answer 403
-for both cases.
-
-## 10. Nothing ever expires a session or a token row
-
-`auth_sessions` rows are deleted only by an explicit sign-out
-(`src/lib/auth.ts:121`). `currentUser` refuses an expired session and leaves the
-row, with a comment saying it is left for a cleanup that does not exist.
-`magic_link_tokens` is the same. Both tables grow without bound, and
-`requestMagicLink` mints a `users` row for any address that asks, so `users`
-grows on request too.
-
-## 11. Four destructive actions have no confirmation
-
-`deletePage`, `deleteAward`, `deleteSpeakerTaskAction` and `withdrawNomination`
-each act on first click. Rooms, tracks and time bands all round-trip through a
-confirmation. `autoNumberBoards` is the same shape without being a delete: it
-overwrites every hand-set poster board number with no warning.
-
-## 12. Smaller walls, verified and low impact
-
-- A completed speaker task cannot be un-completed. `completeTask` only ever
-  writes a timestamp and the button renders only under `!done`.
-- No video upload. `SNIFFED_TYPES` in `src/lib/uploads.ts` is `application/pdf`,
-  `image/gif`, `image/jpeg`, `image/png`, `image/webp`. A recording is a pasted
-  URL, and the poster screen's own hint says so.
-- No speaker or submission delete. Withdrawal is the terminal state, which is
-  the right default for a conference record but leaves no path for a genuine
-  erasure request.
-- A co-author cannot withdraw the proposal, edit poster artwork, or be shown the
-  poster page they are linked to. `/speaker` renders the poster link for anyone
-  with an accepted poster in `mySubmissions`, and `/speaker/posters` scopes on
-  `speaker_id`, so a co-author following it is told they have none.
+The last three of those were built together and are covered by
+`e2e/auth.spec.ts`, `e2e/onboarding.spec.ts` and `e2e/posters.spec.ts`
+respectively.
 
 ---
 
@@ -159,6 +75,8 @@ Listed so nobody files them twice.
   process and should stay unless the committee decides otherwise.
 - **`isPresenter` grants nothing.** It renders a badge. `canEdit`, its neighbour
   in the same table, is the real capability.
+- **A co-author cannot withdraw the proposal or grant access onward.** Answering
+  for the talk and handing out access stay with the person who filed it.
 - **The embed feeds read without a session.** Stated at `src/lib/embed.ts:29-31`
   and gated on `agenda_published` alone, on purpose.
 
@@ -179,3 +97,14 @@ are kept here because a corrected claim is more useful than a deleted one.
   runs `assignedQueue()` and `openSubmissionQueue()` from `src/lib/grading.ts`,
   and neither joins `users` or selects a speaker column. The citations were
   corrected; the property always held.
+
+---
+
+## One defect left open
+
+`FLOWS.md` keeps the defect register. Seven of its eight entries are closed; B4
+is not. `addAuthorByEmail` takes `canEdit` from its caller and gates only on
+`writableBy`, so a hand-built POST from a `can_edit` co-author can credit a
+stranger with `can_edit = true`. The UI never offers it, and the narrowest fix is
+to ignore `canEdit` unless the caller is the filer, which is the rule
+`setAuthorAccess` already enforces.

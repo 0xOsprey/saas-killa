@@ -6,6 +6,7 @@ import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { db } from '@/db';
 import { submissions } from '@/db/schema';
+import { writableBy } from '@/lib/abstracts';
 import { requireUser } from '@/lib/auth';
 import { linkField, saveUpload, uploadHref } from '@/lib/uploads';
 
@@ -16,12 +17,14 @@ const posterSchema = z.object({
 });
 
 /**
- * Write the artwork onto one of the caller's own posters.
+ * Write the artwork onto a poster the caller may write to.
  *
  * Every refusal is a WHERE clause, not a check before the query, so a forged
  * submission id updates zero rows rather than someone else's poster:
  *
- *   - `speakerId` is the caller's, so it has to be theirs;
+ *   - `writableBy` is the house predicate: the filer, or a co-author the filer
+ *     gave `can_edit` to. It replaced an equality on `speakerId`, which refused
+ *     the co-author that `applyTextEdit` and `applyAbstractEdit` admit;
  *   - `format` must be 'poster', so this cannot smuggle artwork onto a talk;
  *   - `lockedFields` must not name posterUrl, which is the freeze an organizer
  *     sets when the printed programme has gone to the venue.
@@ -38,7 +41,7 @@ const posterSchema = z.object({
  */
 async function writePosterUrl(
   submissionId: string,
-  speakerId: string,
+  userId: string,
   posterUrl: string | null,
 ): Promise<boolean> {
   const updated = await db
@@ -47,7 +50,7 @@ async function writePosterUrl(
     .where(
       and(
         eq(submissions.id, submissionId),
-        eq(submissions.speakerId, speakerId),
+        writableBy(userId),
         eq(submissions.format, 'poster'),
         sql`not (${submissions.lockedFields} @> '["posterUrl"]'::jsonb)`,
       ),

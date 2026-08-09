@@ -7,7 +7,12 @@ import { getEvent } from '@/lib/queries';
 import { TASK_KIND_LABELS } from '@/lib/speaker-labels';
 import { speakerDetail } from '@/lib/speakers';
 import { Headshot } from '@/app/speakers/Headshot';
-import { completeSpeakerTaskAction, deleteAvailabilityAction, deleteSpeakerTaskAction } from '../actions';
+import {
+  completeSpeakerTaskAction,
+  deleteAvailabilityAction,
+  deleteSpeakerTaskAction,
+  reopenSpeakerTaskAction,
+} from '../actions';
 import { ReminderForm } from '../ReminderForm';
 import { AvailabilityForm } from './AvailabilityForm';
 import { ProfileForm } from './ProfileForm';
@@ -176,7 +181,20 @@ export default async function SpeakerDetailPage({
                           </Button>
                         </form>
                       </>
-                    ) : null}
+                    ) : (
+                      <form action={reopenSpeakerTaskAction}>
+                        <input type="hidden" name="taskId" value={task.id} />
+                        <input type="hidden" name="userId" value={user.id} />
+                        <Button
+                          type="submit"
+                          variant="secondary"
+                          className="px-2 py-1 text-xs"
+                          data-testid="task-reopen"
+                        >
+                          Not done after all
+                        </Button>
+                      </form>
+                    )}
                     <form action={deleteSpeakerTaskAction}>
                       <input type="hidden" name="taskId" value={task.id} />
                       <input type="hidden" name="userId" value={user.id} />

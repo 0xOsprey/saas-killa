@@ -1,7 +1,7 @@
 # User roles and every user flow
 
 What each kind of person can do in this app, screen by screen, control by control.
-175 flows and 796 numbered steps across four roles, written 2026-08-08 by reading
+176 flows and 799 numbered steps across four roles, written 2026-08-08 by reading
 the code rather than by clicking around.
 
 `SCOPE.md` answers "is the requirement built". This answers "what does a person
@@ -17,7 +17,7 @@ it writes, and what the person sees next. Identifiers are verbatim from the
 source. Nothing was renamed to read better, because a renamed symbol is a symbol
 you cannot grep for.
 
-Flow ids are prefixed by part: `ORG-1` to `ORG-105`, `SPK-1` to `SPK-25`,
+Flow ids are prefixed by part: `ORG-1` to `ORG-106`, `SPK-1` to `SPK-25`,
 `REV-1` to `REV-45`. Cross-references inside a part use the same ids.
 
 ## The role model in one paragraph
@@ -39,43 +39,64 @@ organizer without an explicit `reviewer` row can grade but never appears in the
 completion dashboard, because `reviewerCompletion` and `distributionInputs`
 inner-join `user_roles` on `reviewer`.
 
-## Defects found while tracing
+## Defects found while tracing, and what closed them
 
-This pass was read-only and changed no application code. Everything below was
-found by following a flow, and the first three I reproduced or traced myself
-rather than taking on trust.
+The tracing pass was read-only and changed no application code. Everything below
+was found by following a flow, and the first three were reproduced or traced
+rather than taken on trust. All three were fixed the same day. This section is
+now the record of what each one was and where its fix lives: a defect list that
+argues against working code is worse than no list.
 
-1. **`/awards` publishes the acceptance list before the agenda is published.**
-   `src/app/awards/page.tsx` has no `events.agenda_published` gate and no role
+1. **`/awards` published the acceptance list before the agenda was published.**
+   `src/app/awards/page.tsx` had no `events.agenda_published` gate and no role
    check, while `/agenda`, `/agenda/[id]`, `/speakers`, `/speakers/[id]`,
-   `/posters` and the embed feeds all have one. `awardDetails()` selects `title`
-   and `speakerName`, and `nominatableSubmissions()` restricts nominees to
-   `status = 'accepted'`. Reproduced against the seeded fixture, signed out,
-   with `agenda_published = false`: `/agenda` said "not published" and `/awards`
-   listed eight accepted titles each paired with its speaker name.
-2. **A co-author's content edit is discarded and reported as saved.**
+   `/posters` and the embed feeds all had one. Reproduced against the seeded
+   fixture, signed out, with `agenda_published = false`: `/agenda` said "not
+   published" and `/awards` listed eight accepted titles each paired with its
+   speaker name. Closed at `src/app/awards/page.tsx:41`, which gates on
+   `!event.agendaPublished && !isOrganizer` and renders "Nominees and results
+   open when the programme is published."
+2. **A co-author's content edit was discarded and reported as saved.**
    `/speaker/content` admits a co-author with `can_edit = true` at every gate,
-   because `myContent` and `loadOwned` scope with `writableBy`. Then
-   `applyTextEdit` at `src/lib/content.ts:231` scopes with
-   `eq(submissions.speakerId, opts.ownerId)`, which matches zero rows for a
-   co-author. The action still redirects to `?saved=1`. Its sibling
-   `applyAbstractEdit` at `src/lib/abstracts.ts:207` uses `writableBy` on the
-   same line, which is why editing an abstract works and editing content does
-   not.
-3. **Editing approved content does not send it back for moderation.**
-   `/speaker/content` promises that it will. `saveContentDraft` calls
-   `applyTextEdit` and redirects without ever calling `setContentStatus`, so the
-   live slide and recording URLs are rewritten while `content_status` stays
-   `approved` and the new material is public immediately.
+   because `myContent` and `loadOwned` scope with `writableBy`. `applyTextEdit`
+   then scoped with `eq(submissions.speakerId, opts.ownerId)`, which matches zero
+   rows for a co-author, and the action still redirected to `?saved=1`. Closed at
+   `src/lib/content.ts:245`, which uses `writableBy` — the predicate its sibling
+   `applyAbstractEdit` always used. Covered by `e2e/content.spec.ts`.
+3. **Editing approved content did not send it back for moderation.**
+   `saveContentDraft` called `applyTextEdit` and redirected without ever calling
+   `setContentStatus`, so live slide and recording URLs were rewritten while
+   `content_status` stayed `approved`. Closed at
+   `src/app/speaker/content/actions.ts:205`, which calls
+   `setContentStatus(row, user.id, 'draft')` on the same path.
 
-Not verified by me, reported by the pass that found them, listed so they are not
-lost: a "Slides" button on `/agenda/[id]` that renders for an accepted talk in
-`draft` state and then 404s for every anonymous visitor; `/login` discarding the
-`?error=missing` and `?error=expired` codes that `/auth/verify` redirects with;
-`addAuthorByEmail` letting a `can_edit` co-author grant `can_edit` onward
-through a hand-built POST; two flash messages that say "removed" whether or not
-a row matched; and the public People's Choice tally rendering unsealed while the
-committee tally is sealed.
+Five more were reported by the pass without being verified. Four are closed and
+one still stands:
+
+- **Closed.** A "Slides" button on `/agenda/[id]` rendering for an accepted talk
+  in `draft` state: every material now goes through `showMaterial`
+  (`src/app/agenda/[id]/page.tsx:92`).
+- **Closed.** `/login` discarding `?error=missing` and `?error=expired`: it reads
+  `searchParams` and renders `SIGN_IN_ERRORS[params.error]` into
+  `data-testid="login-error"`. Covered by `e2e/auth.spec.ts`.
+- **Closed.** The public People's Choice tally rendering unsealed while the
+  committee tally was sealed: `src/app/awards/page.tsx:204` passes
+  `sealed={open}`.
+- **Closed, as a decision rather than a fix.** The two flash messages that say
+  "removed" whether or not a row matched now say in their own comments that this
+  is deliberate, and a third joined them
+  (`src/app/speaker/content/actions.ts:295`,
+  `src/app/speaker/profile/actions.ts:104`,
+  `src/app/speaker/availability/actions.ts:85`). The scope is the caller's own
+  rows, so a miss means the row was already gone, and "removed" is what the
+  person wanted either way.
+- **Still open.** `addAuthorByEmail` (`src/lib/abstracts.ts:466`) takes
+  `canEdit` from its caller and gates only on `ownedSubmission(..., writableBy)`,
+  and `addMyAuthor` passes `canEdit: formData.get('canEdit') !== null`
+  unconditionally. The checkbox is hidden from a co-author, so the UI does not
+  offer it, but a hand-built POST from a `can_edit` co-author adds a fourth
+  person with `can_edit = true`. `setAuthorAccess` is carefully filer-only;
+  this is the back door round it. See B4.
 
 `reviewQueue()` deserves its own line because it is not a defect and reads like
 one. It is dead code with no call site, and three documents named it as the
@@ -497,14 +518,19 @@ Consumers of `writableBy` / `canWriteSubmission`:
 **What a `canEdit` co-author cannot do**, because these compare against `submissions.speakerId`
 directly rather than going through `writableBy`:
 
-- `confirmAttendance` (`src/app/speaker/actions.ts:26`)
-- `withdrawSubmission` (`src/app/speaker/actions.ts:41`)
+- `confirmAttendance` and `declineAttendance` (`src/app/speaker/actions.ts:25`, `:64`)
+- `withdrawSubmission` (`src/app/speaker/actions.ts:135`)
 - `setAuthorAccess` — hand out or take back `canEdit` (`src/lib/abstracts.ts:492`). The comment at
   `src/lib/abstracts.ts:478-481`: *"Only the filer may call this … a co-author who could grant
   access could grant it to anyone."*
-- `writePosterUrl`, both the paste and the upload door (`src/app/speaker/posters/actions.ts:41`)
 - Being removed from the submission: `removeAuthor` refuses when
   `opts.userId === owned.speakerId` (`src/lib/abstracts.ts:452`)
+
+`writePosterUrl` used to be on that list and is not any more. `myPosters` and
+`writePosterUrl` both take `writableBy` now
+(`src/lib/poster-queries.ts:275`, `src/app/speaker/posters/actions.ts:48`), which
+is the same shape as the content fix: `/speaker` offered a co-author the poster
+link and `/speaker/posters` then told them they had no posters at all.
 
 The UI states the split at `src/app/speaker/page.tsx:182-187`:
 
@@ -928,7 +954,7 @@ Signed-in-but-wrong-role never 403s at the page level — it renders a `Notice` 
 
 ---
 
-## Part 2 — Organizer flows (ORG-1 to ORG-105)
+## Part 2 — Organizer flows (ORG-1 to ORG-106)
 
 Exhaustive enumeration of every organizer flow.
 
@@ -1956,11 +1982,21 @@ Export: `.../organizer/speakers/export/route.ts`
 - **Route:** `/organizer/speakers/<id>`
 - **Precondition:** the task is open.
 - **Steps:**
-  1. Press **Complete** (`data-testid="task-complete"`) on the row → `completeSpeakerTaskAction`.
+  1. Press **Mark done** (`data-testid="task-complete"`) on the row → `completeSpeakerTaskAction`.
   2. Writes `speaker_tasks.completed_at = now()`.
   3. Revalidates the detail page, the roster and the onboarding screen.
 - **Error and refusal paths:** none.
-- **Ends:** the task leaves the outstanding counts and enters "Done this week" for seven days.
+- **Ends:** the task leaves the outstanding counts and enters "Done this week" for seven days. The button is replaced by ORG-106's undo.
+
+##### ORG-106. Put a task back on the list
+- **Route:** `/organizer/speakers/<id>`
+- **Precondition:** the task is done — `completed_at is not null`.
+- **Steps:**
+  1. Press **Not done after all** (`data-testid="task-reopen"`) → `reopenSpeakerTaskAction`.
+  2. Writes `speaker_tasks.completed_at = null`, with `isNotNull(completedAt)` in the WHERE so a double submit is a no-op rather than an error.
+  3. Revalidates the detail page, the roster, the onboarding screen and `/speaker`.
+- **Error and refusal paths:** none, and deliberately no confirmation: this **is** the confirmation step for ORG-75, which has none. Mis-clicking the undo costs one more click.
+- **Ends:** `completed_at` is null, the task rejoins the outstanding and overdue counts, and the row offers **Mark done** again. Delete (ORG-76) used to be the only route back, and it destroys the deadline and the chase history with it. Covered by `e2e/onboarding.spec.ts`.
 
 ##### ORG-76. Delete a task
 - **Route:** `/organizer/speakers/<id>`
@@ -2337,12 +2373,13 @@ Screen: `.../organizer/email/page.tsx` · Query: `recentEmails()` in `src/lib/em
 
 ### Cross-cutting notes
 
-**Where each destructive action's guard lives.** Time band, room and track deletion each use the
-query-string confirmation round trip (`?confirmDelete=`, `?confirmDeleteRoom=`,
-`?confirmDeleteTrack=`) so the page can stay a server component. Page deletion (ORG-98), task deletion
-(ORG-76), nomination withdrawal (ORG-87) and award deletion (ORG-93) have no confirmation at all.
-`autoNumberBoards` (ORG-82) silently overwrites hand-set numbers with no confirmation, which is the
-most surprising unconfirmed overwrite in the organizer surface.
+**Where each destructive action's guard lives.** Every one of them uses the same query-string
+confirmation round trip, so the pages can stay server components: `?confirmDelete=` for a time
+band (ORG-43) and a portal page (ORG-98), `?confirmRoom=` (ORG-56), `?confirmTrack=` (ORG-59),
+`?confirmTask=` (ORG-76) and `?confirmAward=` (ORG-93). Nomination withdrawal (ORG-87) and
+`autoNumberBoards` (ORG-82) take the second press without a query parameter, on a
+`confirm=yes` field. The board sweep only asks once a number exists to lose, because a first
+run on a blank hall has nothing to overwrite.
 
 **Archive rather than delete** holds for `form_questions.archived_at` (ORG-38), `evaluator_personas.active`
 (ORG-62) and `review_rounds` (never deleted, ORG-27). It does not hold for rooms, tracks, pages, tasks,
@@ -2412,12 +2449,15 @@ Three different scopes coexist, and the differences are load-bearing:
 
 | Scope | Used by | Co-author with `canEdit` passes? |
 |---|---|---|
-| `writableBy(userId)` | `mySubmissions`, `myContent`, `loadOwned`, `canWriteSubmission`, `applyAbstractEdit`, `setContentStatus`, `ownedSubmission` | yes |
-| `eq(submissions.speakerId, ownerId)` | `applyTextEdit` (`src/lib/content.ts:231`), `writePosterUrl`, `myPosters`, `confirmAttendance`, `withdrawSubmission`, `setAuthorAccess` | **no** |
+| `writableBy(userId)` | `mySubmissions`, `myContent`, `loadOwned`, `canWriteSubmission`, `applyAbstractEdit`, `applyTextEdit`, `setContentStatus`, `ownedSubmission`, `myPosters`, `writePosterUrl` | yes |
+| `eq(submissions.speakerId, ownerId)` | `confirmAttendance`, `declineAttendance`, `withdrawSubmission`, `setAuthorAccess` | **no** |
 | `eq(speakerTasks.userId, user.id)` | `completeTask`, `speakerTasksFor` | n/a — tasks are per person |
 
-The second row is where the co-author's powers stop, and one of those stops is a silent
-failure. See §SPK-19 and Bug B1.
+The second row is where the co-author's powers stop, and it is now a clean line: answering for
+the talk and handing out access are the filer's, everything to do with the work itself is
+shared. `applyTextEdit`, `myPosters` and `writePosterUrl` were on that row and moved to the
+first, each for the same reason — the surface admitted a co-author and the write underneath it
+refused, in one case while reporting success. See §SPK-19 and Bug B1.
 
 ##### 0.3 Field locks
 
@@ -2787,8 +2827,9 @@ Confirm and never Withdraw.
 - Ordering: `speakerTasksFor` sorts `completed_at is not null asc`, then `due_at asc nulls last`,
   then `created_at`, so outstanding leads.
 
-**Ends:** `speaker_tasks.completed_at` set. **No un-complete control exists** — the button is
-rendered only under `!done`.
+**Ends:** `speaker_tasks.completed_at` set. **No un-complete control exists on this screen** —
+the button is rendered only under `!done`, and `completeTask` only ever writes a timestamp. The
+undo is organizer-side, ORG-106, so a speaker who ticked the wrong row has to ask.
 
 ---
 
@@ -2817,11 +2858,14 @@ rendered only under `!done`.
   `confirmAttendance` scopes on `speaker_id` rather than `writableBy`.
 - No `submission_revisions` row is written for a confirmation; it is not in `REVISABLE_FIELDS`
   and no `logRevisions` call accompanies it.
-- **There is no decline control.** The only way to say no is SPK-9, Withdraw. A `confirm`-kind
-  `speaker_tasks` row can be ticked with "Mark done" (SPK-7) without ever pressing this button, and
-  nothing reconciles the two.
+- A `confirm`-kind `speaker_tasks` row can be ticked with "Mark done" (SPK-7) without ever
+  pressing this button, and nothing reconciles the two.
 
-**Ends:** `submissions.speaker_confirmed_at` set. It cannot be unset from any speaker surface.
+**Ends:** `submissions.speaker_confirmed_at` set. Declining is its own control now —
+`data-testid={`decline-<id>`}` calling `declineAttendance` (`src/app/speaker/actions.ts:64`),
+which writes `speaker_declined_at` and clears `speaker_confirmed_at` in the same update. So
+un-confirming is declining, saying no no longer collapses into Withdraw (SPK-9), and the grid
+raises `declined-warning` on a talk that still holds a slot.
 
 ---
 
@@ -3351,10 +3395,10 @@ to 60 seconds. The module says so: "the bytes are gone from this server immediat
 
 #### SPK-21. Put artwork on a poster
 
-- **Role:** **filer only** — see Bug B5
+- **Role:** the filer, or a co-author holding `can_edit` — was filer-only, see Bug B5
 - **Route:** `/speaker/posters`
-- **Precondition:** signed in; a submission with `format='poster'` and `speaker_id = user.id`.
-  `myPosters` returns them at **any** status. Empty state: "You have no poster submissions. Only
+- **Precondition:** signed in; a submission with `format='poster'` that `writableBy(user.id)`
+  admits. `myPosters` returns them at **any** status. Empty state: "You have no poster submissions. Only
   a submission filed as a poster can carry artwork."
 
 **Steps**
@@ -3376,8 +3420,8 @@ to 60 seconds. The module says so: "the bytes are gone from this server immediat
    not `type="url"`; hint "A PDF, an image or a video hosted anywhere you can link to. A video
    has to be a link; there is no video upload. Leave it empty to remove the artwork."
    Button **Save poster** (no testid).
-7. Both doors converge on `writePosterUrl(submissionId, speakerId, posterUrl)`, whose WHERE is
-   `id = ? AND speaker_id = ? AND format = 'poster' AND not (locked_fields @> '["posterUrl"]'::jsonb)`,
+7. Both doors converge on `writePosterUrl(submissionId, userId, posterUrl)`, whose WHERE is
+   `id = ? AND writableBy(?) AND format = 'poster' AND not (locked_fields @> '["posterUrl"]'::jsonb)`,
    returning the updated ids. Zero rows is reported as a refusal rather than a silent success.
 8. `uploadPoster` stores the file **before** checking ownership, on purpose: "`writePosterUrl` is
    the only thing that knows whether this poster is the caller's, and asking it twice would mean
@@ -3390,9 +3434,9 @@ to 60 seconds. The module says so: "the bytes are gone from this server immediat
 
 - `?error=url` ⇒ "That is not a URL we can link to. Paste the full address including https://,
   or upload a file." (from `linkField` failing, i.e. neither `http(s)://` nor `/files/`)
-- `?error=refused` ⇒ "That poster was not updated. It is either not yours, not a poster, or its
-  artwork has been frozen by an organizer." — one message for all three, and it is also what a
-  `canEdit` co-author gets.
+- `?error=refused` ⇒ "That poster was not updated. It is either not one you can edit, not a
+  poster, or its artwork has been frozen by an organizer." — one message for all three. It used
+  to say "not yours", which was wrong twice over once co-authors were admitted.
 - `?message=<reason>` ⇒ the `saveUpload` refusal verbatim (wrong type, over 25.0 MB, no file
   chosen). The page distinguishes the two on purpose: "`error` is a key into a fixed table;
   `message` is a refusal the upload library wrote."
@@ -3465,14 +3509,15 @@ is no "coming soon" state and no way to tell a draft page from one that never ex
    filed this manages the billing and who may edit."
 4. **`/speaker/content`** lists the submission (`myContent` uses `writableBy`). They can attach
    and remove **their own** documents (SPK-19), submit for review and pull back out of review
-   (`setContentStatus` uses `writableBy`) — but their edits to `slidesUrl`, `recordingUrl` and
-   `resourcesNote` are **silently discarded**. See Bug B1.
-5. **`/speaker/posters`** shows `<Empty>You have no poster submissions.</Empty>`, because
-   `myPosters` is scoped `eq(submissions.speakerId, speakerId)`. The `poster-<id>` link on
-   `/speaker` still renders for them.
+   (`setContentStatus` uses `writableBy`), and their edits to `slidesUrl`, `recordingUrl` and
+   `resourcesNote` land: `applyTextEdit` takes `writableBy` too. It did not, and reported success
+   anyway — see Bug B1, now closed.
+5. **`/speaker/posters`** lists the poster and takes their artwork, through `myPosters` and
+   `writePosterUrl`, both `writableBy`. The `poster-<id>` link on `/speaker` has always rendered
+   for them; for a while it led to "You have no poster submissions."
 6. **`/files/<id>`** — they can read the submission's documents, because `readableUpload`'s
    document branch runs `writableBy(viewer.id)`.
-7. **Not offered:** Confirm attendance, Withdraw, poster artwork, and every mail. Decision mail
+7. **Not offered:** Confirm attendance, Decline, Withdraw, and every mail. Decision mail
    (`acceptanceMail`, `rejectionMail`), schedule mail (`scheduleNoticeMail`) and
    `contentReturnedMail` all address `submissions.speaker_id` alone.
 
@@ -3516,30 +3561,32 @@ The only route back in is SPK-12, run by the filer.
 
 ---
 
-#### What a speaker apparently cannot do
+#### What a speaker cannot do
 
-1. **Set their own availability.** `speaker_availability` has no speaker-facing route at all.
-   The only writers are `createAvailabilityAction` and `deleteAvailabilityAction` in
-   `src/app/organizer/speakers/actions.ts`, whose comment says outright: "this is the only place
-   they are written." The form is `src/app/organizer/speakers/[id]/AvailabilityForm.tsx`, inside
-   the organizer layout. A speaker cannot see, add or remove a blackout window; they have to ask.
-2. **Decline an accepted talk.** SPK-8 offers Confirm and nothing else. Declining collapses into
-   Withdraw (SPK-9), which is a one-click, unconfirmed, speaker-irreversible status change with no
-   revision row and no mail to anyone.
-3. **Un-confirm.** `speaker_confirmed_at` has no speaker-side reset.
-4. **Un-complete a task.** The "Mark done" button is rendered only under `!done`, and
-   `completeTask` only ever writes a timestamp.
-5. **See a decision or a schedule change in the app before it is emailed.** `/speaker` shows the
-   status badge and the slot line as soon as an organizer flips them, but there is no notification
-   surface, no "read" state, and nothing that distinguishes "accepted and told" from "accepted and
-   not yet told" — that lives in `decision_emailed_at` and `schedule_notice_key`, neither of which
-   is selected by `mySubmissions`.
-6. **Reply to `contentReturnedMail`.** The organizer's reason is in the email only; nothing on
-   `/speaker/content` shows why content came back. The page shows the status flipped to Draft
-   with no note attached.
-7. **See their own reviews or scores.** Nothing under `/speaker/**` selects from `reviews`.
-8. **Withdraw a proposal they are a co-author on**, edit poster artwork as a co-author, or grant
-   access onward as a co-author. All three are deliberate.
+Six of the ten this pass listed have since been built. They are kept, struck and dated, because
+the reader most likely to open this section is looking for whether a wall is real.
+
+1. ~~**Set their own availability.**~~ Built: `/speaker/availability`, with
+   `src/app/speaker/availability/actions.ts` as a second writer of `speaker_availability`
+   alongside the organizer's.
+2. ~~**Decline an accepted talk.**~~ Built: `declineAttendance` and `data-testid={`decline-<id>`}`
+   on `/speaker`. Saying no no longer collapses into Withdraw.
+3. ~~**Un-confirm.**~~ Built, as the same control: `declineAttendance` clears
+   `speaker_confirmed_at` while it sets `speaker_declined_at`.
+4. **Un-complete a task.** Still true on `/speaker`. The "Mark done" button is rendered only
+   under `!done` and `completeTask` only ever writes a timestamp. The organizer can undo it for
+   them (ORG-106).
+5. ~~**See a decision or a schedule change in the app before it is emailed.**~~ Built:
+   `mySubmissions` selects `decision_emailed_at` and `schedule_notice_key`, so `/speaker`
+   distinguishes "accepted and told" from "accepted and not yet told".
+6. ~~**Reply to `contentReturnedMail`.**~~ Half built: the organizer's reason is on the page at
+   `src/app/speaker/content/page.tsx:167`, from `submissions.content_return_reason`. There is
+   still no reply control; the mail is the channel.
+7. **See their own reviews or scores.** Nothing under `/speaker/**` selects from `reviews`. This
+   one is deliberate and should stay while review is blind.
+8. **Withdraw a proposal they are a co-author on**, or grant access onward as a co-author. Both
+   deliberate: answering for the talk and handing out access are the filer's. Poster artwork used
+   to be on this line and is not any more.
 9. **Upload a video.** Stated in the poster hint; `recordingUrl` is `type="url"` with no file
    input, and `SNIFFED_TYPES` has no video signature.
 10. **Delete their account or any submission.** There is no delete anywhere in the speaker
@@ -3549,7 +3596,11 @@ The only route back in is SPK-12, run by the filer.
 
 #### Bugs and sharp edges found while tracing
 
-**B1 — a co-author's content edits are silently discarded.** `/speaker/content` admits a
+Seven of the eight are closed. Each keeps its original description, because the description is
+what makes the fix legible, with a closing line naming what fixed it. B4 is the one still
+standing.
+
+**B1 — CLOSED — a co-author's content edits are silently discarded.** `/speaker/content` admits a
 co-author with `can_edit = true` at every gate: `myContent` and `loadOwned` both use
 `writableBy`. But `applyTextEdit` (`src/lib/content.ts:231`) builds its scope as
 `and(eq(submissions.id, opts.submissionId), eq(submissions.speakerId, opts.ownerId))`, and
@@ -3564,48 +3615,70 @@ row written but `slides_url` left untouched (an orphan), and `submitContentForRe
 `'pending'` on a submission whose content columns are all still null.
 `applyAbstractEdit` in `src/lib/abstracts.ts:207` — the same shape, one file over — uses
 `writableBy(opts.ownerId)`, which is what makes SPK-10 work for a co-author.
+*Closed:* `applyTextEdit` takes `writableBy` (`src/lib/content.ts:245`), and
+`e2e/content.spec.ts` asserts the co-author's edit is in the database afterwards rather than
+only that the flash said so.
 
-**B2 — `/login` swallows its own error codes.** `/auth/verify` redirects to `/login?error=missing`
+**B2 — CLOSED — `/login` swallows its own error codes.** `/auth/verify` redirects to `/login?error=missing`
 and `/login?error=expired`, but `LoginPage` is a client component that takes no props and never
 reads `searchParams`. A speaker who clicks a link twice, or clicks one after 15 minutes, lands on
 a clean sign-in form with no indication that anything went wrong.
+*Closed:* the page reads `searchParams` and renders `SIGN_IN_ERRORS[params.error]` into
+`data-testid="login-error"`, with three tests in `e2e/auth.spec.ts`.
 
-**B3 — "editing it moves it back to a draft" is not implemented.** `/speaker/content` tells an
+**B3 — CLOSED — "editing it moves it back to a draft" is not implemented.** `/speaker/content` tells an
 approved speaker: "Approved and live on the agenda. Editing it below moves it back to a draft you
 will need to resubmit." `saveContentDraft` never calls `setContentStatus`; only
 `submitContentForReview` and `withdrawContentFromReview` do. Saving a draft edit on an approved
 submission therefore rewrites the live URLs while `content_status` stays `'approved'`, and the
 new content publishes immediately with no organizer pass.
+*Closed:* `saveContentDraft` calls `setContentStatus(row, user.id, 'draft')`
+(`src/app/speaker/content/actions.ts:205`), so the promise the screen makes is the behaviour.
 
-**B4 — a co-author can grant themselves nothing, but can grant a stranger everything.**
+**B4 — STILL OPEN — a co-author can grant themselves nothing, but can grant a stranger everything.**
 `addMyAuthor` reads `canEdit: formData.get('canEdit') !== null` unconditionally, and
 `addAuthorByEmail`'s only gate is `ownedSubmission(..., writableBy)`. The checkbox is hidden from
 a co-author (`accessAction ? … : null`), so the UI does not offer it, but a hand-built POST from
 a `can_edit` co-author would add a fourth person with `can_edit = true`. `setAuthorAccess` is
 carefully filer-only; `addAuthorByEmail` is the back door round it.
+*Still true.* The narrowest fix is for `addAuthorByEmail` to ignore `canEdit` unless
+`opts.ownerId === owned.speakerId`, which is the rule `setAuthorAccess` already enforces.
 
-**B5 — an uploaded deck on a `'draft'` submission is advertised publicly and 404s.**
+**B5 — CLOSED — an uploaded deck on a `'draft'` submission is advertised publicly and 404s.**
 `contentIsPublic` and the agenda detail page's `showMaterial` both publish a populated field at
 `content_status = 'draft'`. `readableUpload`'s `slides` branch requires
 `status === 'accepted' && contentStatus === 'approved'`. So an accepted talk in `'draft'` with an
 uploaded deck renders a "Slides" button on `/agenda/<id>` that returns 404 for every anonymous
 visitor. A pasted third-party URL in the same column works fine — the divergence only bites the
 upload path.
+*Closed:* the agenda detail page runs every material through `showMaterial`
+(`src/app/agenda/[id]/page.tsx:92`), so the button and the file agree about who may have it.
 
-**B6 — two flash messages lie on failure.** `removeHeadshot` redirects to `?removed=1` ("Headshot
-removed.") whether or not `deleteUpload` matched a row, and `removeDocument` redirects to
-`?removed=1` ("Document removed.") on the same terms — it only skips the revision log.
+**B6 — CLOSED, as a decision — two flash messages lie on failure.** `removeHeadshot` redirects to
+`?removed=1` ("Headshot removed.") whether or not `deleteUpload` matched a row, and
+`removeDocument` redirects to `?removed=1` ("Document removed.") on the same terms — it only
+skips the revision log.
+*Resolved the other way:* all three removers (headshot, document, availability) now say in their
+own comments that this is deliberate. Each is scoped to the caller's own rows, so a miss means
+the row was already gone, and reporting a failure would be telling somebody their intent failed
+when it had already succeeded.
 
-**B7 — the `posterUrl` lock does not use the shared comparator.** Every other lock in the app
-goes through `isFieldLocked` / `isLocked`, which flatten underscores and case precisely because
+**B7 — CLOSED — the `posterUrl` lock does not use the shared comparator.** Every other lock in the
+app goes through `isFieldLocked` / `isLocked`, which flatten underscores and case precisely because
 "a lock that silently does not hold is worse than no lock at all". The poster lock is a literal
 `lockedFields.includes('posterUrl')` in the page and a literal `@> '["posterUrl"]'` in the action.
 `posterUrl` is also absent from `LOCKABLE_FIELDS`, so it is not clear which organizer control is
 meant to write it.
+*Closed:* `posterUrl` is in `LOCKABLE_FIELDS` with a comment recording that it "was read before
+it could be written", the page reads it through `isLocked`, and the action's jsonb containment
+is safe because `withLock` is the only writer of the column and always stores the canonical key.
 
-**B8 — `/speaker` links a co-author to a page that will be empty.** The `poster-<id>` link renders
-for anyone with an accepted poster in `mySubmissions`, co-authors included; `/speaker/posters`
-scopes on `speaker_id` and shows them "You have no poster submissions."
+**B8 — CLOSED — `/speaker` links a co-author to a page that will be empty.** The `poster-<id>` link
+renders for anyone with an accepted poster in `mySubmissions`, co-authors included;
+`/speaker/posters` scopes on `speaker_id` and shows them "You have no poster submissions."
+*Closed:* `myPosters` and `writePosterUrl` both take `writableBy`, so the link leads somewhere
+and the artwork form underneath it accepts the write. Covered by `e2e/posters.spec.ts`, which
+checks the credited-only case refuses and the `can_edit` case saves.
 
 ---
 

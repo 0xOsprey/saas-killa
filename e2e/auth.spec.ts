@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { withDb } from './db';
 import { extractMagicLink, waitForMail } from './mailbox';
 
 /**
@@ -93,5 +94,67 @@ test('a signed-in speaker gets 403 from every organizer route handler', async ({
   for (const path of GUARDED) {
     const response = await page.goto(path);
     expect(response?.status(), path).toBe(403);
+  }
+});
+
+/**
+ * Dead rows are actually removed, and an ordinary sign-in is what removes them.
+ *
+ * `currentUser` refuses an expired session but cannot delete it: it runs during
+ * render, and Next forbids writes from a render pass. Nothing else ever touched
+ * either table, so `auth_sessions` and `magic_link_tokens` grew for the life of
+ * the deployment. That is invisible from every screen, which is why this is the
+ * one spec in the suite that opens the database directly: the subject is a row
+ * that has already stopped being usable, so no cookie and no link can reach it.
+ *
+ * The live row is the other half and the one that would matter if the predicate
+ * were wrong by an inequality: a sweep that took `expires_at > now()` as well
+ * would sign out everybody who is currently using the app.
+ */
+test('signing in sweeps expired sessions and expired links, and spares live ones', async ({
+  page,
+}) => {
+  const marker = `e2e-sweep-${Date.now()}`;
+  const stale = new Date(Date.now() - 60 * 60 * 1000);
+  const live = new Date(Date.now() + 60 * 60 * 1000);
+
+  const { staleSession, liveSession } = await withDb(async (sql) => {
+    const [user] = await sql`select id from users where email = ${SPEAKER}`;
+    expect(user, `no ${SPEAKER} in the fixture`).toBeTruthy();
+    const [dead] = await sql`
+      insert into auth_sessions (user_id, expires_at) values (${user!.id}, ${stale}) returning id`;
+    const [alive] = await sql`
+      insert into auth_sessions (user_id, expires_at) values (${user!.id}, ${live}) returning id`;
+    await sql`
+      insert into magic_link_tokens (user_id, token_hash, expires_at)
+      values (${user!.id}, ${marker}, ${stale})`;
+    return { staleSession: dead!.id as string, liveSession: alive!.id as string };
+  });
+
+  try {
+    // Any sign-in at all. The sweep is hung off `startSession`, so it is the act
+    // of opening a session that pays for the cleanup, not a cron nobody runs.
+    await signIn(page, 'speaker2@example.com');
+
+    await withDb(async (sql) => {
+      const dead = await sql`select id from auth_sessions where id = ${staleSession}`;
+      expect(dead.length, 'expired session survived the sweep').toBe(0);
+
+      const token = await sql`select id from magic_link_tokens where token_hash = ${marker}`;
+      expect(token.length, 'expired magic link survived the sweep').toBe(0);
+
+      const alive = await sql`select id from auth_sessions where id = ${liveSession}`;
+      expect(alive.length, 'live session was swept away').toBe(1);
+    });
+
+    // And the browser that just signed in is still signed in, which is the same
+    // claim from the outside: the sweep runs after its own row is written.
+    await page.goto('/speaker');
+    await expect(page.getByTestId('current-user')).toHaveText('speaker2@example.com');
+  } finally {
+    await withDb(async (sql) => {
+      await sql`delete from auth_sessions where id = ${liveSession}`;
+      await sql`delete from magic_link_tokens where token_hash = ${marker}`;
+    });
   }
 });

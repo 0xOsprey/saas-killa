@@ -2,6 +2,7 @@ import { type SQL, and, asc, count, eq, ilike, isNotNull, or, sql } from 'drizzl
 import { db } from '@/db';
 import { bookmarks, submissionAuthors, submissions, tracks, users } from '@/db/schema';
 import type { ContentStatus, SubmissionStatus } from '@/db/schema';
+import { writableBy } from './abstracts';
 
 /**
  * Every read the poster hall makes. Kept out of `src/lib/poster.ts` so that
@@ -263,8 +264,17 @@ export type SpeakerPosterRow = {
   lockedFields: string[];
 };
 
-/** The caller's own posters, at any status. Scoped by speaker id in the WHERE. */
-export async function myPosters(speakerId: string): Promise<SpeakerPosterRow[]> {
+/**
+ * The posters this person may act on, at any status: their own, plus any a filer
+ * granted them `can_edit` on.
+ *
+ * `writableBy`, not an equality on `speakerId`. `/speaker` builds its poster
+ * link out of `mySubmissions`, which is already `writableBy`, so a co-author on
+ * a poster was offered the link and then told on arrival that they had no
+ * posters at all. Scoped in the WHERE either way, so nothing widens beyond the
+ * predicate the rest of the app writes with.
+ */
+export async function myPosters(userId: string): Promise<SpeakerPosterRow[]> {
   return db
     .select({
       id: submissions.id,
@@ -278,6 +288,6 @@ export async function myPosters(speakerId: string): Promise<SpeakerPosterRow[]> 
     })
     .from(submissions)
     .leftJoin(tracks, eq(tracks.id, submissions.trackId))
-    .where(and(eq(submissions.speakerId, speakerId), eq(submissions.format, 'poster')))
+    .where(and(writableBy(userId), eq(submissions.format, 'poster')))
     .orderBy(asc(submissions.title));
 }

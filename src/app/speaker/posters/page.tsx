@@ -22,7 +22,7 @@ import { savePosterUrl, uploadPoster } from './actions';
 const ERRORS: Record<string, string> = {
   url: 'That is not a URL we can link to. Paste the full address including https://, or upload a file.',
   refused:
-    'That poster was not updated. It is either not yours, not a poster, or its artwork has been frozen by an organizer.',
+    'That poster was not updated. It is either not one you can edit, not a poster, or its artwork has been frozen by an organizer.',
 };
 
 /**

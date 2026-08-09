@@ -11,6 +11,10 @@ import { extractMagicLink, waitForMail } from './mailbox';
 
 const ORGANIZER = 'organizer@example.com';
 
+/** Rows on the decision board. The uuid is what tells a row from a control that
+ *  happens to start with the same word; see the note in `submissions.spec.ts`. */
+const ROWS = /^submission-[0-9a-f]{8}-/;
+
 async function signInVia(page: Page, email: string) {
   await page.goto('/login');
   await page.getByTestId('login-email').fill(email);
@@ -60,6 +64,145 @@ async function dragSlot(page: Page, source: Locator, target: Locator) {
   await page.mouse.move(...at(to));
   await page.mouse.up();
 }
+
+/**
+ * Open the fallback form without closing it.
+ *
+ * A server action re-renders the page around the `<details>`, which React keeps
+ * open. Clicking the summary unconditionally, which is what the no-script test
+ * can do because it starts from a fresh navigation each time, would shut it.
+ */
+async function openFallback(page: Page): Promise<Locator> {
+  const fallback = page.getByTestId('schedule-fallback');
+  await expect(fallback).toBeVisible();
+  if (!(await fallback.evaluate((el) => (el as HTMLDetailsElement).open))) {
+    await fallback.locator('summary').click();
+  }
+  return fallback;
+}
+
+/** Slot options as `{ value, label }`, empty ones only. A taken slot's label carries an em dash. */
+async function emptySlots(page: Page): Promise<{ value: string; label: string }[]> {
+  const fallback = await openFallback(page);
+  const options = await fallback
+    .getByTestId('fallback-slot')
+    .locator('option')
+    .evaluateAll((nodes) =>
+      nodes.map((node) => ({
+        value: node.getAttribute('value') ?? '',
+        label: (node.textContent ?? '').trim(),
+      })),
+    );
+  return options.filter((option) => option.value !== '' && !option.label.includes('—'));
+}
+
+async function placeVia(page: Page, submissionId: string, slotId: string) {
+  const fallback = await openFallback(page);
+  await fallback.getByTestId('fallback-talk').selectOption(submissionId);
+  await fallback.getByTestId('fallback-slot').selectOption(slotId);
+  await fallback.getByTestId('fallback-place').click();
+  await expect(page.locator(`[data-testid="slot-${slotId}"]`)).not.toContainText('empty');
+}
+
+async function clearVia(page: Page, slotId: string) {
+  const fallback = await openFallback(page);
+  await fallback.getByTestId('fallback-clear-slot').selectOption(slotId);
+  await fallback.getByTestId('fallback-clear').click();
+  await expect(page.locator(`[data-testid="slot-${slotId}"]`)).toContainText('empty');
+}
+
+/**
+ * The one scheduling rule this app enforces, and the only warning of the four
+ * that had no test: `availability-warning`, `declined-warning` and
+ * `withdrawn-warning` all did.
+ *
+ * The fixture cannot raise it on its own. Every accepted talk in the seed
+ * belongs to a different speaker, which is why the situation has to be built
+ * here: an undecided proposal by a speaker who already has one accepted is
+ * accepted, both are placed in the same band, and the pair is taken apart again
+ * on the way out.
+ *
+ * Placement goes through the fallback form rather than the grid because the band
+ * is what matters and the form's options name it. Both paths call the same
+ * server action, and the grid gesture is covered by the drag test above.
+ */
+test('two talks by one speaker in the same band raise the double-booking warning', async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  await signInVia(page, ORGANIZER);
+  await page.goto('/organizer/schedule');
+
+  const pool = await page.locator('[data-testid^="pool-"]').evaluateAll((nodes) =>
+    nodes.map((node) => ({
+      id: (node.getAttribute('data-testid') ?? '').replace('pool-', ''),
+      speaker: (node.querySelectorAll('span')[1]?.textContent ?? '').trim(),
+    })),
+  );
+  expect(pool.length, 'unscheduled accepted talks').toBeGreaterThan(0);
+
+  // The board row reads "Name · email", so matching on the name with its
+  // separator is what stops "Speaker 1" matching Speaker 10's row.
+  await page.goto('/organizer/submissions?status=submitted&per=all');
+  const undecided = await page.getByTestId(ROWS).evaluateAll((nodes) =>
+    nodes.map((node) => ({
+      id: (node.getAttribute('data-testid') ?? '').replace('submission-', ''),
+      text: node.textContent ?? '',
+    })),
+  );
+  const second = undecided.find(
+    (row) =>
+      !row.text.includes('Poster / ePoster') &&
+      pool.some((item) => row.text.includes(`${item.speaker} · `)),
+  );
+  expect(second, 'an undecided talk by a speaker who already has one accepted').toBeTruthy();
+  const first = pool.find((item) => second!.text.includes(`${item.speaker} · `))!;
+
+  await page.getByTestId(`accept-${second!.id}`).click();
+  await expect(page.getByTestId(`submission-${second!.id}`)).toHaveCount(0);
+
+  try {
+    await page.goto('/organizer/schedule');
+    // Two empty boxes at the same time, which is what "the same band" is: a band
+    // is one slot in every room at one instant, so the label before the room
+    // name is the band key.
+    const empty = await emptySlots(page);
+    const byBand = new Map<string, string[]>();
+    for (const slot of empty) {
+      const band = slot.label.split(' · ')[0]!;
+      byBand.set(band, [...(byBand.get(band) ?? []), slot.value]);
+    }
+    const pair = [...byBand.values()].find((slots) => slots.length >= 2);
+    expect(pair, 'a band with two free rooms').toBeTruthy();
+    const [slotA, slotB] = pair!;
+
+    await placeVia(page, first.id, slotA!);
+    await expect(page.getByTestId('conflict-warning')).toHaveCount(0);
+
+    await placeVia(page, second!.id, slotB!);
+    await expect(page.getByTestId('conflict-warning')).toContainText(first.speaker);
+    // Named on the boxes as well as in the banner. The banner scrolls off a long
+    // grid, and the cell is where the organizer is looking.
+    await expect(page.locator(`[data-testid="slot-${slotA}"]`)).toContainText(
+      'speaker double-booked',
+    );
+    await expect(page.locator(`[data-testid="slot-${slotB}"]`)).toContainText(
+      'speaker double-booked',
+    );
+
+    // Reported, never blocked: both placements went through. Moving one out is
+    // what clears it, which is the other half of the claim.
+    await clearVia(page, slotB!);
+    await expect(page.getByTestId('conflict-warning')).toHaveCount(0);
+    await clearVia(page, slotA!);
+  } finally {
+    // Back to undecided, so the pool, the review queue and the counts this
+    // file's neighbours read are the ones the seed made.
+    await page.goto(`/organizer/submissions?q=${second!.id}`);
+    await page.getByRole('button', { name: 'Undecide' }).click();
+    await expect(page.getByTestId(`submission-${second!.id}`)).toContainText('Under review');
+  }
+});
 
 test('an organizer drags a placed talk into another box', async ({ page }) => {
   await signInVia(page, ORGANIZER);

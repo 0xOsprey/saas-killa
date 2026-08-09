@@ -1,5 +1,5 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
-import { and, eq, gt, isNull } from 'drizzle-orm';
+import { and, eq, gt, isNull, lte } from 'drizzle-orm';
 import { cookies } from 'next/headers';
 import { db } from '@/db';
 import { authSessions, magicLinkTokens, userRoles, users } from '@/db/schema';
@@ -95,12 +95,37 @@ export async function consumeMagicLink(token: string): Promise<User | null> {
   return (await db.query.users.findFirst({ where: eq(users.id, claimed.userId) })) ?? null;
 }
 
+/**
+ * Delete every session and every magic link that has outlived its expiry.
+ *
+ * `currentUser` refuses an expired session and cannot delete it: it runs during
+ * render, and Next forbids writes from a render pass. So the row was left for a
+ * cleanup that did not exist, and both tables grew for the life of the
+ * deployment with nothing ever removing anything.
+ *
+ * This is that cleanup, hung off `startSession`. Signing in is the act that puts
+ * rows in both tables, so the work scales with the traffic that causes it and an
+ * instance nobody is using does none. It is two indexed deletes on a timestamp,
+ * which is affordable on a request that already writes.
+ *
+ * A spent link inside its 15 minutes is left to age out rather than deleted
+ * here. Removing it early would change nothing a person sees: `/auth/verify`
+ * redirects to `?error=expired` for a link that is spent, one that is stale and
+ * one that never existed, all three.
+ */
+export async function sweepExpiredAuth(now = new Date()): Promise<void> {
+  await db.delete(authSessions).where(lte(authSessions.expiresAt, now));
+  await db.delete(magicLinkTokens).where(lte(magicLinkTokens.expiresAt, now));
+}
+
 export async function startSession(userId: string): Promise<void> {
   const [session] = await db
     .insert(authSessions)
     .values({ userId, expiresAt: new Date(Date.now() + SESSION_TTL_MS) })
     .returning();
   if (!session) throw new Error('failed to create auth session');
+
+  await sweepExpiredAuth();
 
   const jar = await cookies();
   jar.set(SESSION_COOKIE, `${session.id}.${sign(session.id)}`, {
@@ -126,8 +151,8 @@ export type CurrentUser = User & { roles: Role[] };
 /**
  * Resolve the signed-in user, or null. Every check has to pass: the cookie's
  * HMAC, the session row's existence, and its expiry. An expired row is left for
- * cleanup rather than deleted here, because this runs during render and Next
- * forbids writes from a render pass.
+ * `sweepExpiredAuth` rather than deleted here, because this runs during render
+ * and Next forbids writes from a render pass.
  */
 export async function currentUser(): Promise<CurrentUser | null> {
   const jar = await cookies();
