@@ -97,8 +97,11 @@ schedule unusable. The warning persists until it is resolved.
 **Times are stored as `timestamptz` and rendered in the event's timezone.** The
 schedule form posts a bare wall clock with no offset;
 `wallClockToInstant()` reads it as a time in the event's zone rather than the
-server's, which is what makes a London schedule come out right on a UTC host and
-across a DST boundary.
+server's, which is what makes a London schedule come out right on a UTC host.
+It measures the zone's offset twice, because the first measurement is taken at
+the wall clock read as UTC and that instant can sit on the far side of a DST
+transition from the real one: 03:00 on the March morning New York goes forward
+stored as 08:00Z and read back as 04:00 until the second pass was added.
 
 **A re-sent invitation updates the entry the speaker already has.** The UID of
 every `.ics` is derived from the submission id and `SEQUENCE` rises with each
@@ -138,7 +141,7 @@ its rubric breakdown through a tool call rather than parseable prose. Without
 pnpm test          # Playwright; resets the database first
 ```
 
-Sixteen specs, 64 tests, no unit runner. `pipeline.spec.ts` walks one proposal the
+Sixteen specs, 65 tests, no unit runner. `pipeline.spec.ts` walks one proposal the
 length of the pipeline: submit, grade, accept, notify, schedule, publish, then
 read it as a signed-out visitor, checking the acceptance email actually landed.
 `smoke.spec.ts` opens every route the nav leads to, reading the tab list off the

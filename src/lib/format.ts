@@ -67,21 +67,13 @@ export function dayKey(date: Date, timezone: string): string {
 }
 
 /**
- * Turn a `datetime-local` value into the instant it names in the event's
- * timezone.
+ * The wall clock a zone is showing at an instant, as a UTC-based number.
  *
- * `new Date('2026-11-06T09:00')` parses as the *server's* local time, which for
- * an organizer in London filling in a London schedule on a UTC host is an hour
- * out for half the year. Rather than depend on a timezone library, the string
- * is read as UTC, formatted back into the target zone, and the difference is
- * the offset to subtract. Formatting the actual instant is what makes this
- * correct across a DST boundary: the offset is the one in force on that date,
- * not today's.
+ * Subtracting the instant from it gives that zone's offset then, which is the
+ * only thing this file needs and the reason there is no timezone dependency in
+ * the graph.
  */
-export function wallClockToInstant(wallClock: string, timezone: string): Date {
-  const asUtc = new Date(`${wallClock.length === 16 ? `${wallClock}:00` : wallClock}Z`);
-  if (Number.isNaN(asUtc.getTime())) throw new Error(`unparseable date: ${wallClock}`);
-
+function zoneWallClock(instant: Date, timezone: string): number {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: timezone,
     hourCycle: 'h23',
@@ -92,13 +84,13 @@ export function wallClockToInstant(wallClock: string, timezone: string): Date {
     minute: '2-digit',
     second: '2-digit',
   })
-    .formatToParts(asUtc)
+    .formatToParts(instant)
     .reduce<Record<string, string>>((acc, part) => {
       acc[part.type] = part.value;
       return acc;
     }, {});
 
-  const roundTripped = Date.UTC(
+  return Date.UTC(
     Number(parts.year),
     Number(parts.month) - 1,
     Number(parts.day),
@@ -106,7 +98,40 @@ export function wallClockToInstant(wallClock: string, timezone: string): Date {
     Number(parts.minute),
     Number(parts.second),
   );
-  return new Date(asUtc.getTime() - (roundTripped - asUtc.getTime()));
+}
+
+/**
+ * Turn a `datetime-local` value into the instant it names in the event's
+ * timezone.
+ *
+ * `new Date('2026-11-06T09:00')` parses as the *server's* local time, which for
+ * an organizer in London filling in a London schedule on a UTC host is an hour
+ * out for half the year. Rather than depend on a timezone library, the string
+ * is read as UTC, the zone's offset is measured, and the offset is subtracted.
+ *
+ * Twice, not once. The first measurement is taken at the wrong instant by
+ * construction — the wall clock read as UTC — and when that instant sits on the
+ * far side of a DST transition from the real one, it reports the wrong offset.
+ * New York on 2026-03-08, the morning the clocks go forward at 02:00 local:
+ * 03:00 read as UTC is still 22:00 EST the previous evening, so the first pass
+ * subtracts -5 and lands on 08:00Z, which is 04:00 EDT. An hour late, on the
+ * one day of the year an organizer is most likely to be checking. The second
+ * pass measures the offset at the candidate instant and re-subtracts, which
+ * converges because the offset either side of a transition is constant.
+ *
+ * A wall clock inside the skipped hour names no instant at all. It resolves to
+ * the one an hour either side rather than throwing, on the grounds that a form
+ * refusing 02:30 with an explanation of civil time is worse than a schedule
+ * with a time in it an organizer can see and move.
+ */
+export function wallClockToInstant(wallClock: string, timezone: string): Date {
+  const asUtc = new Date(`${wallClock.length === 16 ? `${wallClock}:00` : wallClock}Z`);
+  if (Number.isNaN(asUtc.getTime())) throw new Error(`unparseable date: ${wallClock}`);
+
+  const target = asUtc.getTime();
+  const firstPass = target - (zoneWallClock(asUtc, timezone) - target);
+  const offset = zoneWallClock(new Date(firstPass), timezone) - firstPass;
+  return new Date(target - offset);
 }
 
 /** Render an instant as a `datetime-local` value in the event's timezone. */

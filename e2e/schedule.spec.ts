@@ -262,6 +262,54 @@ test('a talk on the agenda carries its own star count, not the whole site', asyn
 });
 
 /**
+ * The morning the clocks go forward.
+ *
+ * `wallClockToInstant` measured the zone's offset once, at the wall clock read
+ * as UTC, which is by construction the wrong instant. When that instant sits on
+ * the far side of a DST transition from the real one the offset is an hour out:
+ * 03:00 on 2026-03-08 in New York stored as 08:00Z, which reads back as 04:00.
+ * London hides it, because its transitions happen at 01:00 UTC and the guess
+ * lands on the same side; this test therefore moves the event to New York and
+ * puts it back.
+ */
+test('a wall clock on the morning the clocks go forward stores the time it says', async ({
+  page,
+}) => {
+  const WALL = '2026-03-08T03:00';
+  const RIGHT = '2026-03-08T07:00:00.000Z';
+  const SINGLE_PASS = '2026-03-08T08:00:00.000Z';
+
+  await signInVia(page, ORGANIZER);
+  await page.goto('/organizer/settings');
+  const timezone = await page.getByTestId('event-timezone').inputValue();
+  await page.getByTestId('event-timezone').selectOption('America/New_York');
+  await page.getByTestId('save-settings').click();
+  await expect(page.getByTestId('event-timezone')).toHaveValue('America/New_York');
+
+  await page.goto('/organizer/schedule');
+  await page.getByTestId('band-start').fill(WALL);
+  await page.getByTestId('add-band').click();
+
+  // The band remover carries each band's stored instant verbatim, which is the
+  // value under test; the button beside it carries what the organizer reads.
+  await expect(page.locator(`input[name="startsAt"][value="${RIGHT}"]`)).toHaveCount(1);
+  await expect(page.locator(`input[name="startsAt"][value="${SINGLE_PASS}"]`)).toHaveCount(0);
+
+  const remove = page.locator(`form:has(input[name="startsAt"][value="${RIGHT}"])`);
+  await page.getByText('Remove a time band or break').click();
+  await expect(remove.getByRole('button')).toContainText('8 March 03:00');
+
+  await remove.getByRole('button').click();
+  await page.getByTestId('confirm-delete-band-submit').click();
+  await expect(page.locator(`input[name="startsAt"][value="${RIGHT}"]`)).toHaveCount(0);
+
+  await page.goto('/organizer/settings');
+  await page.getByTestId('event-timezone').selectOption(timezone);
+  await page.getByTestId('save-settings').click();
+  await expect(page.getByTestId('event-timezone')).toHaveValue(timezone);
+});
+
+/**
  * Placing onto an occupied box is allowed and always was. What it did was
  * happen in silence: the talk that had been sitting there went back to the
  * unscheduled pool with nothing on screen to say so, and on a grid taller than
