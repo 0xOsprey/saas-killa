@@ -7,6 +7,7 @@ import { db } from '@/db';
 import { submissions, uploads, users } from '@/db/schema';
 import type { Upload, UploadKind } from '@/db/schema';
 import { writableBy } from '@/lib/abstracts';
+import { contentIsPublic } from '@/lib/content';
 import { posterGalleryGate } from '@/lib/poster';
 import { getEvent } from '@/lib/queries';
 import { UPLOAD_DIR } from '@/lib/upload-dir';
@@ -334,7 +335,13 @@ export async function readableUpload(id: string, viewer: CurrentUser | null): Pr
   if (!submission) return null;
 
   if (row.kind === 'slides') {
-    return submission.status === 'accepted' && submission.contentStatus === 'approved'
+    // `contentIsPublic`, not a hand-written `contentStatus === 'approved'`.
+    // The stricter local copy is what made `/agenda/<id>` offer a Slides button
+    // that answered 404: that page publishes on 'draft' too, deliberately, so
+    // the seeded back catalogue did not vanish the day moderation shipped, and
+    // this branch had never been told. The upload row existing is the "field is
+    // filled in" the rule asks about.
+    return submission.status === 'accepted' && contentIsPublic(submission.contentStatus, row.id)
       ? row
       : null;
   }

@@ -238,3 +238,40 @@ test('a supporting document is private and a headshot is not', async ({ page }) 
   await page.getByTestId(`document-remove-${documentHref.split('/')[2]}`).click();
   await expect(page.getByTestId('content-flash')).toContainText('Document removed');
 });
+
+/**
+ * A deck on a draft card is readable by the public, because the agenda page
+ * links to it.
+ *
+ * Two gates decide this and they had drifted. `/agenda/<id>` publishes a
+ * material when the content is 'approved' or 'draft'-with-a-value, the second
+ * leg being deliberate so the seeded back catalogue did not vanish the day
+ * moderation shipped. `readableUpload` demanded 'approved' outright, so the
+ * button rendered and the file behind it answered 404. Both now go through
+ * `contentIsPublic`.
+ */
+test('slides on a draft card are public, matching the link the agenda renders', async ({
+  page,
+}) => {
+  await signInVia(page, SPEAKER);
+  const { id } = await firstContentCard(page);
+
+  await page.getByTestId(`slides-file-${id}`).setInputFiles({
+    name: 'draft-deck.pdf',
+    mimeType: 'application/pdf',
+    buffer: PDF,
+  });
+  await page.getByRole('button', { name: 'Save draft' }).first().click();
+  await expect(page.getByTestId('content-flash')).toContainText('Saved');
+
+  // Saving a draft leaves the card at contentStatus 'draft', which is the whole
+  // point: this is the state the agenda page publishes and the file server used
+  // to refuse.
+  const href = await page.getByTestId(`slides-${id}`).inputValue();
+  expect(href).toMatch(FILES);
+
+  await signOut(page);
+  const deck = await fetchFile(page, href);
+  expect(deck.status, 'a signed-out visitor following the agenda link').toBe(200);
+  expect(deck.contentType).toBe('application/pdf');
+});

@@ -4,6 +4,7 @@ import { db } from '@/db';
 import { awards, bookmarks, rooms, slots, submissions, tracks, users } from '@/db/schema';
 import { Badge, Card, LinkButton, PageHeader } from '@/components/ui';
 import { currentUser } from '@/lib/auth';
+import { contentIsPublic } from '@/lib/content';
 import { FORMAT_LABELS, LEVEL_LABELS, dayLabel, timeOfDay } from '@/lib/format';
 import { getEvent } from '@/lib/queries';
 import { StarButton } from '../StarButton';
@@ -71,17 +72,14 @@ export default async function SubmissionDetailPage({
   /**
    * Speaker-supplied materials, gated on `contentStatus`.
    *
-   * The rule implemented: show a field when the submission is 'approved', or
-   * when it is 'draft' and that field is already filled in. 'pending' hides
-   * everything — it means the speaker has asked for review and an organizer has
-   * not answered, which is the one state where publishing would pre-empt a
-   * decision. The 'draft' leg exists because every seeded row is 'draft' with
-   * materials already on it, and those must not vanish the day moderation ships.
+   * Through `contentIsPublic` rather than a local copy of its rule. This page
+   * used to spell the same two clauses out by hand, and the copy drifted from
+   * `readableUpload`, which serves the file the link points at: an accepted talk
+   * at 'draft' rendered a Slides button whose `/files/` target answered 404,
+   * because one gate published on draft and the other demanded approval.
    */
   const showMaterial = (field: string | null): field is string =>
-    field !== null &&
-    field.length > 0 &&
-    (row.contentStatus === 'approved' || row.contentStatus === 'draft');
+    contentIsPublic(row.contentStatus, field);
 
   const slidesUrl = showMaterial(row.slidesUrl) ? row.slidesUrl : null;
   const recordingUrl = showMaterial(row.recordingUrl) ? row.recordingUrl : null;
