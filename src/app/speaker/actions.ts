@@ -1,12 +1,12 @@
 'use server';
 
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, ne } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { db } from '@/db';
 import { speakerTasks, submissions } from '@/db/schema';
 import { requireUser } from '@/lib/auth';
-import { alertOrganizers, attendanceDeclinedMail } from '@/lib/email';
+import { alertOrganizers, attendanceDeclinedMail, submissionWithdrawnMail } from '@/lib/email';
 import { dayLabel, timeOfDay } from '@/lib/format';
 import { getEvent } from '@/lib/queries';
 import { placementFor } from '@/lib/speaker-calendar';
@@ -110,17 +110,75 @@ export async function declineAttendance(formData: FormData): Promise<void> {
   revalidatePath('/organizer/schedule');
 }
 
+/**
+ * "Take this off the programme." The larger move, and the only speaker action
+ * that used to happen in silence: it mailed nobody and revalidated neither the
+ * grid nor the board, so the public agenda dropped the talk immediately while
+ * the organizer's own screen went on drawing it in its slot with no warning
+ * anywhere. The organizers are emailed for the same reason `declineAttendance`
+ * emails them: the screen that has to change is elsewhere in the app from the
+ * one this was pressed on.
+ *
+ * The placement is read before the update, not after, because `placementFor`
+ * has to see the row while it is still on the grid to name the box in the mail.
+ *
+ * No confirm-on-second-press, and not by oversight. The house rule two
+ * functions up is that a press asks first when what it destroys cannot be got
+ * back, and this can: `setDecision` in the organizer's board takes any status
+ * with no guard on the current one, so a withdrawn talk goes back to accepted
+ * in one click. The mail says so.
+ *
+ * `ne(status, 'withdrawn')` makes it idempotent. A double submit updates zero
+ * rows and sends nothing, rather than mailing every organizer twice about one
+ * withdrawal.
+ */
 export async function withdrawSubmission(formData: FormData): Promise<void> {
   const user = await requireUser();
   const id = z.string().uuid().parse(formData.get('submissionId'));
 
-  await db
+  const placement = await placementFor(id);
+
+  const updated = await db
     .update(submissions)
     .set({ status: 'withdrawn', updatedAt: new Date() })
-    .where(and(eq(submissions.id, id), eq(submissions.speakerId, user.id)));
+    .where(
+      and(
+        eq(submissions.id, id),
+        eq(submissions.speakerId, user.id),
+        ne(submissions.status, 'withdrawn'),
+      ),
+    )
+    .returning({ id: submissions.id, title: submissions.title });
+
+  const row = updated[0];
+  if (row) {
+    const event = await getEvent();
+    await alertOrganizers(
+      (to) =>
+        submissionWithdrawnMail({
+          to,
+          title: row.title,
+          speakerName: user.name ?? user.email,
+          eventName: event.name,
+          placement:
+            placement?.slot != null
+              ? {
+                  when: `${dayLabel(placement.slot.startsAt, event.timezone)}, ${timeOfDay(
+                    placement.slot.startsAt,
+                    event.timezone,
+                  )}`,
+                  room: placement.slot.roomName,
+                }
+              : null,
+        }),
+      { kind: 'submission_withdrawn', submissionId: row.id },
+    );
+  }
 
   revalidatePath('/speaker');
   revalidatePath('/agenda');
+  revalidatePath('/organizer/schedule');
+  revalidatePath('/organizer/submissions');
 }
 
 /*

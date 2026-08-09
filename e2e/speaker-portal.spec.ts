@@ -378,3 +378,72 @@ test('a speaker writes the availability the scheduler reads', async ({
 
   await organizer.context.close();
 });
+
+/**
+ * Withdrawing, and what the organizer's own screen says about it.
+ *
+ * The public side was always right: a withdrawn talk drops off /agenda, the ICS
+ * feeds and /speakers at once. The organizer's side was not. Withdrawing mailed
+ * nobody, revalidated neither the grid nor the board, and left the talk sitting
+ * in its slot — under a declined-warning banner reading "nothing has been
+ * withdrawn" if the speaker had also declined. The screen that shows the hole in
+ * the programme was the one denying there was one.
+ *
+ * Borrows `speaker3`'s accepted, placed talk and hands it straight back with
+ * Accept, which is also the reversibility the mail promises. The slot is never
+ * cleared, by design: the grid is the organizer's and nothing empties a box for
+ * them.
+ */
+test('withdrawing tells the organizers and shows on the grid', async ({
+  page,
+  browser,
+  baseURL,
+}) => {
+  const organizer = await asOrganizer(browser, baseURL);
+  await organizer.page.goto('/organizer/schedule');
+  await expect(organizer.page.getByTestId('withdrawn-warning')).toHaveCount(0);
+
+  await signInVia(page, DECLINER);
+  await page.goto('/speaker');
+
+  // The talk that is actually on the grid, not simply the first one this
+  // speaker owns. Only a placed talk can leave a slot behind, which is the
+  // whole subject here, and which of their talks is placed depends on what the
+  // files before this one moved.
+  const placed = await page
+    .locator('[data-testid^="placement-"]')
+    .evaluateAll((nodes) =>
+      nodes.map((node) => (node.getAttribute('data-testid') ?? '').replace('placement-', '')),
+    );
+  expect(placed.length, 'a placed talk for this speaker').toBeGreaterThan(0);
+
+  const submissionId = placed[0]!;
+  await page
+    .getByTestId(`submission-card-${submissionId}`)
+    .getByRole('button', { name: 'Withdraw' })
+    .click();
+
+  // The organizers hear about it. `declineAttendance` has always done this and
+  // its reasoning applies here more strongly: the screen that has to change is
+  // elsewhere in the app from the one the speaker pressed.
+  const alert = await waitForMail((m) => m.subject.startsWith('Withdrawn:'));
+  expect(alert.to).toBe(ORGANIZER);
+  expect(alert.body).toContain('has already left the public agenda');
+
+  // And the grid says so, in its own banner rather than under the declined one,
+  // whose copy is only true of a talk that is still accepted.
+  await organizer.page.goto('/organizer/schedule');
+  await expect(organizer.page.getByTestId('withdrawn-warning')).toContainText(
+    '1 talk(s) still hold a slot after being withdrawn',
+  );
+  await expect(organizer.page.getByTestId('declined-warning')).toHaveCount(0);
+
+  // Hand it back. Accept restores the status with no guard on the current one,
+  // which is why withdrawing does not ask for confirmation in the first place.
+  await organizer.page.goto('/organizer/submissions');
+  await organizer.page.getByTestId(`accept-${submissionId}`).click();
+  await organizer.page.goto('/organizer/schedule');
+  await expect(organizer.page.getByTestId('withdrawn-warning')).toHaveCount(0);
+
+  await organizer.context.close();
+});

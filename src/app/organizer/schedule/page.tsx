@@ -5,6 +5,7 @@ import {
   capacityWarnings,
   declinedPlacements,
   speakerConflicts,
+  withdrawnPlacements,
 } from '@/lib/conflicts';
 import { dayKey, dayLabel, instantToWallClock, timeOfDay } from '@/lib/format';
 import { agenda, allRooms, getEvent, unscheduledAccepted } from '@/lib/queries';
@@ -31,18 +32,29 @@ export default async function SchedulePage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = await searchParams;
-  const [event, rooms, entries, pool, conflicts, unavailable, declined, tooSmall, labels] =
-    await Promise.all([
-      getEvent(),
-      allRooms(),
-      agenda(),
-      unscheduledAccepted(),
-      speakerConflicts(),
-      availabilityConflicts(),
-      declinedPlacements(),
-      capacityWarnings(),
-      slotLabels(),
-    ]);
+  const [
+    event,
+    rooms,
+    entries,
+    pool,
+    conflicts,
+    unavailable,
+    declined,
+    withdrawn,
+    tooSmall,
+    labels,
+  ] = await Promise.all([
+    getEvent(),
+    allRooms(),
+    agenda(),
+    unscheduledAccepted(),
+    speakerConflicts(),
+    availabilityConflicts(),
+    declinedPlacements(),
+    withdrawnPlacements(),
+    capacityWarnings(),
+    slotLabels(),
+  ]);
 
   const conflictedSlots = new Set(conflicts.flatMap((c) => c.slots.map((s) => s.slotId)));
   const unavailableSlots = new Map(unavailable.map((row) => [row.slotId, row.note]));
@@ -233,6 +245,25 @@ export default async function SchedulePage({
             {conflicts.length} speaker(s) are booked into two rooms at the same time:{' '}
             {conflicts.map((c) => c.speakerName ?? c.speakerEmail).join(', ')}. The grid still
             accepts the placement; the warning stays until you move one.
+          </span>
+        </Notice>
+      ) : null}
+
+      {/*
+        First of the speaker warnings, because it is the only one where the
+        talk is already gone. Withdrawing drops it from /agenda and the calendar
+        feeds at once and leaves the grid untouched, so without this the two
+        views of one programme disagree and the grid is the one that lies.
+      */}
+      {withdrawn.length > 0 ? (
+        <Notice tone="bad">
+          <span data-testid="withdrawn-warning">
+            {withdrawn.length} talk(s) still hold a slot after being withdrawn:{' '}
+            {withdrawn
+              .map((row) => `${row.speakerName ?? row.speakerEmail} (${row.title})`)
+              .join(', ')}
+            . They have already left the public agenda. Nothing clears a slot for you, so the box is
+            yours to reassign or empty.
           </span>
         </Notice>
       ) : null}

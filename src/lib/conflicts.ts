@@ -1,4 +1,4 @@
-import { and, asc, eq, isNotNull, sql } from 'drizzle-orm';
+import { and, asc, eq, isNotNull, ne, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { bookmarks, rooms, slots, speakerAvailability, submissions, users } from '@/db/schema';
 
@@ -141,6 +141,12 @@ export type DeclinedPlacement = {
  * Reported, never blocked, matching the others. A speaker who declines and then
  * finds a co-presenter has changed nothing an organizer needs to undo, and the
  * warning clears by itself if they confirm again.
+ *
+ * Withdrawn talks are excluded, because they have their own warning below. This
+ * banner tells the organizer that "nothing has been withdrawn", and for a
+ * speaker who declined and then withdrew that was false in the reassuring
+ * direction: the one screen that could have shown the hole in the programme was
+ * denying there was one.
  */
 export async function declinedPlacements(): Promise<DeclinedPlacement[]> {
   return db
@@ -156,7 +162,41 @@ export async function declinedPlacements(): Promise<DeclinedPlacement[]> {
     .innerJoin(submissions, eq(submissions.id, slots.submissionId))
     .innerJoin(users, eq(users.id, submissions.speakerId))
     .innerJoin(rooms, eq(rooms.id, slots.roomId))
-    .where(isNotNull(submissions.speakerDeclinedAt))
+    .where(and(isNotNull(submissions.speakerDeclinedAt), ne(submissions.status, 'withdrawn')))
+    .orderBy(asc(slots.startsAt), asc(users.email));
+}
+
+export type WithdrawnPlacement = DeclinedPlacement;
+
+/**
+ * A talk still holding a slot that its speaker has withdrawn.
+ *
+ * Withdrawing does not clear the placement, deliberately: the grid belongs to
+ * the organizer, and an app that silently emptied a box would take a decision
+ * away from the only person who can fill it. What it must not do is stay quiet.
+ * It used to — the talk sat in its box looking scheduled while `/agenda` and the
+ * calendar feeds had already dropped it, so the two views of one programme
+ * disagreed and nobody was told.
+ *
+ * Separate from the declined warning because the remedy differs. A decline can
+ * resolve itself when a co-presenter steps in. A withdrawal will not, and the
+ * slot is empty whatever the grid draws in it.
+ */
+export async function withdrawnPlacements(): Promise<WithdrawnPlacement[]> {
+  return db
+    .select({
+      slotId: slots.id,
+      speakerName: users.name,
+      speakerEmail: users.email,
+      title: submissions.title,
+      roomName: rooms.name,
+      startsAt: slots.startsAt,
+    })
+    .from(slots)
+    .innerJoin(submissions, eq(submissions.id, slots.submissionId))
+    .innerJoin(users, eq(users.id, submissions.speakerId))
+    .innerJoin(rooms, eq(rooms.id, slots.roomId))
+    .where(eq(submissions.status, 'withdrawn'))
     .orderBy(asc(slots.startsAt), asc(users.email));
 }
 

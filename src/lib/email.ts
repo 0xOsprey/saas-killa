@@ -373,3 +373,39 @@ export function attendanceDeclinedMail(opts: {
     ].join('\n'),
   };
 }
+
+/**
+ * The organizer's heads-up that a speaker has taken their talk off the
+ * programme outright. The counterpart to `attendanceDeclinedMail` and the
+ * stronger of the two: this one leaves a hole.
+ *
+ * Withdrawing used to send nothing, which made it the only speaker action that
+ * changed the public agenda in silence. It reports the placement as something
+ * that still stands, because clearing a slot is the organizer's decision and
+ * nothing here makes it for them.
+ */
+export function submissionWithdrawnMail(opts: {
+  to: string;
+  title: string;
+  speakerName: string;
+  eventName: string;
+  placement: MailPlacement | null;
+}): Mail {
+  return {
+    to: opts.to,
+    subject: `Withdrawn: "${opts.title}"`,
+    text: [
+      `${opts.speakerName} has withdrawn "${opts.title}" from ${opts.eventName}.`,
+      '',
+      opts.placement
+        ? `It is scheduled for ${opts.placement.when}, ${opts.placement.room}, and still holds` +
+          ' that box. Nothing clears a slot on your behalf.'
+        : 'It is not on the schedule.',
+      '',
+      'It has already left the public agenda and the calendar feeds. Withdrawing',
+      'is reversible from the submissions board if this was a mistake.',
+      '',
+      `Schedule: ${env().APP_URL}/organizer/schedule`,
+    ].join('\n'),
+  };
+}
