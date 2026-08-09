@@ -120,6 +120,46 @@ export async function availabilityConflicts(): Promise<AvailabilityConflict[]> {
     .orderBy(asc(slots.startsAt), asc(users.email));
 }
 
+export type DeclinedPlacement = {
+  slotId: string;
+  speakerName: string | null;
+  speakerEmail: string;
+  title: string;
+  roomName: string;
+  startsAt: Date;
+};
+
+/**
+ * A talk still on the grid whose speaker has said they cannot present it.
+ *
+ * Alongside the other two warnings rather than in a queue of its own, because
+ * this is the screen where the fact costs something: the slot is the thing that
+ * has to change, and an organizer looking at the grid is the person who can
+ * change it. The decline itself also mails them, which is the half that reaches
+ * somebody who is not on this page.
+ *
+ * Reported, never blocked, matching the others. A speaker who declines and then
+ * finds a co-presenter has changed nothing an organizer needs to undo, and the
+ * warning clears by itself if they confirm again.
+ */
+export async function declinedPlacements(): Promise<DeclinedPlacement[]> {
+  return db
+    .select({
+      slotId: slots.id,
+      speakerName: users.name,
+      speakerEmail: users.email,
+      title: submissions.title,
+      roomName: rooms.name,
+      startsAt: slots.startsAt,
+    })
+    .from(slots)
+    .innerJoin(submissions, eq(submissions.id, slots.submissionId))
+    .innerJoin(users, eq(users.id, submissions.speakerId))
+    .innerJoin(rooms, eq(rooms.id, slots.roomId))
+    .where(isNotNull(submissions.speakerDeclinedAt))
+    .orderBy(asc(slots.startsAt), asc(users.email));
+}
+
 export type CapacityWarning = {
   slotId: string;
   title: string;

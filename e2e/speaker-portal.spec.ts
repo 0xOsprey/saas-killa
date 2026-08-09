@@ -20,6 +20,14 @@ import { extractMagicLink, waitForMail } from './mailbox';
 
 const ORGANIZER = 'organizer@example.com';
 
+/**
+ * Seeded with an accepted talk that is on the grid and already confirmed, which
+ * is the exact state the portal had no way out of. Not used by any other file:
+ * `speaker9` and `speaker11` are spoken for by auth, review, portal-pages and
+ * uploads.
+ */
+const DECLINER = 'speaker3@example.com';
+
 async function signInVia(page: Page, email: string) {
   await page.goto('/login');
   await page.getByTestId('login-email').fill(email);
@@ -206,6 +214,73 @@ test('the portal separates what the organizers decided from what the speaker was
   await expect(card.getByTestId(/^schedule-notice-/)).toContainText(
     'Not on the schedule, which is what your last email about it said',
   );
+
+  await organizer.context.close();
+});
+
+test('a speaker who cannot come says so without withdrawing the talk', async ({
+  page,
+  browser,
+  baseURL,
+}) => {
+  await signInVia(page, DECLINER);
+  await page.goto('/speaker');
+
+  // On the grid as well as accepted. This speaker has two accepted talks and
+  // only one of them is placed, and both halves of the organizer's side of this
+  // — the mail's "it is still on the schedule" line and the warning on the
+  // schedule screen — are about a talk that occupies a slot.
+  const offered = page
+    .locator('[data-testid^="submission-card-"]')
+    .filter({ has: page.locator('[data-testid^="decline-"]') })
+    .filter({ has: page.locator('[data-testid^="placement-"]') });
+  expect(await offered.count(), 'an accepted, placed talk to decline').toBeGreaterThan(0);
+
+  const card = offered.first();
+  const title = ((await card.locator('h2').first().textContent()) ?? '').trim();
+  expect(title).not.toBe('');
+
+  // Already confirmed, which is the state the portal could not reverse:
+  // `confirmAttendance` set a timestamp and nothing anywhere reset it.
+  await expect(card.getByText('Attendance confirmed')).toBeVisible();
+
+  const organizer = await asOrganizer(browser, baseURL);
+  await organizer.page.goto('/organizer/schedule');
+  await expect(organizer.page.getByTestId('declined-warning')).toHaveCount(0);
+
+  await card.locator('[data-testid^="decline-"]').click();
+
+  const declined = page.locator('[data-testid^="submission-card-"]').filter({ hasText: title });
+  await expect(declined.getByTestId(/^declined-/)).toBeVisible();
+  await expect(declined.locator('[data-testid^="decline-"]')).toHaveCount(0);
+
+  // The whole point of the smaller move. Withdrawing is still on the card and
+  // still a different button, and the proposal has not gone anywhere.
+  await expect(declined.getByTestId(/^status-/)).toHaveText('Accepted');
+  await expect(declined.getByRole('button', { name: 'Withdraw' })).toBeVisible();
+
+  // The organizers are told, rather than left to notice a column. The mail says
+  // where the talk still is, which is the placement lookup working.
+  const alert = await waitForMail(
+    (m) => m.to === ORGANIZER && m.subject.startsWith('Cannot present:'),
+  );
+  expect(alert.body).toContain(title);
+  expect(alert.body).toContain('It is still on the schedule');
+  expect(alert.body).toContain('has not been withdrawn');
+
+  // And the screen where the slot has to change says so too.
+  await organizer.page.goto('/organizer/schedule');
+  await expect(organizer.page.getByTestId('declined-warning')).toContainText(title);
+
+  // Undoing it is a press of the opposite button, which is why neither asks
+  // twice. This also puts the fixture back for the files that run after.
+  await declined.getByTestId(/^reconfirm-/).click();
+  await expect(
+    page.locator('[data-testid^="submission-card-"]').filter({ hasText: title }),
+  ).toContainText('Attendance confirmed');
+
+  await organizer.page.goto('/organizer/schedule');
+  await expect(organizer.page.getByTestId('declined-warning')).toHaveCount(0);
 
   await organizer.context.close();
 });

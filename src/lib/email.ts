@@ -1,8 +1,9 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Resend } from 'resend';
+import { eq } from 'drizzle-orm';
 import { db } from '@/db';
-import { emailLog } from '@/db/schema';
+import { emailLog, userRoles, users } from '@/db/schema';
 import { env } from './env';
 
 /**
@@ -108,6 +109,41 @@ export async function sendAndLog(
     delivered: result.delivered,
   });
   return result;
+}
+
+/**
+ * Send one mail per organizer, and never fail the caller over it.
+ *
+ * Per organizer rather than to a shared address, because there is no shared
+ * address in this app: the recipient list is whoever holds the organizer role,
+ * which lives in `user_roles` and not on `users`, since one person can hold both
+ * organizer and reviewer.
+ *
+ * Failures are swallowed on purpose. Every caller has already committed the
+ * thing being announced, and a mail server refusing the organizer's copy is not
+ * a reason to show a speaker an error about an action that did in fact happen.
+ */
+export async function alertOrganizers(
+  build: (to: string) => Mail,
+  meta: { kind: string; submissionId?: string },
+): Promise<void> {
+  try {
+    const organizers = await db
+      .select({ id: users.id, email: users.email })
+      .from(users)
+      .innerJoin(userRoles, eq(userRoles.userId, users.id))
+      .where(eq(userRoles.role, 'organizer'));
+
+    for (const organizer of organizers) {
+      await sendAndLog(build(organizer.email), {
+        userId: organizer.id,
+        kind: meta.kind,
+        submissionId: meta.submissionId,
+      });
+    }
+  } catch (error) {
+    console.error(`[${meta.kind}] organizer alert failed`, error);
+  }
 }
 
 /**
@@ -302,6 +338,38 @@ export function submissionAlertMail(opts: {
       `${opts.speakerName} has submitted "${opts.title}" (${opts.format}) to ${opts.eventName}.`,
       '',
       `Review queue: ${env().APP_URL}/organizer/submissions`,
+    ].join('\n'),
+  };
+}
+
+/**
+ * The organizer's heads-up that an accepted speaker has dropped out.
+ *
+ * Says plainly what has not happened as well as what has. The talk is still
+ * accepted and still on the grid, and an organizer who reads this as a
+ * withdrawal will go looking for a hole in the programme that is not there.
+ */
+export function attendanceDeclinedMail(opts: {
+  to: string;
+  title: string;
+  speakerName: string;
+  eventName: string;
+  placement: MailPlacement | null;
+}): Mail {
+  return {
+    to: opts.to,
+    subject: `Cannot present: "${opts.title}"`,
+    text: [
+      `${opts.speakerName} can no longer present "${opts.title}" at ${opts.eventName}.`,
+      '',
+      opts.placement
+        ? `It is still on the schedule: ${opts.placement.when}, ${opts.placement.room}.`
+        : 'It is not on the schedule.',
+      '',
+      'The proposal is still accepted and has not been withdrawn. Declining is',
+      'about the speaker, not the talk, so nothing has left the programme.',
+      '',
+      `Schedule: ${env().APP_URL}/organizer/schedule`,
     ].join('\n'),
   };
 }

@@ -258,6 +258,24 @@ export const submissions = pgTable(
     scheduleNoticeSeq: integer('schedule_notice_seq').notNull().default(0),
     /** Speaker's own confirmation that they will attend, after acceptance. */
     speakerConfirmedAt: timestamp('speaker_confirmed_at', { withTimezone: true }),
+    /**
+     * Set when the speaker says they can no longer present it.
+     *
+     * A column of its own rather than clearing `speakerConfirmedAt`, because the
+     * two nulls mean different things to an organizer: one is somebody who has
+     * not answered and needs chasing, the other is somebody who has answered and
+     * needs replacing. Every existing count is `speakerConfirmedAt is null`, and
+     * a decline that only cleared it would put the second person back in the
+     * first queue.
+     *
+     * Mutually exclusive with the confirmation by construction: each of the two
+     * actions clears the other, so no query has to decide which one wins.
+     *
+     * Not `status: 'withdrawn'`, which is the bigger move: that takes the talk
+     * off the programme entirely. Declining says the accepted talk still stands
+     * and this speaker cannot give it.
+     */
+    speakerDeclinedAt: timestamp('speaker_declined_at', { withTimezone: true }),
     /** ePoster artwork. Only meaningful when format is 'poster'. */
     posterUrl: text('poster_url'),
     /** Poster hall board this poster hangs on. Only meaningful for posters. */

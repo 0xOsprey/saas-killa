@@ -3,9 +3,10 @@
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { db } from '@/db';
-import { audienceLevelEnum, submissionFormatEnum, submissions, userRoles, users } from '@/db/schema';
+import { audienceLevelEnum, submissionFormatEnum, submissions, users } from '@/db/schema';
 import { currentUser, issueMagicLink, startSession, upsertUserByEmail } from '@/lib/auth';
 import {
+  alertOrganizers,
   magicLinkMail,
   sendAndLog,
   sendMail,
@@ -63,37 +64,22 @@ function parseKeywords(value: FormDataEntryValue | null): string[] {
 /**
  * Tell the organizers a proposal has landed.
  *
- * Failures are swallowed. The submitter has already been written to the
- * database and already has their receipt, and a mail server refusing the
- * organizer's copy is not a reason to show them an error about a proposal that
- * was in fact accepted.
+ * The recipient lookup and the swallowed failure both moved to
+ * `alertOrganizers` in `lib/email.ts` once a second caller needed them: a
+ * speaker declining an accepted talk is the other thing the organizers have to
+ * hear about without the speaker's own action failing over it.
  */
-async function alertOrganizers(opts: {
+async function announceSubmission(opts: {
   title: string;
   speakerName: string;
   format: string;
   eventName: string;
   submissionId: string;
 }): Promise<void> {
-  try {
-    // Roles live in `user_roles`, not on `users`: one person can hold both
-    // organizer and reviewer, and this mail is for the first of those.
-    const organizers = await db
-      .select({ id: users.id, email: users.email })
-      .from(users)
-      .innerJoin(userRoles, eq(userRoles.userId, users.id))
-      .where(eq(userRoles.role, 'organizer'));
-
-    for (const organizer of organizers) {
-      await sendAndLog(submissionAlertMail({ ...opts, to: organizer.email }), {
-        userId: organizer.id,
-        kind: 'submission_alert',
-        submissionId: opts.submissionId,
-      });
-    }
-  } catch (error) {
-    console.error('[cfp] organizer alert failed', error);
-  }
+  await alertOrganizers((to) => submissionAlertMail({ ...opts, to }), {
+    kind: 'submission_alert',
+    submissionId: opts.submissionId,
+  });
 }
 
 export async function submitProposal(_prev: CfpState, formData: FormData): Promise<CfpState> {
@@ -189,7 +175,7 @@ export async function submitProposal(_prev: CfpState, formData: FormData): Promi
       kind: 'submission_received',
       submissionId: created.id,
     });
-    await alertOrganizers({
+    await announceSubmission({
       title: input.title,
       speakerName: input.name,
       format: FORMAT_LABELS[input.format],

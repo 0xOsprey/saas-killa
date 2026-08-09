@@ -1,6 +1,11 @@
 import Link from 'next/link';
 import { Button, Card, Field, Input, LinkButton, Notice, PageHeader, Select, cn } from '@/components/ui';
-import { availabilityConflicts, capacityWarnings, speakerConflicts } from '@/lib/conflicts';
+import {
+  availabilityConflicts,
+  capacityWarnings,
+  declinedPlacements,
+  speakerConflicts,
+} from '@/lib/conflicts';
 import { dayKey, dayLabel, instantToWallClock, timeOfDay } from '@/lib/format';
 import { agenda, allRooms, getEvent, unscheduledAccepted } from '@/lib/queries';
 import {
@@ -26,16 +31,18 @@ export default async function SchedulePage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = await searchParams;
-  const [event, rooms, entries, pool, conflicts, unavailable, tooSmall, labels] = await Promise.all([
-    getEvent(),
-    allRooms(),
-    agenda(),
-    unscheduledAccepted(),
-    speakerConflicts(),
-    availabilityConflicts(),
-    capacityWarnings(),
-    slotLabels(),
-  ]);
+  const [event, rooms, entries, pool, conflicts, unavailable, declined, tooSmall, labels] =
+    await Promise.all([
+      getEvent(),
+      allRooms(),
+      agenda(),
+      unscheduledAccepted(),
+      speakerConflicts(),
+      availabilityConflicts(),
+      declinedPlacements(),
+      capacityWarnings(),
+      slotLabels(),
+    ]);
 
   const conflictedSlots = new Set(conflicts.flatMap((c) => c.slots.map((s) => s.slotId)));
   const unavailableSlots = new Map(unavailable.map((row) => [row.slotId, row.note]));
@@ -226,6 +233,25 @@ export default async function SchedulePage({
             {conflicts.length} speaker(s) are booked into two rooms at the same time:{' '}
             {conflicts.map((c) => c.speakerName ?? c.speakerEmail).join(', ')}. The grid still
             accepts the placement; the warning stays until you move one.
+          </span>
+        </Notice>
+      ) : null}
+
+      {/*
+        Above the availability warning, not below it. A declared window is a
+        placement an organizer may still know better than; a decline is the
+        speaker saying they will not be there at all, and it is the only one of
+        these four that no amount of moving the talk resolves.
+      */}
+      {declined.length > 0 ? (
+        <Notice tone="bad">
+          <span data-testid="declined-warning">
+            {declined.length} talk(s) are scheduled for a speaker who has said they cannot present:{' '}
+            {declined
+              .map((row) => `${row.speakerName ?? row.speakerEmail} (${row.title})`)
+              .join(', ')}
+            . The proposals are still accepted and nothing has been withdrawn, so the slot is yours
+            to reassign or clear.
           </span>
         </Notice>
       ) : null}

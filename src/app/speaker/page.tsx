@@ -28,7 +28,12 @@ import {
   type NoticedPlacement,
 } from '@/lib/queries';
 import { UNSCHEDULED, placementKey } from '@/lib/speaker-calendar';
-import { completeTask, confirmAttendance, withdrawSubmission } from './actions';
+import {
+  completeTask,
+  confirmAttendance,
+  declineAttendance,
+  withdrawSubmission,
+} from './actions';
 import { Headshot } from './profile/Headshot';
 
 const STATUS_TONE = {
@@ -178,7 +183,7 @@ export default async function SpeakerPage({
             </div>
 
             {row.slotStartsAt && row.roomName ? (
-              <p className="text-sm text-ink">
+              <p className="text-sm text-ink" data-testid={`placement-${row.id}`}>
                 {dayLabel(row.slotStartsAt, event.timezone)} at{' '}
                 {timeOfDay(row.slotStartsAt, event.timezone)} in {row.roomName}
               </p>
@@ -235,7 +240,34 @@ export default async function SpeakerPage({
               </p>
             )}
 
-            {row.isOwner && accepted && !row.speakerConfirmedAt ? (
+            {/*
+              Three states, and the third is the one the portal used to have no
+              way to reach: confirming set a timestamp nothing anywhere reset, so
+              a speaker who confirmed and then could not come had the choice of
+              saying nothing or withdrawing the proposal outright.
+
+              Neither button asks twice. Each is the undo for the other, and the
+              only thing a stray press costs is a timestamp the opposite press
+              replaces.
+            */}
+            {row.isOwner && accepted && row.speakerDeclinedAt ? (
+              <div className="space-y-2">
+                <Notice tone="warn">
+                  <span data-testid={`declined-${row.id}`}>
+                    You have told the organizers you can no longer present this. The proposal is
+                    still accepted and has not been withdrawn.
+                  </span>
+                </Notice>
+                <form action={confirmAttendance} className="flex items-center gap-3">
+                  <input type="hidden" name="submissionId" value={row.id} />
+                  <Button type="submit" variant="secondary" data-testid={`reconfirm-${row.id}`}>
+                    I can present after all
+                  </Button>
+                </form>
+              </div>
+            ) : null}
+
+            {row.isOwner && accepted && !row.speakerDeclinedAt && !row.speakerConfirmedAt ? (
               <form action={confirmAttendance} className="flex items-center gap-3">
                 <input type="hidden" name="submissionId" value={row.id} />
                 <Button type="submit" data-testid={`confirm-${row.id}`}>
@@ -289,6 +321,26 @@ export default async function SpeakerPage({
                 >
                   Poster artwork
                 </LinkButton>
+              ) : null}
+
+              {/*
+                Beside Withdraw rather than anywhere else, because the pair is
+                the distinction: this one is about the speaker and leaves the
+                accepted talk on the programme, and the next one takes the talk
+                off it. A speaker who can only see the second presses it.
+              */}
+              {row.isOwner && accepted && !row.speakerDeclinedAt ? (
+                <form action={declineAttendance}>
+                  <input type="hidden" name="submissionId" value={row.id} />
+                  <Button
+                    type="submit"
+                    variant="ghost"
+                    className="text-xs"
+                    data-testid={`decline-${row.id}`}
+                  >
+                    I can no longer present
+                  </Button>
+                </form>
               ) : null}
 
               {row.isOwner && row.status !== 'withdrawn' ? (

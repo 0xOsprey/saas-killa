@@ -249,8 +249,16 @@ export default async function SpeakerDetailPage({
                 <Badge>{STATUS_LABELS[submission.status]}</Badge>
                 <Badge>{FORMAT_LABELS[submission.format]}</Badge>
                 {submission.trackName ? <Badge tone="accent">{submission.trackName}</Badge> : null}
+                {/*
+                  Three states, not two. "not confirmed" is a chase; "declined"
+                  is somebody who has already answered, and telling an organizer
+                  to chase them is telling them to ask a question that has been
+                  answered.
+                */}
                 {submission.status === 'accepted' ? (
-                  submission.speakerConfirmedAt ? (
+                  submission.speakerDeclinedAt ? (
+                    <Badge tone="bad">declined</Badge>
+                  ) : submission.speakerConfirmedAt ? (
                     <Badge tone="good">confirmed</Badge>
                   ) : (
                     <Badge tone="warn">not confirmed</Badge>

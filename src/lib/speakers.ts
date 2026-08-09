@@ -199,6 +199,8 @@ export type SpeakerSubmissionRow = {
   format: SubmissionFormat;
   trackName: string | null;
   speakerConfirmedAt: Date | null;
+  /** Set once they have said they cannot present. Distinct from never answering. */
+  speakerDeclinedAt: Date | null;
 };
 
 export type SpeakerDetail = {
@@ -224,6 +226,7 @@ export async function speakerDetail(userId: string): Promise<SpeakerDetail | nul
         format: submissions.format,
         trackName: tracks.name,
         speakerConfirmedAt: submissions.speakerConfirmedAt,
+        speakerDeclinedAt: submissions.speakerDeclinedAt,
       })
       .from(submissions)
       .leftJoin(tracks, eq(tracks.id, submissions.trackId))

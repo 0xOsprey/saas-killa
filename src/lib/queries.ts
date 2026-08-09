@@ -202,6 +202,7 @@ export async function mySubmissions(speakerId: string) {
       slotRoomId: slots.roomId,
       roomName: rooms.name,
       speakerConfirmedAt: submissions.speakerConfirmedAt,
+      speakerDeclinedAt: submissions.speakerDeclinedAt,
       // What the organizers have actually sent, as opposed to what they have
       // decided. Both are idempotency keys on the organizer's side and both are
       // the only record of whether this speaker was ever told; a portal that
