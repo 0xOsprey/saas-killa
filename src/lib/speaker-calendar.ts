@@ -104,6 +104,12 @@ export async function placements(ids?: string[]): Promise<Placement[]> {
             // Nobody bookmarks their own talk into an invitation.
             bookmarkCount: 0,
             bookmarkedByMe: false,
+            // The stored counter. Every caller on this path passes its own
+            // `sequence` to `buildCalendar`, which overrides this, because an
+            // invitation has to send the next value rather than the one on
+            // file. It is filled in so the shape is honest, not because it is
+            // read here.
+            sequence: row.noticeSeq,
           }
         : null;
 
@@ -214,5 +220,8 @@ export async function slotFromNoticeKey(
     speakerName: placement.speakerName,
     bookmarkCount: 0,
     bookmarkedByMe: false,
+    // `cancellationFor` passes the next sequence explicitly, which overrides
+    // this. Present so the shape is complete, not because it is read.
+    sequence: placement.noticeSeq,
   };
 }

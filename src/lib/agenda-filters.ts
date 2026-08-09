@@ -128,6 +128,15 @@ export type AgendaSlot = {
   speakerName: string | null;
   bookmarkCount: number;
   bookmarkedByMe: boolean;
+  /**
+   * RFC 5545 SEQUENCE for this talk's VEVENT, from `scheduleNoticeSeq`.
+   *
+   * Carried on the slot rather than passed once per calendar because a feed
+   * holds many events at different revisions, and one number for the file is
+   * only ever right for a single-event invitation. A break has no submission
+   * and so no counter; it stays at 0.
+   */
+  sequence: number;
 };
 
 /** `%` and `_` are LIKE wildcards; an attendee typing one means the character. */
@@ -235,6 +244,9 @@ export async function agendaSlots(
       speakerName: users.name,
       bookmarkCount,
       bookmarkedByMe,
+      // A break has no submission, so the left join gives null and the VEVENT
+      // for it stays at 0. Nothing else is available to count with.
+      sequence: sql<number>`coalesce(${submissions.scheduleNoticeSeq}, 0)::int`,
     })
     .from(slots)
     .innerJoin(rooms, eq(rooms.id, slots.roomId))

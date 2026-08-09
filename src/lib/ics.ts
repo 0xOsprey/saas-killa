@@ -77,6 +77,8 @@ type Vevent = {
   summary: string;
   location: string | null;
   description: string | null;
+  /** This event's own revision counter. See `CalendarOptions.sequence`. */
+  sequence: number;
 };
 
 function describe(entry: AgendaSlot): string {
@@ -116,6 +118,7 @@ export function toVevents(entries: AgendaSlot[], includeBlocks: boolean): Vevent
         summary: entry.title,
         location: entry.roomName,
         description: describe(entry),
+        sequence: entry.sequence,
       });
       continue;
     }
@@ -138,6 +141,9 @@ export function toVevents(entries: AgendaSlot[], includeBlocks: boolean): Vevent
         summary: entry.label,
         location: entry.roomName,
         description: null,
+        // A break has no submission and so no counter to read. Its time moving
+        // is the one revision this file cannot signal.
+        sequence: 0,
       },
     });
   }
@@ -165,9 +171,17 @@ export type CalendarOptions = {
   now?: Date;
   method?: CalendarMethod;
   /**
-   * RFC 5545 revision counter. A client applies a re-sent VEVENT with a UID it
-   * already holds only when the SEQUENCE has gone up, so a schedule change that
-   * reuses 0 is silently ignored and the speaker keeps the old time.
+   * RFC 5545 revision counter for every event in this calendar.
+   *
+   * A client applies a re-sent VEVENT with a UID it already holds only when the
+   * SEQUENCE has gone up, so a schedule change that reuses 0 is silently
+   * ignored and the subscriber keeps the old time.
+   *
+   * One number for the whole file is right for an invitation, which carries a
+   * single VEVENT, and wrong for a feed, which carries many at different
+   * revisions. Omit it and each event uses its own `sequence`, which is where
+   * the subscription routes now get theirs; set it and it overrides them all,
+   * which is what `inviteFor` and `cancellationFor` need.
    */
   sequence?: number;
   organizer?: CalendarParty;
@@ -202,7 +216,7 @@ export function buildCalendar(entries: AgendaSlot[], options: CalendarOptions): 
       `DTSTART:${icsUtc(event.startsAt)}`,
       `DTEND:${icsUtc(event.endsAt)}`,
       `SUMMARY:${icsEscape(event.summary)}`,
-      `SEQUENCE:${options.sequence ?? 0}`,
+      `SEQUENCE:${options.sequence ?? event.sequence}`,
     );
     if (options.organizer) lines.push(partyLine('ORGANIZER', options.organizer));
     if (options.attendee) lines.push(partyLine('ATTENDEE', options.attendee));

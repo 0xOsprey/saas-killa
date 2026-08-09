@@ -234,3 +234,77 @@ test('a first-time submitter gets a receipt, and the organizers get a heads-up',
   expect(alert.body).toContain(name);
   expect(alert.body).toContain(title);
 });
+
+/**
+ * One VEVENT per talk, each carrying its own revision, in the public feeds.
+ *
+ * The invitation path above was always right. The subscription feeds were not:
+ * `buildCalendar` took one `sequence` for the whole file and the three ics
+ * routes passed none, so every event in every feed read `SEQUENCE:0` forever.
+ * A subscriber who already held the entry would keep the old time through every
+ * move, which is the exact failure the comment in `lib/ics.ts` describes and the
+ * README claimed could not happen.
+ *
+ * One number per file is right for an invitation, which holds one event, and
+ * wrong for a feed, which holds many at different revisions. So the assertion
+ * is per UID, and it is that the number moves.
+ */
+test('the public feed gives each talk its own rising SEQUENCE', async ({ page }) => {
+  await signInVia(page, ORGANIZER);
+
+  // Signed in as the organizer, so the publish gate is not what is under test.
+  // Fetched from inside the page because the session cookie is `Secure` and
+  // Playwright's APIRequestContext will not send it to http://127.0.0.1.
+  async function feed(): Promise<string> {
+    return page.evaluate(async () => {
+      const response = await fetch('/agenda/calendar.ics', { credentials: 'include' });
+      return response.text();
+    });
+  }
+
+  /** SEQUENCE by UID, for every VEVENT in a calendar. */
+  function sequences(ics: string): Map<string, number> {
+    const unfolded = ics.replace(/\r\n[ \t]/g, '');
+    const out = new Map<string, number>();
+    for (const block of unfolded.split('BEGIN:VEVENT').slice(1)) {
+      const uid = /^UID:(.*)$/m.exec(block)?.[1]?.trim();
+      const seq = /^SEQUENCE:(\d+)$/m.exec(block)?.[1];
+      if (uid && seq !== undefined) out.set(uid, Number(seq));
+    }
+    return out;
+  }
+
+  await page.goto('/organizer/schedule');
+  const before = sequences(await feed());
+  expect(before.size, 'events in the feed').toBeGreaterThan(0);
+
+  // The seeded talks have all been notified at least once by the time this
+  // runs, so a feed of nothing but zeros is the bug rather than a quiet fixture.
+  expect([...before.values()].some((value) => value > 0), 'a non-zero SEQUENCE').toBe(true);
+
+  // Move a talk and tell its speaker, which is the only thing that turns the
+  // counter. Then the same UID has to come back higher.
+  const fallback = page.getByTestId('schedule-fallback');
+  await fallback.locator('summary').click();
+  const talkId = await fallback
+    .getByTestId('fallback-talk')
+    .locator('option')
+    .nth(1)
+    .getAttribute('value');
+  const from = await fallback
+    .getByTestId('fallback-slot')
+    .locator('option')
+    .filter({ hasNotText: '—' })
+    .nth(1)
+    .getAttribute('value');
+  await fallback.getByTestId('fallback-talk').selectOption(talkId!);
+  await fallback.getByTestId('fallback-slot').selectOption(from!);
+  await fallback.getByTestId('fallback-place').click();
+  await expect(page.locator(`[data-testid="slot-${from}"]`)).not.toContainText('empty');
+
+  await sendNotices(page);
+
+  const after = sequences(await feed());
+  const risen = [...after.entries()].filter(([uid, value]) => (before.get(uid) ?? 0) < value);
+  expect(risen.length, 'UIDs whose SEQUENCE rose after a move and a notice').toBeGreaterThan(0);
+});

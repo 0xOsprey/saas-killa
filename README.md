@@ -101,11 +101,14 @@ server's, which is what makes a London schedule come out right on a UTC host and
 across a DST boundary.
 
 **A re-sent invitation updates the entry the speaker already has.** The UID of
-every `.ics` is derived from the submission id and `SEQUENCE` always rises, which
-is the pair RFC 5545 clients use to revise an appointment instead of adding a
-second one an hour after the first. What gets emailed is decided by comparing
-the current placement against the one the speaker was last told about, so a talk
-dragged four times sends one mail and a talk moved out and back sends none.
+every `.ics` is derived from the submission id and `SEQUENCE` rises with each
+notice, which is the pair RFC 5545 clients use to revise an appointment instead
+of adding a second one an hour after the first. What gets emailed is decided by
+comparing the current placement against the one the speaker was last told about,
+so a talk dragged four times sends one mail and a talk moved out and back sends
+none. The subscription feeds carry the same counter per event, from the same
+column; a break has no submission behind it and stays at 0, which is the one
+revision they cannot signal.
 
 **An uploaded file's type comes from its own first bytes.** `src/lib/uploads.ts`
 sniffs magic bytes and never trusts the declared `Content-Type`; the name on disk
@@ -135,7 +138,7 @@ its rubric breakdown through a tool call rather than parseable prose. Without
 pnpm test          # Playwright; resets the database first
 ```
 
-Ten specs, 34 tests, no unit runner. `pipeline.spec.ts` walks one proposal the
+Sixteen specs, 62 tests, no unit runner. `pipeline.spec.ts` walks one proposal the
 length of the pipeline: submit, grade, accept, notify, schedule, publish, then
 read it as a signed-out visitor, checking the acceptance email actually landed.
 `smoke.spec.ts` opens every route the nav leads to, reading the tab list off the
