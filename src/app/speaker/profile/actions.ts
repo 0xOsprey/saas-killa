@@ -100,6 +100,14 @@ export async function uploadHeadshot(formData: FormData): Promise<void> {
  * Take the uploaded headshot down. Clearing the column is not enough on its
  * own: the file would stay readable at its old `/files/` path, and "remove my
  * photo" that leaves the photo up is a promise the app did not keep.
+ *
+ * The redirect says `removed=1` whether or not `deleteUpload` matched a row,
+ * and that is deliberate rather than an unchecked return. `deleteUpload` is
+ * scoped to the caller's own uploads, so the two ways to match nothing are a
+ * double submit, where "removed" is a true statement about the end state, and
+ * an id belonging to somebody else, where reporting the miss would turn this
+ * form into an oracle for which uploads exist. `/files/` gives one 404 for "no
+ * such file" and "not yours" for the same reason.
  */
 export async function removeHeadshot(formData: FormData): Promise<void> {
   const user = await requireUser();

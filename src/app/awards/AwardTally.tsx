@@ -15,6 +15,11 @@ const CHANNEL_LABELS = {
  * `sealed` hides the numbers while the ballot is still open. A live committee
  * tally tells judges how their colleagues voted before they have voted
  * themselves, which is the thing blind review exists to prevent.
+ *
+ * The community tally on the public page is rendered without it, deliberately.
+ * The harm `sealed` prevents is peer influence inside a small deciding body. A
+ * People's Choice leaderboard is a running score the audience is meant to
+ * watch, and hiding it until voting closed would take away the reason to vote.
  */
 export function AwardTally({
   tally,

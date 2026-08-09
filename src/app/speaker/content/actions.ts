@@ -283,6 +283,12 @@ export async function uploadDocument(formData: FormData): Promise<void> {
  * Take a document back down. Scoped to the caller's own uploads, so a co-author
  * with write access can add their own and remove their own but cannot delete
  * the filer's release form out from under them.
+ *
+ * `?removed=1` goes out whether or not a row matched, deliberately. Given that
+ * ownership scope, a miss is either a double submit, where "removed" describes
+ * the end state correctly, or somebody else's upload id, where naming the miss
+ * would say whether that id exists. Same reasoning as the single 404 on
+ * `/files/`.
  */
 export async function removeDocument(formData: FormData): Promise<void> {
   const user = await requireUser();
