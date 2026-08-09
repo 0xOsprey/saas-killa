@@ -31,7 +31,14 @@ export type Placement = {
 
 export const UNSCHEDULED = 'unscheduled';
 
-function placementKey(slot: AgendaSlot | null): string {
+/**
+ * The key format `submissions.scheduleNoticeKey` stores. Exported and typed on
+ * the two fields it actually reads, so the speaker portal can build the same key
+ * from a row that carries a start and a room id without inventing a second
+ * spelling of the format. A key written under one spelling and compared under
+ * another would report every talk as moved.
+ */
+export function placementKey(slot: { startsAt: Date; roomId: string } | null): string {
   return slot ? `${slot.startsAt.toISOString()}|${slot.roomId}` : UNSCHEDULED;
 }
 

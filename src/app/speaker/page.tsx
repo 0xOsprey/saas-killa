@@ -20,7 +20,14 @@ import {
   taskTargetsProfile,
   type SpeakerTaskRow,
 } from '@/lib/portal';
-import { cfpIsOpen, getEvent, mySubmissions } from '@/lib/queries';
+import {
+  cfpIsOpen,
+  getEvent,
+  mySubmissions,
+  placementsFromNoticeKeys,
+  type NoticedPlacement,
+} from '@/lib/queries';
+import { UNSCHEDULED, placementKey } from '@/lib/speaker-calendar';
 import { completeTask, confirmAttendance, withdrawSubmission } from './actions';
 import { Headshot } from './profile/Headshot';
 
@@ -47,6 +54,10 @@ export default async function SpeakerPage({
   ]);
 
   const gaps = profileGaps(user);
+
+  // What the last schedule email described, so a card can say whether the time
+  // above it is the time the speaker was told. One lookup for the whole page.
+  const noticed = await placementsFromNoticeKeys(mine.map((row) => row.scheduleNoticeKey));
 
   // Split the task list the way it will be read: a task naming a submission
   // belongs under that submission's card, everything else is account-level. A
@@ -148,6 +159,8 @@ export default async function SpeakerPage({
 
       {mine.map((row) => {
         const accepted = row.status === 'accepted';
+        const decided = accepted || row.status === 'rejected';
+        const told = scheduleNotice(row, noticed, event.timezone);
         const rowTasks = bySubmission.get(row.id) ?? [];
         return (
           <Card key={row.id} className="space-y-4" data-testid={`submission-card-${row.id}`}>
@@ -169,6 +182,42 @@ export default async function SpeakerPage({
                 {dayLabel(row.slotStartsAt, event.timezone)} at{' '}
                 {timeOfDay(row.slotStartsAt, event.timezone)} in {row.roomName}
               </p>
+            ) : null}
+
+            {/*
+              The status and the slot above are the organizers' current position.
+              These two lines are what the speaker has actually been told about
+              them, which is the thing they can check their inbox against. An
+              organizer flips a status while deciding and moves a talk four times
+              while building the grid; neither leaves the building until they
+              press send, and a portal that shows only the position invites a
+              speaker to act on a decision no email describes.
+            */}
+            {decided && !row.decisionEmailedAt ? (
+              <Notice tone="warn">
+                <span data-testid={`decision-unsent-${row.id}`}>
+                  The committee has recorded this decision but has not sent it yet. Expect an email
+                  once they do.
+                </span>
+              </Notice>
+            ) : null}
+
+            {decided && row.decisionEmailedAt ? (
+              <p className="text-xs text-muted" data-testid={`decision-sent-${row.id}`}>
+                Decision emailed {dayLabel(row.decisionEmailedAt, event.timezone)}.
+              </p>
+            ) : null}
+
+            {told ? (
+              told.tone === 'good' ? (
+                <p className="text-xs text-muted" data-testid={`schedule-notice-${row.id}`}>
+                  {told.text}
+                </p>
+              ) : (
+                <Notice tone="warn">
+                  <span data-testid={`schedule-notice-${row.id}`}>{told.text}</span>
+                </Notice>
+              )
             ) : null}
 
             {rowTasks.length > 0 ? (
@@ -256,6 +305,76 @@ export default async function SpeakerPage({
       })}
     </div>
   );
+}
+
+type ScheduleNotice = { tone: 'good' | 'warn'; text: string };
+
+/**
+ * Where this talk is, against where the last schedule email said it was.
+ *
+ * The comparison is the same one `pendingNotices` makes when deciding who to
+ * mail: the stored `scheduleNoticeKey` against the key the current placement
+ * produces. Reusing `placementKey` rather than reformatting the string here is
+ * deliberate, since a second spelling of the format would report every talk as
+ * moved.
+ *
+ * Never scheduled and never emailed about returns nothing, matching that same
+ * rule: a talk nobody has placed yet is not news, and every accepted speaker
+ * would otherwise open the portal to a warning about an email that was correct
+ * not to have been sent.
+ */
+function scheduleNotice(
+  row: { slotStartsAt: Date | null; slotRoomId: string | null; scheduleNoticeKey: string | null },
+  noticed: Map<string, NoticedPlacement>,
+  timezone: string,
+): ScheduleNotice | null {
+  const current = placementKey(
+    row.slotStartsAt && row.slotRoomId
+      ? { startsAt: row.slotStartsAt, roomId: row.slotRoomId }
+      : null,
+  );
+
+  if (row.scheduleNoticeKey === null) {
+    if (current === UNSCHEDULED) return null;
+    return {
+      tone: 'warn',
+      text: 'This time has not been emailed to you yet. Organizers are still building the schedule, so treat it as provisional.',
+    };
+  }
+
+  if (row.scheduleNoticeKey === current) {
+    // Agreeing on `unscheduled` is still agreement, but the good-news wording
+    // would describe a time and a room that are not on the card. This is the
+    // talk that was taken off the grid and emailed about, and the speaker is
+    // owed the "yes, we told you" half of that rather than silence.
+    return current === UNSCHEDULED
+      ? { tone: 'good', text: 'Not on the schedule, which is what your last email about it said.' }
+      : { tone: 'good', text: 'This is the time and room your last email described.' };
+  }
+
+  const previous = noticed.get(row.scheduleNoticeKey);
+  if (!previous) {
+    // Either the last mail said the talk was unscheduled, or its key names a
+    // room that has since been deleted. Both mean the same thing to a speaker:
+    // the email in their inbox does not describe the line above.
+    return {
+      tone: 'warn',
+      text: 'This has changed since your last email about it. The email you have does not describe the time above.',
+    };
+  }
+
+  const when = `${dayLabel(previous.startsAt, timezone)} at ${timeOfDay(previous.startsAt, timezone)}${
+    previous.roomName ? ` in ${previous.roomName}` : ''
+  }`;
+
+  if (current === UNSCHEDULED) {
+    return {
+      tone: 'warn',
+      text: `Taken off the schedule since your last email, which put you on ${when}.`,
+    };
+  }
+
+  return { tone: 'warn', text: `Moved since your last email, which said ${when}.` };
 }
 
 function TaskRow({

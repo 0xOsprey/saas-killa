@@ -1,8 +1,9 @@
-import { and, asc, eq, ne, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, ne, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { events, reviews, rooms, slots, submissions, tracks, users } from '@/db/schema';
 import type { AudienceLevel, Event, SubmissionFormat, SubmissionStatus } from '@/db/schema';
 import { writableBy } from './abstracts';
+import { UNSCHEDULED } from './speaker-calendar';
 
 export async function getEvent(): Promise<Event> {
   const found = await db.query.events.findFirst({ orderBy: asc(events.createdAt) });
@@ -198,8 +199,16 @@ export async function mySubmissions(speakerId: string) {
       trackName: tracks.name,
       createdAt: submissions.createdAt,
       slotStartsAt: slots.startsAt,
+      slotRoomId: slots.roomId,
       roomName: rooms.name,
       speakerConfirmedAt: submissions.speakerConfirmedAt,
+      // What the organizers have actually sent, as opposed to what they have
+      // decided. Both are idempotency keys on the organizer's side and both are
+      // the only record of whether this speaker was ever told; a portal that
+      // shows the decision without them says "accepted" to somebody who has had
+      // no email and cannot tell whether one is coming.
+      decisionEmailedAt: submissions.decisionEmailedAt,
+      scheduleNoticeKey: submissions.scheduleNoticeKey,
       slidesUrl: submissions.slidesUrl,
       recordingUrl: submissions.recordingUrl,
       resourcesNote: submissions.resourcesNote,
@@ -212,6 +221,53 @@ export async function mySubmissions(speakerId: string) {
     .leftJoin(rooms, eq(rooms.id, slots.roomId))
     .where(writableBy(speakerId))
     .orderBy(asc(submissions.createdAt));
+}
+
+export type NoticedPlacement = { startsAt: Date; roomName: string | null };
+
+/**
+ * The placements a set of `scheduleNoticeKey` values describe: what the speaker
+ * was last emailed, not where the talk is now.
+ *
+ * `slotFromNoticeKey` in `speaker-calendar.ts` does the same decoding, but it
+ * builds a whole `AgendaSlot` because its caller has to put one in a
+ * cancellation VEVENT. A portal only needs a time and a room name, and it needs
+ * them for every row on the page, so this resolves the whole set in one room
+ * lookup rather than one per talk.
+ *
+ * An unparseable or `unscheduled` key yields no entry. The caller renders the
+ * absence as "we have not emailed you about a time", which is what a key
+ * naming no placement means.
+ */
+export async function placementsFromNoticeKeys(
+  keys: (string | null)[],
+): Promise<Map<string, NoticedPlacement>> {
+  const parsed = new Map<string, { startsAt: Date; roomId: string }>();
+  for (const key of keys) {
+    if (!key || key === UNSCHEDULED || parsed.has(key)) continue;
+    const [startsAtIso, roomId] = key.split('|');
+    if (!startsAtIso || !roomId) continue;
+    const startsAt = new Date(startsAtIso);
+    if (Number.isNaN(startsAt.getTime())) continue;
+    parsed.set(key, { startsAt, roomId });
+  }
+  if (parsed.size === 0) return new Map();
+
+  const roomIds = [...new Set([...parsed.values()].map((entry) => entry.roomId))];
+  const found = await db
+    .select({ id: rooms.id, name: rooms.name })
+    .from(rooms)
+    .where(inArray(rooms.id, roomIds));
+  const names = new Map(found.map((room) => [room.id, room.name]));
+
+  // A deleted room leaves the time, which is the half a speaker acts on. Losing
+  // the whole line because the room row went away would hide the move itself.
+  return new Map(
+    [...parsed].map(([key, entry]) => [
+      key,
+      { startsAt: entry.startsAt, roomName: names.get(entry.roomId) ?? null },
+    ]),
+  );
 }
 
 export async function allTracks() {
