@@ -166,6 +166,35 @@ unset means the AI evaluator is off and the organizer screen says so.
 `ACCELEVENTS_BASE_URL`, `ACCELEVENTS_API_KEY` and `ACCELEVENTS_EVENT_ID` unset
 means every export is a dry run against fixtures. The suite never sets them.
 
+## There is a live instance
+
+`https://saas-killa.0xosprey.com` serves real traffic from a persistent host, so
+`uploads/` is real disk and files survive a redeploy. It runs from its own
+checkout against its own database; the operational detail is in
+`CLAUDE.local.md`. Two consequences bind anyone editing this repo.
+
+Never reset the live database. `pnpm test` and `pnpm db:reset` both act on
+whatever `.env.local` names, and the live one names a different database from the
+dev one, so check which directory you are in before running either.
+
+Never press the decision-email send button on the live board. `notifyDecided` is
+bulk with no per-row option, and the seeded speakers are at the reserved domain
+`@example.com`, so one press mails every decided-but-unnotified row into a wall
+of bounces. The seed needs addresses somebody controls before that is safe.
+
+## How the submission is scored
+
+The organiser grades with a public LLM-as-judge kit: a browser agent walks
+scripted scenarios and a separate judge scores 84 required rubric items worth 178
+weighted points across six areas, plus an optional seventh for extra credit. Two
+of its rules should shape what gets built next.
+
+Below 60% coverage the headline score is withheld entirely, so a screen the agent
+cannot reach costs as much as a feature that was never built. And the kit's own
+calibration says `exists` and `crud` items pass almost everywhere while `rule`,
+`scoping` and `handoff` items are where clones fail. Enforcement, role isolation,
+and data crossing a module boundary are worth more than another CRUD screen.
+
 ## Scope that was declined
 
 Attendee registration, ticketing and check-in; sponsors and exhibitors;
