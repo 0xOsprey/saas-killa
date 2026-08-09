@@ -15,6 +15,12 @@ import { removeHeadshot, uploadHeadshot } from './actions';
  * preview shows the file that was actually stored. The URL field lives in
  * `ProfileForm`, a client component holding its own preview state, and a file
  * input inside it would leave that state showing a URL the server had replaced.
+ *
+ * Separate forms, but only one visible door at a time. An upload writes its own
+ * `/files/…` path into `headshotUrl`, so leaving the URL field on screen after
+ * one showed the speaker a value they never typed under a control that already
+ * displayed the image. `hasUpload` picks the door: the URL field is the
+ * fallback for someone who has not uploaded anything.
  */
 export default async function SpeakerProfilePage({
   searchParams,
@@ -101,6 +107,7 @@ export default async function SpeakerProfilePage({
         name={user.name}
         bio={user.bio}
         headshotUrl={user.headshotUrl}
+        hasUpload={Boolean(uploaded)}
       />
     </div>
   );

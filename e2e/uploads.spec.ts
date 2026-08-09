@@ -167,6 +167,34 @@ test('a speaker uploads a headshot, a deck and a supporting document', async ({ 
   await expect(page.getByTestId('content-flash')).toContainText('Document removed');
 });
 
+test('an uploaded headshot replaces the URL field instead of sitting beside it', async ({
+  page,
+}) => {
+  await signInVia(page, SPEAKER);
+
+  // The URL field is the door for a speaker who has not uploaded anything, so
+  // it is on screen before one exists.
+  await page.goto('/speaker/profile');
+  await expect(page.getByTestId('profile-headshot-url')).toBeVisible();
+
+  const headshot = await uploadHeadshot(page, PNG, 'one-door.png');
+  await expect(page.getByTestId('profile-headshot-url')).toHaveCount(0);
+
+  // Saving the rest of the profile must not blank the column the upload wrote.
+  // This form is `headshotUrl`'s only writer on save, so a field that were
+  // simply deleted would post nothing and take the photo down with it.
+  await page.getByTestId('profile-save').click();
+  await expect(page.getByTestId('profile-saved')).toBeVisible();
+  await page.goto('/speaker/profile');
+  await expect(page.getByTestId('headshot-image').first()).toHaveAttribute('src', headshot);
+  expect((await fetchFile(page, headshot)).status).toBe(200);
+
+  // Removing the upload hands the fallback door back, empty.
+  await page.getByTestId('headshot-remove').click();
+  await expect(page.getByTestId('headshot-file-meta')).toContainText('Upload an image');
+  await expect(page.getByTestId('profile-headshot-url')).toHaveValue('');
+});
+
 test('a file that is not what it says it is gets refused', async ({ page }) => {
   await signInVia(page, SPEAKER);
   await page.goto('/speaker/profile');

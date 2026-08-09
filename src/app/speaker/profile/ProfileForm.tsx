@@ -10,11 +10,13 @@ export function ProfileForm({
   name,
   bio,
   headshotUrl,
+  hasUpload,
 }: {
   email: string;
   name: string | null;
   bio: string | null;
   headshotUrl: string | null;
+  hasUpload: boolean;
 }) {
   const [state, action, pending] = useActionState<ProfileState, FormData>(saveProfile, {});
   // Mirrored into state purely so the preview beside the field tracks typing.
@@ -60,16 +62,29 @@ export function ProfileForm({
           />
         </Field>
 
-        <Field label="Headshot URL" hint="A link to an image. Leave it empty to show your initials.">
-          <Input
-            name="headshotUrl"
-            type="url"
-            defaultValue={headshotUrl ?? ''}
-            onChange={(e) => setPreviewUrl(e.target.value)}
-            placeholder="https://example.com/me.jpg"
-            data-testid="profile-headshot-url"
-          />
-        </Field>
+        {hasUpload ? (
+          // An upload already owns this column and the upload card above is the
+          // door that maintains it, so showing the stored `/files/…` path back
+          // as an editable URL asks the speaker to keep a value they never
+          // typed. The hidden input is not decoration: this form is the only
+          // writer of `headshotUrl` on save, and dropping the field entirely
+          // would post nothing and blank the upload on the next name edit.
+          <input type="hidden" name="headshotUrl" value={headshotUrl ?? ''} />
+        ) : (
+          <Field
+            label="Headshot URL"
+            hint="A link to an image. Leave it empty to show your initials, or upload a file above."
+          >
+            <Input
+              name="headshotUrl"
+              type="url"
+              defaultValue={headshotUrl ?? ''}
+              onChange={(e) => setPreviewUrl(e.target.value)}
+              placeholder="https://example.com/me.jpg"
+              data-testid="profile-headshot-url"
+            />
+          </Field>
+        )}
       </Card>
 
       <Button type="submit" disabled={pending} data-testid="profile-save">
