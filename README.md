@@ -12,7 +12,7 @@ deliberately not, and which test covers each. It also records that four of the
 brief's nine requirements are struck through in the source document, all four of
 which were built here before that was noticed.
 
-`FLOWS.md` is the other axis: every user flow in the app, 173 of them across 783
+`FLOWS.md` is the other axis: every user flow in the app, 174 of them across 787
 numbered steps, by role. Each one carries its route, its preconditions, the
 server action behind each control, the column it writes, and its refusal paths.
 

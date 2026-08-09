@@ -22,6 +22,7 @@ const TABS = [
   { href: '/organizer/onboarding', label: 'Onboarding' },
   { href: '/organizer/awards', label: 'Awards' },
   { href: '/organizer/pages', label: 'Speaker info' },
+  { href: '/organizer/email', label: 'Email log' },
   { href: '/organizer/embed', label: 'Embed' },
   { href: '/organizer/integrations', label: 'Accelevents' },
   { href: '/organizer/settings', label: 'Settings' },

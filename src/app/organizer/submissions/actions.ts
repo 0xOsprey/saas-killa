@@ -9,6 +9,7 @@ import { requireRole } from '@/lib/auth';
 import {
   acceptanceMail,
   calendarAttachment,
+  logEmail,
   mailFromParty,
   rejectionMail,
   sendAndLog,
@@ -84,6 +85,7 @@ export async function notifyDecided(): Promise<void> {
       id: submissions.id,
       title: submissions.title,
       status: submissions.status,
+      speakerId: submissions.speakerId,
       email: users.email,
     })
     .from(submissions)
@@ -122,7 +124,7 @@ export async function notifyDecided(): Promise<void> {
       mail = acceptanceMail(row.email, row.title, event.name);
     }
 
-    await sendMail(mail);
+    const sent = await sendMail(mail);
     await db
       .update(submissions)
       .set({
@@ -132,6 +134,16 @@ export async function notifyDecided(): Promise<void> {
           : {}),
       })
       .where(eq(submissions.id, row.id));
+    // After the idempotency write rather than through `sendAndLog`, so a
+    // receipt that fails costs the log a row instead of costing the speaker a
+    // second acceptance mail on the retry.
+    await logEmail({
+      userId: row.speakerId,
+      submissionId: row.id,
+      kind: row.status === 'accepted' ? 'decision_accepted' : 'decision_rejected',
+      subject: mail.subject,
+      delivered: sent.delivered,
+    });
   }
 
   revalidatePath('/organizer/submissions');

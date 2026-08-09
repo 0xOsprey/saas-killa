@@ -1,9 +1,9 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Resend } from 'resend';
-import { eq } from 'drizzle-orm';
+import { desc, eq } from 'drizzle-orm';
 import { db } from '@/db';
-import { emailLog, userRoles, users } from '@/db/schema';
+import { emailLog, submissions, userRoles, users } from '@/db/schema';
 import { env } from './env';
 
 /**
@@ -91,6 +91,30 @@ export function calendarAttachment(ics: string, filename = 'invite.ics'): Attach
 }
 
 /**
+ * Write the receipt for a message that has already gone out.
+ *
+ * Separate from `sendAndLog` for the one caller that cannot use it: the
+ * decision mail marks `decisionEmailedAt` between the send and the receipt,
+ * because that column is its idempotency key and a receipt failing must not
+ * cost a speaker a second acceptance mail on the retry.
+ */
+export async function logEmail(meta: {
+  userId: string;
+  kind: string;
+  subject: string;
+  delivered: boolean;
+  submissionId?: string;
+}): Promise<void> {
+  await db.insert(emailLog).values({
+    userId: meta.userId,
+    submissionId: meta.submissionId ?? null,
+    kind: meta.kind,
+    subject: meta.subject,
+    delivered: meta.delivered,
+  });
+}
+
+/**
  * Send, then write the receipt. Every caller outside the sign-in path should
  * use this rather than `sendMail`, because an organizer asking "did that go
  * out" is asking about `email_log`, and a row only exists if a send happened.
@@ -101,14 +125,57 @@ export async function sendAndLog(
   meta: { userId: string; kind: string; submissionId?: string },
 ): Promise<{ delivered: boolean; path?: string }> {
   const result = await sendMail(mail);
-  await db.insert(emailLog).values({
-    userId: meta.userId,
-    submissionId: meta.submissionId ?? null,
-    kind: meta.kind,
-    subject: mail.subject,
-    delivered: result.delivered,
-  });
+  await logEmail({ ...meta, subject: mail.subject, delivered: result.delivered });
   return result;
+}
+
+export type EmailLogEntry = {
+  id: string;
+  kind: string;
+  subject: string;
+  delivered: boolean;
+  sentAt: Date;
+  recipientName: string | null;
+  recipientEmail: string;
+  submissionId: string | null;
+  submissionTitle: string | null;
+};
+
+/**
+ * The correspondence log, newest first.
+ *
+ * Every send but one is here: the sign-in link goes out through `sendMail`
+ * alone, because a magic link is authentication rather than correspondence and
+ * an organizer reading a list of who was mailed what does not want it padded
+ * with one row per page load.
+ *
+ * Capped rather than paginated. The screen answers "did that go out", which is
+ * always a question about a recent send, and an uncapped select on a table that
+ * grows with every reminder is a page that gets slower every week.
+ */
+export async function recentEmails(limit = 200): Promise<EmailLogEntry[]> {
+  return db
+    .select({
+      id: emailLog.id,
+      kind: emailLog.kind,
+      subject: emailLog.subject,
+      delivered: emailLog.delivered,
+      sentAt: emailLog.sentAt,
+      recipientName: users.name,
+      recipientEmail: users.email,
+      submissionId: emailLog.submissionId,
+      submissionTitle: submissions.title,
+    })
+    .from(emailLog)
+    .innerJoin(users, eq(users.id, emailLog.userId))
+    .leftJoin(submissions, eq(submissions.id, emailLog.submissionId))
+    .orderBy(desc(emailLog.sentAt))
+    .limit(limit);
+}
+
+/** Whether mail is really leaving the box, so the screen can say which. */
+export function mailIsLive(): boolean {
+  return Boolean(env().RESEND_API_KEY);
 }
 
 /**

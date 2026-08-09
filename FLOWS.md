@@ -1,7 +1,7 @@
 # User roles and every user flow
 
 What each kind of person can do in this app, screen by screen, control by control.
-173 flows and 783 numbered steps across four roles, written 2026-08-08 by reading
+174 flows and 787 numbered steps across four roles, written 2026-08-08 by reading
 the code rather than by clicking around.
 
 `SCOPE.md` answers "is the requirement built". This answers "what does a person
@@ -17,7 +17,7 @@ it writes, and what the person sees next. Identifiers are verbatim from the
 source. Nothing was renamed to read better, because a renamed symbol is a symbol
 you cannot grep for.
 
-Flow ids are prefixed by part: `ORG-1` to `ORG-103`, `SPK-1` to `SPK-25`,
+Flow ids are prefixed by part: `ORG-1` to `ORG-104`, `SPK-1` to `SPK-25`,
 `REV-1` to `REV-45`. Cross-references inside a part use the same ids.
 
 ## The role model in one paragraph
@@ -1145,7 +1145,8 @@ Board rows come from `organizerSubmissions()` (`src/lib/queries.ts`), sorted by 
      - accepted **and placed** → `acceptanceMail(...)` carrying `when` (`dayLabel`, `timeOfDay`–`timeOfDay`) and `room`, plus a `calendarAttachment(ics)` built by `inviteFor(placement, {eventName, organizer, sequence})` where `sequence = (placement.noticeSeq ?? 0) + 1`.
      - accepted, unplaced → plain `acceptanceMail(email, title, eventName)`.
   5. `sendMail(mail)`, then **immediately** `UPDATE submissions SET decision_emailed_at = now()` for that row, and — only when placed — also `schedule_notice_key = placement.key` and `schedule_notice_seq = sequence`.
-  6. Revalidates `/organizer/submissions` and `/speaker`.
+  6. `logEmail({ userId: speakerId, submissionId, kind: 'decision_accepted' | 'decision_rejected', subject, delivered })` writes the `email_log` row ORG-16 reads. **After** the idempotency write rather than through `sendAndLog`, so a receipt that fails costs the log a row instead of costing the speaker a second acceptance mail on the retry.
+  7. Revalidates `/organizer/submissions` and `/speaker`.
 - **Error and refusal paths:** `decision_emailed_at` is the idempotency key, so a second press finds nothing to send. The per-row write is deliberate: a failure halfway leaves the already-sent speakers marked and a retry resumes rather than restarting. The `scheduleNoticeKey` write matters — without it `notifySchedule` (ORG-52) would read the talk as newly placed and send a second invitation minutes later for a time nothing had changed about.
 - **Ends:** speakers told; the row caption flips to "speaker notified"; the button becomes disabled.
 
@@ -2297,6 +2298,22 @@ Screen: `.../organizer/settings/page.tsx` · Actions: `.../organizer/settings/ac
   6. `revalidatePath('/', 'layout')` — the whole tree, because the timezone changes how every rendered date reads.
 - **Error and refusal paths:** the thrown message above. **This action never touches `cfp_opens_at` or `cfp_closes_at`** — the call window belongs to `/organizer/cfp` (ORG-23–ORG-25) and a save here cannot silently reopen or close the call.
 - **Ends:** the event's identity, zone, dates, poster embargo and agenda visibility are set. `poster_embargo_until` and `agenda_published` are the two levers behind `posterGalleryGate` (ORG-83), and `agenda_published` is the same column the schedule toggle writes (ORG-51).
+
+---
+
+### Q. Email log
+
+Screen: `.../organizer/email/page.tsx` · Query: `recentEmails()` in `src/lib/email.ts`
+
+##### ORG-104. Read what has been sent
+- **Route:** `/organizer/email`
+- **Precondition:** none.
+- **Steps:**
+  1. The page lists the most recent 200 `email_log` rows, newest first, each carrying its `kind` slug and a glossed label, the subject, the recipient's name and address, the send time in the event's zone, a link to the submission when the row names one, and a `delivered` badge.
+  2. When `RESEND_API_KEY` is unset, `data-testid="mail-not-live"` says so, because every row then reads as undelivered and that is configuration rather than 19 failed sends.
+  3. `data-testid="email-count"` is the number of rows shown.
+- **Error and refusal paths:** none; it is read-only. The magic link is the one send with no row here (`sendMail` rather than `sendAndLog`), on the grounds that authentication is not correspondence.
+- **Ends:** no DB change. The second read-only organizer tab, after ORG-102.
 
 ---
 

@@ -108,6 +108,23 @@ test('a proposal travels from the CFP to the published agenda', async ({ page })
   // Pressing send again must not mail anybody twice.
   await expect(page.getByTestId('notify-decided')).toBeDisabled();
 
+  // 4b. Read the receipt ----------------------------------------------------
+  // "Did that go out" used to be answerable only in psql: every send wrote an
+  // `email_log` row and no screen read the table. The acceptance was not even
+  // in it, because the decision mail alone went through `sendMail`.
+  await page.goto('/organizer/email');
+  // Matched on the subject of the mail this test actually read out of `.mail/`,
+  // so the row is the receipt for that send and not for the "received" mail the
+  // same submission produced an hour of test-time earlier.
+  const receipt = page
+    .locator('[data-testid^="email-row-"]')
+    .filter({ hasText: acceptance.subject });
+  await expect(receipt).toHaveCount(1);
+  await expect(receipt).toContainText('decision_accepted');
+  await expect(receipt).toContainText(SPEAKER_EMAIL);
+  await expect(receipt).toContainText('not sent'); // RESEND_API_KEY is unset under test.
+  await expect(page.getByTestId('mail-not-live')).toBeVisible();
+
   // 5. Schedule -------------------------------------------------------------
   await page.goto('/organizer/schedule');
   await page.getByTestId('add-band').click();

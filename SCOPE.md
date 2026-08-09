@@ -91,10 +91,12 @@ Built.
 
 Built.
 
-- Every template is in `src/lib/email.ts`. Sends that go through `sendAndLog`
-  leave an `email_log` row; the two that do not are the magic link, which is not
-  correspondence, and the decision mail, whose idempotency key is
-  `decisionEmailedAt` on the submission itself.
+- Every template is in `src/lib/email.ts`, and every send but one leaves an
+  `email_log` row that `/organizer/email` lists newest first. The exception is
+  the magic link, which is authentication rather than correspondence. The
+  decision mail writes its receipt after `decisionEmailedAt` rather than through
+  `sendAndLog`, because that column is its idempotency key and a receipt failing
+  must not cost a speaker a second acceptance mail on the retry.
 - Deciding and emailing are separate presses. An organizer flips statuses and
   changes their mind freely and nothing leaves the building until they send.
 - The acceptance mail carries an `.ics` when the talk already has a slot. When
@@ -102,7 +104,8 @@ Built.
   placed.
 - A re-sent invitation revises the entry the speaker already holds rather than
   adding a second one: the UID is derived from the submission id and `SEQUENCE`
-  always rises.
+  rises with each notice. The subscription feeds carry the same per-talk counter;
+  a break has no submission behind it and stays at 0.
 - What gets emailed is decided by comparing the current placement against the
   one the speaker was last told about (`schedule_notice_key`), not by watching
   for events. A talk dragged four times sends one mail; a talk moved out and
