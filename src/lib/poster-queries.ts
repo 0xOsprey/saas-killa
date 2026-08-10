@@ -22,10 +22,14 @@ export type GalleryFilters = {
 export type PosterCard = {
   id: string;
   title: string;
+  abstract: string;
   posterUrl: string | null;
   boardNumber: string | null;
   keywords: string[];
   speakerName: string | null;
+  /** The presenter's byline, in the two halves `billing` joins. */
+  speakerTitle: string | null;
+  speakerCompany: string | null;
   trackName: string | null;
   trackColour: string | null;
   bookmarked: boolean;
@@ -113,10 +117,13 @@ export async function posterGallery(
     .select({
       id: submissions.id,
       title: submissions.title,
+      abstract: submissions.abstract,
       posterUrl: submissions.posterUrl,
       boardNumber: submissions.boardNumber,
       keywords: submissions.keywords,
       speakerName: users.name,
+      speakerTitle: users.title,
+      speakerCompany: users.company,
       trackName: tracks.name,
       trackColour: tracks.colour,
       bookmarked: sql<boolean>`${bookmarked}`,
@@ -166,6 +173,8 @@ export async function posterById(
       boardNumber: submissions.boardNumber,
       keywords: submissions.keywords,
       speakerName: users.name,
+      speakerTitle: users.title,
+      speakerCompany: users.company,
       trackName: tracks.name,
       trackColour: tracks.colour,
       bookmarked: sql<boolean>`${bookmarked}`,

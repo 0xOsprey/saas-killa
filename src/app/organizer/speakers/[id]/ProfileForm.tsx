@@ -15,12 +15,18 @@ const EMPTY: ProfileState = {};
 export function ProfileForm({
   userId,
   name,
+  title,
+  company,
   bio,
+  travelNotes,
   headshotUrl,
 }: {
   userId: string;
   name: string | null;
+  title: string | null;
+  company: string | null;
   bio: string | null;
+  travelNotes: string | null;
   headshotUrl: string | null;
 }) {
   const [state, formAction, pending] = useActionState(updateSpeakerProfileAction, EMPTY);
@@ -33,8 +39,56 @@ export function ProfileForm({
         <Input name="name" defaultValue={name ?? ''} maxLength={120} data-testid="profile-name" />
       </Field>
 
+      {/*
+        Both halves of the byline, side by side, because they are read as one
+        line and an organizer typing a job title into a company field is the
+        mistake that separating them invites. Neither is required: a speaker
+        billed by name alone is a real speaker, and every surface that prints
+        this drops the line rather than showing half of it.
+      */}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Job title">
+          <Input
+            name="title"
+            defaultValue={title ?? ''}
+            maxLength={120}
+            placeholder="Principal Engineer"
+            data-testid="profile-title"
+          />
+        </Field>
+        <Field label="Company">
+          <Input
+            name="company"
+            defaultValue={company ?? ''}
+            maxLength={120}
+            placeholder="Latticework Systems"
+            data-testid="profile-company"
+          />
+        </Field>
+      </div>
+
       <Field label="Bio" hint="Shown on the agenda detail page and the public directory.">
         <Textarea name="bio" defaultValue={bio ?? ''} maxLength={4000} />
+      </Field>
+
+      {/*
+        The hint is doing real work. This box sits directly under the bio, which
+        is published everywhere, and the two are one keystroke apart. Whoever
+        types an allergy or a flight number into the wrong one has put it on the
+        public agenda, so the field says out loud that it is the one nobody else
+        sees.
+      */}
+      <Field
+        label="Travel and logistics"
+        hint="Organizer-only. Never shown to the speaker or on any public page."
+      >
+        <Textarea
+          name="travelNotes"
+          defaultValue={travelNotes ?? ''}
+          maxLength={2000}
+          placeholder="Arriving Friday evening, vegetarian, hotel booked by us."
+          data-testid="profile-travel-notes"
+        />
       </Field>
 
       <div className="flex items-end gap-3">

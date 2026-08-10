@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { Badge, Button, Card, Empty, Input, Notice, PageHeader, Select } from '@/components/ui';
 import { currentUser } from '@/lib/auth';
 import { allTracks, getEvent } from '@/lib/queries';
-import { speakerDirectory } from '@/lib/speakers';
+import { billing, speakerDirectory } from '@/lib/speakers';
 import { Headshot } from './Headshot';
 
 function excerpt(text: string | null, limit = 180): string | null {
@@ -93,6 +93,14 @@ export default async function SpeakerDirectoryPage({
                   >
                     {speaker.name ?? 'Unnamed speaker'}
                   </Link>
+                  {/* Directly under the name, above the talk count: it is how
+                      this person is introduced, not a statistic about them.
+                      Absent entirely when neither half is filled in. */}
+                  {billing(speaker.title, speaker.company) ? (
+                    <p className="text-xs text-ink" data-testid={`speaker-billing-${speaker.id}`}>
+                      {billing(speaker.title, speaker.company)}
+                    </p>
+                  ) : null}
                   <p className="text-xs text-muted">
                     {speaker.acceptedCount} in the programme
                   </p>

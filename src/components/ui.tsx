@@ -110,6 +110,67 @@ export function Badge({
   );
 }
 
+/**
+ * Tailwind reads class names as literal strings out of the source, so a
+ * computed `line-clamp-${n}` compiles to a rule that does not exist. The map is
+ * what makes the `lines` prop real.
+ */
+const CLAMP_LINES = {
+  2: 'line-clamp-2',
+  3: 'line-clamp-3',
+  4: 'line-clamp-4',
+} as const;
+
+/**
+ * Long text, folded to a few lines behind Show more.
+ *
+ * The whole string is in the DOM once and CSS decides how much of it you see.
+ * The obvious alternative, a short server-truncated copy swapped for the full
+ * one, puts the opening sentence on the wire twice on every card of a forty
+ * session agenda, and buys back a description almost nobody expands.
+ *
+ * `details`/`summary` with `group-open:`, which is the disclosure idiom already
+ * used by the collapsible panels on `/organizer/speakers`. It costs no client
+ * JavaScript on pages a venue full of people open at once, and it keeps a
+ * collapsed card the same height whatever the author wrote. Everything sits
+ * inside the `summary`, so the element discloses nothing and exists only to
+ * carry the open state.
+ *
+ * Text shorter than `foldAfter` renders as a plain paragraph. A Show more that
+ * reveals nothing teaches people the control is decorative.
+ */
+export function ShowMoreText({
+  text,
+  lines = 2,
+  foldAfter = 180,
+  className,
+  testId,
+}: {
+  text: string;
+  lines?: keyof typeof CLAMP_LINES;
+  foldAfter?: number;
+  className?: string;
+  testId?: string;
+}) {
+  const body = cn('block whitespace-pre-wrap', className);
+
+  if (text.length <= foldAfter) {
+    return <p className={body}>{text}</p>;
+  }
+
+  return (
+    <details className="group">
+      <summary className="cursor-pointer list-none">
+        <span className={cn(body, CLAMP_LINES[lines], 'group-open:line-clamp-none')}>{text}</span>
+        <span className="mt-0.5 block text-xs font-medium text-accent" data-testid={testId}>
+          <span className="group-open:hidden">Show more</span>
+          <span className="hidden group-open:inline">Show less</span>
+        </span>
+      </summary>
+    </details>
+  );
+}
+
 export function PageHeader({
   title,
   description,

@@ -45,6 +45,41 @@ const ROOMS = [
   { name: 'Workshop room', capacity: 18, position: 2 },
 ];
 
+/**
+ * Bylines for the seeded speakers, one job title and one employer each.
+ *
+ * Two lists of coprime length rather than one list of pairs, so 24 speakers get
+ * 24 combinations out of 17 lines of fixture. The point is not variety for its
+ * own sake: the public directory, the agenda card and both embed widgets all
+ * print this line, and a fixture where every row reads the same makes a
+ * rendering bug that repeats one speaker's byline across every card invisible.
+ *
+ * Titles carry no company and companies carry no title, because `billing` joins
+ * them and a fixture that pre-joined them would never exercise the join.
+ */
+const SPEAKER_TITLES = [
+  'Principal Engineer',
+  'Staff Engineer',
+  'Head of Platform',
+  'Site Reliability Engineer',
+  'Engineering Manager',
+  'Distinguished Engineer',
+  'Director of Engineering',
+  'Research Scientist',
+  'Database Engineer',
+];
+
+const SPEAKER_COMPANIES = [
+  'Latticework Systems',
+  'Northbound Data',
+  'Kestrel Labs',
+  'Meridian Payments',
+  'Halyard Cloud',
+  'Fathom Analytics Group',
+  'Ironwood Software',
+  'Clearwater Storage',
+];
+
 const TITLE_HEADS = [
   'Rebuilding',
   'Debugging',
@@ -274,6 +309,8 @@ async function main() {
       Array.from({ length: 24 }, (_, i) => ({
         email: `speaker${i + 1}@example.com`,
         name: `Speaker ${i + 1}`,
+        title: SPEAKER_TITLES[i % SPEAKER_TITLES.length]!,
+        company: SPEAKER_COMPANIES[i % SPEAKER_COMPANIES.length]!,
         bio: `Builds and operates ${['payments', 'search', 'storage', 'streaming'][i % 4]} systems. This is their ${i % 3 === 0 ? 'first' : 'third'} time on this stage.`,
       })),
     )

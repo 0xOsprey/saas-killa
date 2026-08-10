@@ -350,8 +350,9 @@ export default async function OrganizerCfpPage({
             <div>
               <h2 className="text-sm font-semibold text-ink">Reviewer completion</h2>
               <p className="mt-0.5 text-xs text-muted">
-                Outstanding counts only ungraded assignments on submissions still open, so a
-                decided proposal never nags anybody.
+                Assigned is every ask ever made. Outstanding is what is still doable, so complete
+                is graded over graded plus outstanding: a reviewer who did everything anyone could
+                still do reads 100%. Decided first and recused account for the rest.
               </p>
             </div>
             <form action={remindReviewers}>
@@ -376,6 +377,12 @@ export default async function OrganizerCfpPage({
                   <th className="py-2 text-right font-medium">Assigned</th>
                   <th className="py-2 text-right font-medium">Graded</th>
                   <th className="py-2 text-right font-medium">Outstanding</th>
+                  {/* Assigned still counts every ask ever made, which is the
+                      point: an unanswered one must not vanish. These two are why
+                      it can exceed graded plus outstanding, and without them on
+                      screen the gap read as a reviewer who was simply behind. */}
+                  <th className="py-2 text-right font-medium">Decided first</th>
+                  <th className="py-2 text-right font-medium">Recused</th>
                   <th className="py-2 text-right font-medium">Overdue</th>
                   <th className="py-2 text-right font-medium">Complete</th>
                 </tr>
@@ -394,6 +401,26 @@ export default async function OrganizerCfpPage({
                     <td className="py-2 text-right tabular-nums text-ink">{row.assigned}</td>
                     <td className="py-2 text-right tabular-nums text-ink">{row.graded}</td>
                     <td className="py-2 text-right tabular-nums text-ink">{row.outstanding}</td>
+                    <td
+                      className="py-2 text-right tabular-nums"
+                      data-testid={`decided-first-${row.reviewerId}`}
+                    >
+                      {row.decided > 0 ? (
+                        <Badge tone="warn">{row.decided}</Badge>
+                      ) : (
+                        <span className="text-muted">0</span>
+                      )}
+                    </td>
+                    <td
+                      className="py-2 text-right tabular-nums"
+                      data-testid={`recused-${row.reviewerId}`}
+                    >
+                      {row.recused > 0 ? (
+                        <Badge>{row.recused}</Badge>
+                      ) : (
+                        <span className="text-muted">0</span>
+                      )}
+                    </td>
                     <td className="py-2 text-right tabular-nums">
                       {row.overdue > 0 ? (
                         <Badge tone="bad">{row.overdue}</Badge>

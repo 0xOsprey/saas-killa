@@ -93,6 +93,25 @@ export const ORGANIZER_SORTS = [
 
 export type OrganizerSort = (typeof ORGANIZER_SORTS)[number]['value'];
 
+/**
+ * Which end of the chosen sort comes first. Every mode used to have one fixed
+ * direction, which on `grade` meant the weakest proposals were the ones a chair
+ * could never bring to the top: they sit at the bottom of a paged list, so on a
+ * board of any size they are on a page nobody opens.
+ */
+export type OrganizerDirection = 'asc' | 'desc';
+
+/**
+ * The direction each mode has always had, so an address with no `direction=` in
+ * it returns exactly the order it did before the toggle existed. Titles read A
+ * to Z; the other two put the interesting end first.
+ */
+export const ORGANIZER_DEFAULT_DIRECTION: Record<OrganizerSort, OrganizerDirection> = {
+  grade: 'desc',
+  newest: 'desc',
+  title: 'asc',
+};
+
 export type OrganizerFilters = {
   q?: string | null;
   status?: SubmissionStatus | null;
@@ -102,6 +121,7 @@ export type OrganizerFilters = {
 
 export type OrganizerQuery = OrganizerFilters & {
   sort?: OrganizerSort;
+  direction?: OrganizerDirection;
   limit?: number;
   offset?: number;
 };
@@ -145,15 +165,34 @@ function organizerConditions(filters: OrganizerFilters): SQL[] {
  * tied rows in any order it likes on each query, and two rows tied across a page
  * boundary is a row rendered twice on page 1 and never on page 2.
  */
-const ORGANIZER_ORDER: Record<OrganizerSort, SQL[]> = {
-  grade: [
-    sql`avg(${reviews.score}) desc nulls last`,
-    asc(submissions.createdAt),
-    asc(submissions.id),
-  ],
-  newest: [desc(submissions.createdAt), asc(submissions.id)],
-  title: [asc(submissions.title), asc(submissions.id)],
-};
+/**
+ * The direction is applied to the sort key only. `nulls last` does not flip with
+ * it: an ungraded proposal is not the lowest-scoring one, and floating forty of
+ * them to the top is not what a chair asking for the weakest proposals wants.
+ *
+ * The id tiebreaker stays ascending in both directions for the same reason it
+ * exists: it is there to make the order total, and a tiebreaker that moves is
+ * one more thing that can shuffle a row across a page boundary.
+ */
+function organizerOrder(sort: OrganizerSort, direction: OrganizerDirection): SQL[] {
+  const flip = <T extends SQL>(ascending: T, descending: T) =>
+    direction === 'asc' ? ascending : descending;
+
+  switch (sort) {
+    case 'grade':
+      return [
+        direction === 'asc'
+          ? sql`avg(${reviews.score}) asc nulls last`
+          : sql`avg(${reviews.score}) desc nulls last`,
+        asc(submissions.createdAt),
+        asc(submissions.id),
+      ];
+    case 'newest':
+      return [flip(asc(submissions.createdAt), desc(submissions.createdAt)), asc(submissions.id)];
+    case 'title':
+      return [flip(asc(submissions.title), desc(submissions.title)), asc(submissions.id)];
+  }
+}
 
 /**
  * The organizer view. Unlike the review queue this one carries speaker identity
@@ -192,7 +231,12 @@ export async function organizerSubmissions(options: OrganizerQuery = {}): Promis
     .leftJoin(slots, eq(slots.submissionId, submissions.id))
     .where(conditions.length > 0 ? and(...conditions) : undefined)
     .groupBy(submissions.id, tracks.name, users.name, users.email)
-    .orderBy(...ORGANIZER_ORDER[options.sort ?? 'grade']);
+    .orderBy(
+      ...organizerOrder(
+        options.sort ?? 'grade',
+        options.direction ?? ORGANIZER_DEFAULT_DIRECTION[options.sort ?? 'grade'],
+      ),
+    );
 
   if (options.limit === undefined) return rows;
   return rows.limit(options.limit).offset(options.offset ?? 0);

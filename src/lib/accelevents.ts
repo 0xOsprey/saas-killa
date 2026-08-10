@@ -193,6 +193,15 @@ export async function exportBundle(): Promise<ExportBundle> {
         email: speaker.email,
         firstName: first,
         lastName: last,
+        // Two more transcribed names, on the same footing as every other name
+        // in this file: nobody has seen the far end accept them. They are not
+        // in `REQUIRED_FIELDS`, so a wrong guess costs an ignored key rather
+        // than a 422, and the byline is now on every other surface the
+        // programme reaches. Sending a bare name to the one downstream copy
+        // would have made this file the only place a speaker is still just a
+        // name.
+        jobTitle: speaker.title,
+        company: speaker.company,
         biography: speaker.bio,
         headshotUrl: absolute(speaker.headshotUrl),
         profileUrl: `${env().APP_URL}/speakers/${speaker.id}`,
@@ -239,6 +248,8 @@ async function exportSpeakers() {
       id: users.id,
       email: users.email,
       name: users.name,
+      title: users.title,
+      company: users.company,
       bio: users.bio,
       headshotUrl: users.headshotUrl,
     })

@@ -5,18 +5,86 @@ import { Badge, Button, Card, Empty, Notice, PageHeader } from '@/components/ui'
 import { FORMAT_LABELS, STATUS_LABELS, dayLabel, timeOfDay } from '@/lib/format';
 import { getEvent } from '@/lib/queries';
 import { TASK_KIND_LABELS } from '@/lib/speaker-labels';
-import { speakerDetail } from '@/lib/speakers';
+import { billing, speakerDetail } from '@/lib/speakers';
+import { formatBytes, headshotUpload, uploadHref } from '@/lib/uploads';
 import { Headshot } from '@/app/speakers/Headshot';
 import {
   completeSpeakerTaskAction,
   deleteAvailabilityAction,
   deleteSpeakerTaskAction,
   reopenSpeakerTaskAction,
+  setAttendanceAction,
 } from '../actions';
 import { ReminderForm } from '../ReminderForm';
 import { AvailabilityForm } from './AvailabilityForm';
 import { ProfileForm } from './ProfileForm';
 import { TaskForm } from './TaskForm';
+
+/** The three states `speakerConfirmedAt` and `speakerDeclinedAt` encode between them. */
+type AttendanceState = 'confirmed' | 'declined' | 'pending';
+
+const ATTENDANCE_BADGES = {
+  confirmed: { tone: 'good', label: 'confirmed' },
+  declined: { tone: 'bad', label: 'declined' },
+  pending: { tone: 'warn', label: 'not confirmed' },
+} as const;
+
+const ATTENDANCE_BUTTONS = {
+  confirmed: 'Mark confirmed',
+  declined: 'Mark declined',
+  pending: 'Not heard yet',
+} as const;
+
+/**
+ * The confirmation badge, and the control that sets it.
+ *
+ * This was a badge alone until now, which made the one fact an organizer chases
+ * hardest the one fact they could not record: most answers arrive by email or in
+ * a corridor, never through the speaker's own portal. `setAttendanceAction`
+ * writes the same two columns the speaker-side pair writes, from an
+ * organizer-gated action, so the speaker-side ownership predicate stays intact.
+ *
+ * Every state but the current one gets a button, so the control is one press
+ * from anywhere to anywhere and never renders a button that does nothing.
+ * `pending` is on that list because "we have not heard" is a state worth being
+ * able to get back to after a misclick, and clearing both columns is the only
+ * route there.
+ */
+function Attendance({
+  submissionId,
+  userId,
+  state,
+}: {
+  submissionId: string;
+  userId: string;
+  state: AttendanceState;
+}) {
+  const badge = ATTENDANCE_BADGES[state];
+  const others = (['confirmed', 'declined', 'pending'] as const).filter((next) => next !== state);
+
+  return (
+    <span className="flex flex-wrap items-center gap-1.5">
+      <Badge tone={badge.tone} data-testid="attendance-badge">
+        {badge.label}
+      </Badge>
+      {others.map((next) => (
+        <form key={next} action={setAttendanceAction}>
+          <input type="hidden" name="submissionId" value={submissionId} />
+          <input type="hidden" name="userId" value={userId} />
+          <input type="hidden" name="state" value={next} />
+          <Button
+            type="submit"
+            variant="secondary"
+            className="px-2 py-1 text-xs"
+            data-testid={`attendance-${next}`}
+          >
+            {ATTENDANCE_BUTTONS[next]}
+          </Button>
+        </form>
+      ))}
+    </span>
+  );
+}
 
 export default async function SpeakerDetailPage({
   params,
@@ -29,9 +97,10 @@ export default async function SpeakerDetailPage({
   const parsed = z.string().uuid().safeParse(id);
   if (!parsed.success) notFound();
 
-  const [event, detail, query] = await Promise.all([
+  const [event, detail, headshot, query] = await Promise.all([
     getEvent(),
     speakerDetail(parsed.data),
+    headshotUpload(parsed.data),
     searchParams,
   ]);
   if (!detail) notFound();
@@ -46,7 +115,11 @@ export default async function SpeakerDetailPage({
     <div className="space-y-5">
       <PageHeader
         title={user.name ?? user.email}
-        description={`${user.email} · ${roles.join(', ') || 'no roles'}`}
+        // Joined here rather than interpolated, so an account with no byline
+        // gets no leading separator on the line it does have.
+        description={[billing(user.title, user.company), user.email, roles.join(', ') || 'no roles']
+          .filter((part): part is string => Boolean(part))
+          .join(' · ')}
         action={
           <div className="flex items-center gap-2">
             {hasAccepted ? (
@@ -102,12 +175,47 @@ export default async function SpeakerDetailPage({
       <Card className="space-y-4">
         <div className="flex items-center gap-3">
           <Headshot src={user.headshotUrl} name={user.name} size="lg" />
-          <h2 className="text-sm font-semibold text-ink">Profile</h2>
+          <div className="min-w-0">
+            <h2 className="text-sm font-semibold text-ink">Profile</h2>
+            {/*
+              The photo as a file, not only as a picture. An organizer chasing a
+              headshot needs the thing an email attachment has: a name, a size,
+              a date and something to click. The `img` above answers "has it
+              arrived", and stops there.
+
+              Absent when the column holds a pasted URL rather than an upload,
+              because there is no file of ours to describe and inventing a row
+              for somebody else's hotlink would be a lie about where it lives.
+            */}
+            {headshot ? (
+              <p className="text-xs text-muted" data-testid="headshot-file-meta">
+                <a
+                  href={uploadHref(headshot)}
+                  target="_blank"
+                  rel="noopener"
+                  className="font-medium text-accent hover:underline"
+                  data-testid="headshot-file-link"
+                >
+                  {headshot.filename}
+                </a>{' '}
+                · {formatBytes(headshot.bytes)} · uploaded{' '}
+                {dayLabel(headshot.createdAt, event.timezone)} at{' '}
+                {timeOfDay(headshot.createdAt, event.timezone)} by {user.name ?? user.email}
+              </p>
+            ) : (
+              <p className="text-xs text-muted">
+                {user.headshotUrl ? 'Headshot set by URL, not uploaded here.' : 'No headshot yet.'}
+              </p>
+            )}
+          </div>
         </div>
         <ProfileForm
           userId={user.id}
           name={user.name}
+          title={user.title}
+          company={user.company}
           bio={user.bio}
+          travelNotes={user.travelNotes}
           headshotUrl={user.headshotUrl}
         />
       </Card>
@@ -282,13 +390,17 @@ export default async function SpeakerDetailPage({
                   answered.
                 */}
                 {submission.status === 'accepted' ? (
-                  submission.speakerDeclinedAt ? (
-                    <Badge tone="bad">declined</Badge>
-                  ) : submission.speakerConfirmedAt ? (
-                    <Badge tone="good">confirmed</Badge>
-                  ) : (
-                    <Badge tone="warn">not confirmed</Badge>
-                  )
+                  <Attendance
+                    submissionId={submission.id}
+                    userId={user.id}
+                    state={
+                      submission.speakerDeclinedAt
+                        ? 'declined'
+                        : submission.speakerConfirmedAt
+                          ? 'confirmed'
+                          : 'pending'
+                    }
+                  />
                 ) : null}
               </li>
             ))}

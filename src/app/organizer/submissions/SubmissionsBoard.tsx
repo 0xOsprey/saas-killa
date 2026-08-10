@@ -1,7 +1,18 @@
 'use client';
 
+import Link from 'next/link';
 import { useState, useTransition } from 'react';
-import { Badge, Button, Card, Input, ScoreDots, Select, Textarea, cn } from '@/components/ui';
+import {
+  Badge,
+  Button,
+  Card,
+  Input,
+  LinkButton,
+  ScoreDots,
+  Select,
+  Textarea,
+  cn,
+} from '@/components/ui';
 import {
   approveContent,
   bulkApproveContent,
@@ -40,8 +51,22 @@ export type BoardRow = {
   contentStatus: 'draft' | 'pending' | 'approved';
   contentStatusLabel: string;
   hasContent: boolean;
-  /** Supporting documents. Private, so this board is the only way to reach one. */
-  documents: { href: string; name: string; size: string }[];
+  /**
+   * Every file on this submission, one entry per version chain rather than per
+   * upload. A supporting document is private, so this panel and the files
+   * library are the only two ways to reach one.
+   */
+  files: {
+    href: string;
+    detailHref: string;
+    name: string;
+    kindLabel: string;
+    size: string;
+    versionCount: number;
+    commentCount: number;
+  }[];
+  /** The library, narrowed to this talk. The per-session files tab. */
+  filesHref: string;
   lockedFields: string[];
   revisionCount: number;
   lastEdit: RevisionEntry | null;
@@ -192,7 +217,20 @@ function Row({
             aria-label={`Select ${row.title}`}
           />
           <div className="min-w-0">
-            <h2 className="font-medium text-ink">{row.title}</h2>
+            {/* The board shows the speaker who filed it and nobody else, which
+                on a co-authored proposal is a participant list with a name
+                missing. The abstract page is where the credited billing and its
+                role labels live, so the title is the way there rather than a
+                dead heading. */}
+            <h2 className="font-medium text-ink">
+              <Link
+                href={`/organizer/abstracts/${row.id}`}
+                className="underline-offset-2 hover:underline"
+                data-testid={`open-abstract-${row.id}`}
+              >
+                {row.title}
+              </Link>
+            </h2>
             <p className="mt-0.5 text-xs text-muted">
               {row.speakerName} · {row.speakerEmail}
             </p>
@@ -303,23 +341,43 @@ function Row({
               : 'The speaker has not attached anything yet.'}
           </p>
 
-          {row.documents.length > 0 ? (
-            <div className="space-y-1" data-testid={`organizer-documents-${row.id}`}>
-              <p className="text-xs font-medium text-ink">
-                Supporting documents ({row.documents.length})
-              </p>
+          {/* `organizer-documents-`, not `organizer-files-`: two specs find this
+              panel by that id, and the panel is the same panel. */}
+          <div className="space-y-1" data-testid={`organizer-documents-${row.id}`}>
+            <p className="text-xs font-medium text-ink">Files ({row.files.length})</p>
+            {row.files.length === 0 ? (
+              <p className="text-xs text-muted">Nothing uploaded on this talk yet.</p>
+            ) : (
               <ul className="space-y-0.5">
-                {row.documents.map((document) => (
-                  <li key={document.href} className="flex items-baseline gap-2 text-xs">
-                    <a href={document.href} className="truncate underline hover:text-ink">
-                      {document.name}
+                {row.files.map((file) => (
+                  <li key={file.href} className="flex flex-wrap items-baseline gap-2 text-xs">
+                    <a href={file.href} className="truncate underline hover:text-ink">
+                      {file.name}
                     </a>
-                    <span className="shrink-0 text-muted">{document.size}</span>
+                    <span className="shrink-0 text-muted">
+                      {file.kindLabel} · {file.size} · {file.versionCount} version
+                      {file.versionCount === 1 ? '' : 's'}
+                      {file.commentCount > 0 ? ` · ${file.commentCount} comment(s)` : ''}
+                    </span>
+                    <Link
+                      href={file.detailHref}
+                      className="shrink-0 underline hover:text-ink"
+                      data-testid={`file-detail-${row.id}`}
+                    >
+                      Versions and comments
+                    </Link>
                   </li>
                 ))}
               </ul>
-            </div>
-          ) : null}
+            )}
+            <Link
+              href={row.filesHref}
+              className="inline-block text-xs underline hover:text-ink"
+              data-testid={`files-tab-${row.id}`}
+            >
+              Open the files tab for this session
+            </Link>
+          </div>
 
           <div className="flex flex-wrap items-center gap-2">
             {row.contentStatus === 'approved' ? null : (
@@ -512,6 +570,18 @@ function BulkBar({
         >
           Approve content
         </Button>
+
+        {/* A link rather than an action, because the next thing to decide is how
+            the archive should be laid out, and that choice belongs beside the
+            list of files it applies to. The library opens with these sessions'
+            files already picked and the dialog already open. */}
+        <LinkButton
+          href={`/organizer/files?select=${ids.join(',')}&open=1`}
+          variant="secondary"
+          data-testid="bulk-download-files"
+        >
+          Download files
+        </LinkButton>
 
         <div className="flex items-center gap-1.5">
           <Select

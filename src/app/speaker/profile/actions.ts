@@ -13,6 +13,8 @@ export type ProfileState = { error?: string; saved?: boolean };
 
 const schema = z.object({
   name: z.string().min(1, 'Tell us your name').max(120),
+  title: z.string().max(120, 'Keep the job title under 120 characters').nullable(),
+  company: z.string().max(120, 'Keep the company name under 120 characters').nullable(),
   bio: z.string().max(2000, 'Keep the bio under 2000 characters').nullable(),
   // A headshot goes straight into an `img` src, so the scheme is restricted:
   // `linkField` takes an http(s) URL or one of this app's own `/files/` paths
@@ -40,6 +42,8 @@ export async function saveProfile(_prev: ProfileState, formData: FormData): Prom
 
   const parsed = schema.safeParse({
     name: optional(formData.get('name')),
+    title: optional(formData.get('title')),
+    company: optional(formData.get('company')),
     bio: optional(formData.get('bio')),
     headshotUrl: String(formData.get('headshotUrl') ?? ''),
   });
@@ -51,6 +55,8 @@ export async function saveProfile(_prev: ProfileState, formData: FormData): Prom
     .update(users)
     .set({
       name: parsed.data.name,
+      title: parsed.data.title,
+      company: parsed.data.company,
       bio: parsed.data.bio,
       headshotUrl: parsed.data.headshotUrl,
     })
@@ -58,8 +64,11 @@ export async function saveProfile(_prev: ProfileState, formData: FormData): Prom
 
   revalidatePath('/speaker');
   revalidatePath('/speaker/profile');
-  // The bio and name are printed beside every talk on the public agenda.
+  // The bio, the name and the byline are printed beside every talk on the
+  // public agenda, and again on the directory a speaker's own edit reaches.
   revalidatePath('/agenda');
+  revalidatePath('/speakers');
+  revalidatePath(`/speakers/${user.id}`);
 
   return { saved: true };
 }

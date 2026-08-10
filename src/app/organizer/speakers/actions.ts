@@ -35,6 +35,10 @@ function refreshSpeakerScreens(userId?: string): void {
   revalidatePath('/organizer/speakers');
   if (userId) revalidatePath(`/organizer/speakers/${userId}`);
   revalidatePath('/speakers');
+  // The public profile prints the name, the byline and the bio, so an organizer
+  // correcting any of them has to reach it too. `/speakers` on its own is the
+  // directory page and nothing else.
+  if (userId) revalidatePath(`/speakers/${userId}`);
 }
 
 const roleSchema = z.object({
@@ -82,7 +86,15 @@ export type ProfileState = { error?: string; saved?: boolean };
 const profileSchema = z.object({
   userId: z.string().uuid(),
   name: z.string().max(120).nullable(),
+  title: z.string().max(120, 'Job titles over 120 characters are too long').nullable(),
+  company: z.string().max(120, 'Company names over 120 characters are too long').nullable(),
   bio: z.string().max(4000, 'Bios over 4000 characters are too long').nullable(),
+  // Organizer-only, and not on the speaker's own copy of this form. It holds
+  // what staff were told rather than what the speaker published: an arrival
+  // date, a dietary requirement, who is paying for the flight. None of it
+  // belongs on a public profile and none of it is a field a speaker fills in
+  // about themselves.
+  travelNotes: z.string().max(2000, 'Travel notes over 2000 characters are too long').nullable(),
   // Same field, same rule, as the speaker's own copy of this form: an uploaded
   // headshot writes an app-relative `/files/…` path, and `.url()` rejected the
   // value the upload itself had just written, so an organizer who uploaded a
@@ -104,7 +116,10 @@ export async function updateSpeakerProfileAction(
   const parsed = profileSchema.safeParse({
     userId: formData.get('userId'),
     name: optional(formData.get('name')),
+    title: optional(formData.get('title')),
+    company: optional(formData.get('company')),
     bio: optional(formData.get('bio')),
+    travelNotes: optional(formData.get('travelNotes')),
     headshotUrl: String(formData.get('headshotUrl') ?? ''),
   });
   if (!parsed.success) {
@@ -114,12 +129,80 @@ export async function updateSpeakerProfileAction(
 
   await db
     .update(users)
-    .set({ name: input.name, bio: input.bio, headshotUrl: input.headshotUrl })
+    .set({
+      name: input.name,
+      title: input.title,
+      company: input.company,
+      bio: input.bio,
+      travelNotes: input.travelNotes,
+      headshotUrl: input.headshotUrl,
+    })
     .where(eq(users.id, input.userId));
 
   refreshSpeakerScreens(input.userId);
   revalidatePath('/agenda');
   return { saved: true };
+}
+
+const attendanceSchema = z.object({
+  submissionId: z.string().uuid(),
+  userId: z.string().uuid(),
+  state: z.enum(['confirmed', 'declined', 'pending']),
+});
+
+/**
+ * Record whether a speaker is presenting, from the organizer's side.
+ *
+ * `confirmAttendance` and `declineAttendance` in `/app/speaker/actions.ts` write
+ * the same two columns and are scoped `speakerId = <caller>`, which is right for
+ * them and is left alone: a speaker must never be able to answer for anybody
+ * else. But most of these answers do not arrive through the portal at all. They
+ * arrive by email, on a call, or in a corridor at last year's event, and until
+ * now the only record of one was a badge the organizer could read and not
+ * write. This is that write, and it is a separate action rather than a widened
+ * predicate so the speaker-side rule stays a rule.
+ *
+ * Three states, not a toggle. `pending` clears both columns, which is the undo
+ * for a misclick and the only way back to "we have not heard" once something has
+ * been recorded. Setting either one clears the other, the same invariant the
+ * speaker-side pair holds, so no reader has to decide which timestamp wins.
+ *
+ * `speakerId = userId` is in the WHERE clause even though an organizer may act
+ * on anyone: it ties the row to the record the button was pressed on, so a
+ * mismatched pair updates nothing instead of moving a stranger's talk.
+ *
+ * Nothing is emailed. The organizer pressing this already knows, and the mail in
+ * `declineAttendance` exists to tell organizers something a speaker did.
+ */
+export async function setAttendanceAction(formData: FormData): Promise<void> {
+  await requireRole('organizer');
+  const input = attendanceSchema.parse({
+    submissionId: formData.get('submissionId'),
+    userId: formData.get('userId'),
+    state: formData.get('state'),
+  });
+
+  const now = new Date();
+  const stamps = {
+    confirmed: { speakerConfirmedAt: now, speakerDeclinedAt: null },
+    declined: { speakerConfirmedAt: null, speakerDeclinedAt: now },
+    pending: { speakerConfirmedAt: null, speakerDeclinedAt: null },
+  }[input.state];
+
+  await db
+    .update(submissions)
+    .set({ ...stamps, updatedAt: now })
+    .where(
+      and(
+        eq(submissions.id, input.submissionId),
+        eq(submissions.speakerId, input.userId),
+        eq(submissions.status, 'accepted'),
+      ),
+    );
+
+  refreshSpeakerScreens(input.userId);
+  revalidatePath('/speaker');
+  revalidatePath('/organizer/schedule');
 }
 
 const taskSchema = z.object({
@@ -386,6 +469,13 @@ export type InviteState = { error?: string; message?: string };
 const inviteSchema = z.object({
   email: z.string().email('Enter a valid email address'),
   name: z.string().min(1, 'Tell us their name').max(120),
+  // `speakerTitle`, not `title`, and the one place in this app where the byline
+  // field is not called `title`. This form carries the talk's title as well,
+  // under the name the column has, and two inputs called `title` in one
+  // `FormData` is a bug that reads as a typo.
+  speakerTitle: z.string().max(120).nullable(),
+  company: z.string().max(120).nullable(),
+  bio: z.string().max(4000, 'Bios over 4000 characters are too long').nullable(),
   title: z.string().min(6, 'Give the talk a title').max(200),
   abstract: z.string().min(120, 'Abstracts under 120 characters are too thin to review').max(5000),
   format: z.enum(submissionFormatEnum.enumValues),
@@ -415,6 +505,9 @@ export async function inviteSpeakerAction(
   const parsed = inviteSchema.safeParse({
     email: optional(formData.get('email')),
     name: optional(formData.get('name')),
+    speakerTitle: optional(formData.get('speakerTitle')),
+    company: optional(formData.get('company')),
+    bio: optional(formData.get('bio')),
     title: optional(formData.get('title')),
     abstract: optional(formData.get('abstract')),
     format: formData.get('format'),
@@ -431,6 +524,21 @@ export async function inviteSpeakerAction(
   const event = await getEvent();
   const speaker = await upsertUserByEmail(input.email, input.name);
   await grantRole(speaker.id, 'speaker');
+
+  // A blank field is no opinion, not an instruction to clear the column. The
+  // committee books a keynote knowing where they work; they may also be
+  // re-inviting somebody already on the roster, and a form submitted with the
+  // profile left empty must not wipe what that speaker filled in themselves.
+  if (input.speakerTitle !== null || input.company !== null || input.bio !== null) {
+    await db
+      .update(users)
+      .set({
+        title: input.speakerTitle ?? speaker.title,
+        company: input.company ?? speaker.company,
+        bio: input.bio ?? speaker.bio,
+      })
+      .where(eq(users.id, speaker.id));
+  }
 
   const [created] = await db
     .insert(submissions)

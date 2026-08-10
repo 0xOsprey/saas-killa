@@ -8,12 +8,16 @@ import { saveProfile, type ProfileState } from './actions';
 export function ProfileForm({
   email,
   name,
+  title,
+  company,
   bio,
   headshotUrl,
   hasUpload,
 }: {
   email: string;
   name: string | null;
+  title: string | null;
+  company: string | null;
   bio: string | null;
   headshotUrl: string | null;
   hasUpload: boolean;
@@ -51,6 +55,32 @@ export function ProfileForm({
             data-testid="profile-name"
           />
         </Field>
+
+        {/*
+          Optional, and the hint says so, because a freelancer and a student
+          have no company to give and a required field would have them invent
+          one. The agenda prints whichever half they fill in.
+        */}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Job title" hint="Optional. Printed under your name.">
+            <Input
+              name="title"
+              maxLength={120}
+              defaultValue={title ?? ''}
+              placeholder="Principal Engineer"
+              data-testid="profile-title"
+            />
+          </Field>
+          <Field label="Company" hint="Optional. Where you work.">
+            <Input
+              name="company"
+              maxLength={120}
+              defaultValue={company ?? ''}
+              placeholder="Latticework Systems"
+              data-testid="profile-company"
+            />
+          </Field>
+        </div>
 
         <Field label="Short bio" hint="A paragraph. Attendees read this before deciding to come.">
           <Textarea

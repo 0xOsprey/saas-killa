@@ -30,6 +30,39 @@ function likeTerm(raw: string): string {
   return `%${raw.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 }
 
+/**
+ * How a speaker is billed under their name: "Principal Engineer at Latticework
+ * Systems", or whichever half of that exists.
+ *
+ * One function rather than a join in each template because both columns are
+ * nullable and most accounts carry neither. The bug this exists to prevent is a
+ * card that renders " at Latticework Systems", or a bare separator hanging in
+ * front of nothing, on the six surfaces that print a byline. Null when there is
+ * nothing to say, so a caller can drop the whole element rather than print an
+ * empty one.
+ */
+export function billing(title: string | null, company: string | null): string | null {
+  if (title && company) return `${title} at ${company}`;
+  return title ?? company ?? null;
+}
+
+/**
+ * Order the public directory by surname.
+ *
+ * This app holds one `name` field, deliberately: a programme has no business
+ * insisting a person's name splits in two, and `splitName` in `accelevents.ts`
+ * carries the same note where the export is forced to guess. So "surname" here
+ * is the last whitespace-separated token and nothing cleverer. "Ada Lovelace"
+ * sorts under Lovelace, which is the point; "Ingrid van der Berg" sorts under
+ * Berg and a mononym sorts under itself, which are both wrong and both visible
+ * rather than hidden behind a heuristic that guesses at particles.
+ *
+ * `[[:space:]]` rather than `\s`: this is a JavaScript template literal, where
+ * an unrecognised escape silently becomes the bare letter, and `^.*s+` would
+ * cut names off at their last letter s.
+ */
+const SURNAME_KEY = sql`lower(regexp_replace(coalesce(${users.name}, ${users.email}), '^.*[[:space:]]', ''))`;
+
 export type OpenTask = {
   id: string;
   kind: SpeakerTaskKind;
@@ -44,6 +77,8 @@ export type RosterRow = {
   id: string;
   email: string;
   name: string | null;
+  title: string | null;
+  company: string | null;
   bio: string | null;
   headshotUrl: string | null;
   isBot: boolean;
@@ -54,6 +89,8 @@ export type RosterRow = {
   rejected: number;
   withdrawn: number;
   confirmed: number;
+  /** Accepted talks the speaker has said they cannot give. Never both with `confirmed`. */
+  declined: number;
   openTasks: OpenTask[];
   outstanding: number;
   overdue: number;
@@ -68,7 +105,9 @@ export type RosterRow = {
 export const ROSTER_FILTERS = {
   all: 'Everyone',
   accepted: 'Has an accepted talk',
+  confirmed: 'Confirmed to present',
   unconfirmed: 'Accepted, not confirmed',
+  declined: 'Declined',
   missing_bio: 'No bio',
   missing_headshot: 'No headshot',
   outstanding: 'Has an open task',
@@ -87,8 +126,16 @@ function matchesFilter(row: RosterRow, filter: RosterFilter): boolean {
       return true;
     case 'accepted':
       return row.accepted > 0;
+    case 'confirmed':
+      return row.confirmed > 0;
+    // Subtracting declines as well as confirmations, so this stays what its
+    // label says it is: the chase list. Somebody who has answered "I cannot
+    // present" has not left the question open, and the detail screen has drawn
+    // those two as different states since before this filter existed.
     case 'unconfirmed':
-      return row.accepted > row.confirmed;
+      return row.accepted > row.confirmed + row.declined;
+    case 'declined':
+      return row.declined > 0;
     case 'missing_bio':
       return row.accepted > 0 && !row.bio;
     case 'missing_headshot':
@@ -112,13 +159,27 @@ export async function speakerRoster(
   options: { q?: string; filter?: RosterFilter } = {},
 ): Promise<RosterRow[]> {
   const q = options.q?.trim();
-  const search = q ? or(ilike(users.name, likeTerm(q)), ilike(users.email, likeTerm(q))) : undefined;
+  // Company is in the search because "who have we got from Latticework" is the
+  // question an organizer asks the roster while assembling a panel, and the
+  // answer is not in anybody's name. Job title comes along for the same reason:
+  // it is now on screen beside the name, and a field an organizer can read but
+  // not search reads as a broken search box.
+  const search = q
+    ? or(
+        ilike(users.name, likeTerm(q)),
+        ilike(users.email, likeTerm(q)),
+        ilike(users.title, likeTerm(q)),
+        ilike(users.company, likeTerm(q)),
+      )
+    : undefined;
 
   const people = await db
     .select({
       id: users.id,
       email: users.email,
       name: users.name,
+      title: users.title,
+      company: users.company,
       bio: users.bio,
       headshotUrl: users.headshotUrl,
       isBot: users.isBot,
@@ -131,6 +192,7 @@ export async function speakerRoster(
       rejected: sql<number>`count(distinct ${submissions.id}) filter (where ${submissions.status} = 'rejected')::int`,
       withdrawn: sql<number>`count(distinct ${submissions.id}) filter (where ${submissions.status} = 'withdrawn')::int`,
       confirmed: sql<number>`count(distinct ${submissions.id}) filter (where ${submissions.speakerConfirmedAt} is not null)::int`,
+      declined: sql<number>`count(distinct ${submissions.id}) filter (where ${submissions.speakerDeclinedAt} is not null)::int`,
     })
     .from(users)
     .leftJoin(userRoles, eq(userRoles.userId, users.id))
@@ -275,6 +337,8 @@ export async function hasSubmissions(userId: string): Promise<boolean> {
 export type DirectoryRow = {
   id: string;
   name: string | null;
+  title: string | null;
+  company: string | null;
   bio: string | null;
   headshotUrl: string | null;
   acceptedCount: number;
@@ -324,6 +388,8 @@ export async function speakerDirectory(
     .select({
       id: users.id,
       name: users.name,
+      title: users.title,
+      company: users.company,
       bio: users.bio,
       headshotUrl: users.headshotUrl,
       acceptedCount: sql<number>`count(distinct ${submissions.id})::int`,
@@ -344,12 +410,16 @@ export async function speakerDirectory(
     .leftJoin(tracks, eq(tracks.id, submissions.trackId))
     .where(conditions.length > 0 ? and(...conditions) : undefined)
     .groupBy(users.id)
-    .orderBy(asc(sql`coalesce(${users.name}, ${users.email})`));
+    // Surname first, then the whole name, so two Okafors keep a stable order
+    // instead of Postgres choosing one per query.
+    .orderBy(asc(SURNAME_KEY), asc(sql`lower(coalesce(${users.name}, ${users.email}))`));
 }
 
 export type DirectoryProfile = {
   id: string;
   name: string | null;
+  title: string | null;
+  company: string | null;
   bio: string | null;
   headshotUrl: string | null;
   acceptedSubmissions: {
@@ -395,11 +465,14 @@ export async function speakerProfile(userId: string): Promise<DirectoryProfile |
   return {
     id: user.id,
     name: user.name,
+    title: user.title,
+    company: user.company,
     bio: user.bio,
     headshotUrl: user.headshotUrl,
     acceptedSubmissions: accepted,
   };
 }
+
 
 /**
  * Quote every field rather than only the ones that need it: the rule is then
@@ -418,12 +491,15 @@ function csvCell(value: string | number | null): string {
 export const ROSTER_CSV_HEADER = [
   'name',
   'email',
+  'job_title',
+  'company',
   'roles',
   'submitted',
   'accepted',
   'rejected',
   'withdrawn',
   'confirmed',
+  'declined',
   'bio_present',
   'headshot_present',
   'outstanding_tasks',
@@ -437,12 +513,15 @@ export function rosterCsv(rows: RosterRow[]): string {
       [
         csvCell(row.name),
         csvCell(row.email),
+        csvCell(row.title),
+        csvCell(row.company),
         csvCell([...row.roles].sort().join(' ')),
         csvCell(row.submitted),
         csvCell(row.accepted),
         csvCell(row.rejected),
         csvCell(row.withdrawn),
         csvCell(row.confirmed),
+        csvCell(row.declined),
         csvCell(row.bio ? 'yes' : 'no'),
         csvCell(row.headshotUrl ? 'yes' : 'no'),
         csvCell(row.outstanding),

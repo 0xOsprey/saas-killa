@@ -27,7 +27,41 @@ export function InviteSpeakerForm({ tracks }: { tracks: Track[] }) {
         </Field>
       </div>
 
-      <Field label="Title">
+      {/*
+        How they are billed, asked for here rather than left to the speaker.
+        The committee approached this person and already knows where they work,
+        and a keynote announced as a bare name is the thing an invitation is
+        supposed to avoid. Both are optional; neither blanks an existing value.
+      */}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Job title">
+          <Input
+            name="speakerTitle"
+            maxLength={120}
+            placeholder="Principal Engineer"
+            data-testid="invite-title"
+          />
+        </Field>
+        <Field label="Company">
+          <Input
+            name="company"
+            maxLength={120}
+            placeholder="Latticework Systems"
+            data-testid="invite-company"
+          />
+        </Field>
+      </div>
+
+      <Field
+        label="Speaker bio"
+        hint="Optional. About the person, not the talk. Shown on the public directory."
+      >
+        <Textarea name="bio" maxLength={4000} className="min-h-20" data-testid="invite-bio" />
+      </Field>
+
+      {/* "Talk title", not "Title": the field above it is a job title, and one
+          screen with two things called Title is a form people fill in wrong. */}
+      <Field label="Talk title">
         <Input name="title" required maxLength={200} />
       </Field>
 

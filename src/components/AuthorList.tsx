@@ -1,5 +1,5 @@
-import { authorDisplayName, authorsForDisplay, type AuthorRow } from '@/lib/abstracts';
-import { cn } from './ui';
+import { authorDisplayName, authorRoleLabel, authorsForDisplay, type AuthorRow } from '@/lib/abstracts';
+import { Badge, cn } from './ui';
 
 /**
  * The credited billing for a submission: every `submission_authors` row in
@@ -34,12 +34,20 @@ export function AuthorListView({
       {authors.map((author) => (
         <li key={author.userId} className="text-ink">
           <span className="font-medium">{authorDisplayName(author)}</span>
+          {/* The role, not just the ordering. `isPresenter` has been collected on
+              the co-author form since co-authors existed and rendered nowhere,
+              so a credited co-presenter and a credited co-author were the same
+              line of text with a different row underneath them. */}
+          <Badge
+            tone={author.position === 0 ? 'accent' : 'neutral'}
+            className="ml-1.5 align-middle"
+            data-testid={`author-role-${author.userId}`}
+          >
+            {authorRoleLabel(author)}
+          </Badge>
           {author.affiliation ? (
             <span className="text-muted"> · {author.affiliation}</span>
           ) : null}
-          {author.isPresenter ? null : (
-            <span className="text-muted"> (not presenting)</span>
-          )}
         </li>
       ))}
     </ul>

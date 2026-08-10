@@ -1,12 +1,15 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { z } from 'zod';
-import { Badge, Card, PageHeader } from '@/components/ui';
+import { Badge, Card, PageHeader, ShowMoreText } from '@/components/ui';
 import { currentUser } from '@/lib/auth';
 import { FORMAT_LABELS, dayLabel, timeOfDay } from '@/lib/format';
 import { getEvent } from '@/lib/queries';
-import { speakerProfile } from '@/lib/speakers';
+import { billing, speakerProfile } from '@/lib/speakers';
 import { Headshot } from '../Headshot';
+
+/** Past this many characters a bio is folded behind Show more. */
+const BIO_FOLD = 260;
 
 /**
  * One public speaker page. `speakerProfile` returns null for an account with
@@ -43,13 +46,33 @@ export default async function SpeakerProfilePage({
 
       <Card className="flex flex-wrap items-start gap-4">
         <Headshot src={speaker.headshotUrl} name={speaker.name} size="lg" />
-        <p className="min-w-56 flex-1 whitespace-pre-wrap text-sm text-ink">
-          {speaker.bio ?? 'No bio provided.'}
-        </p>
+        <div className="min-w-56 flex-1 space-y-2">
+          {/* Above the bio rather than in the header, because the header line
+              already carries the event and the talk count and this is the one
+              fact an attendee scans for. Nothing renders when it is empty. */}
+          {billing(speaker.title, speaker.company) ? (
+            <p className="text-sm font-medium text-ink" data-testid="speaker-billing">
+              {billing(speaker.title, speaker.company)}
+            </p>
+          ) : null}
+          {speaker.bio ? (
+            <ShowMoreText
+              text={speaker.bio}
+              lines={3}
+              foldAfter={BIO_FOLD}
+              className="text-sm text-ink"
+              testId="bio-toggle"
+            />
+          ) : (
+            <p className="text-sm text-muted">No bio provided.</p>
+          )}
+        </div>
       </Card>
 
       <section className="space-y-2">
-        <h2 className="text-sm font-semibold text-ink">Accepted submissions</h2>
+        <h2 className="text-sm font-semibold text-ink">
+          Accepted submissions ({speaker.acceptedSubmissions.length})
+        </h2>
         {speaker.acceptedSubmissions.map((submission) => (
           <Card
             key={submission.id}

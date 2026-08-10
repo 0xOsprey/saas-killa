@@ -29,13 +29,15 @@ import { FORMAT_LABELS, LEVEL_LABELS, STATUS_LABELS, inEventZone } from '@/lib/f
 import {
   allTracks,
   getEvent,
+  ORGANIZER_DEFAULT_DIRECTION,
   ORGANIZER_SORTS,
   organizerSubmissionCount,
   organizerSubmissions,
   organizerTotals,
+  type OrganizerDirection,
   type OrganizerSort,
 } from '@/lib/queries';
-import { documentsFor, formatBytes, uploadHref } from '@/lib/uploads';
+import { UPLOAD_KIND_LABELS, fileSeriesBySubmission, formatBytes } from '@/lib/uploads';
 import { gradePending, notifyDecided } from './actions';
 import { SubmissionsBoard, type BoardRow } from './SubmissionsBoard';
 
@@ -78,6 +80,7 @@ type Query = {
   track?: string | null;
   content?: ContentStatus | null;
   sort?: OrganizerSort;
+  direction?: OrganizerDirection;
   page?: number;
   all?: boolean;
 };
@@ -97,6 +100,11 @@ function submissionsHref(query: Query): string {
   if (query.track) params.set('track', query.track);
   if (query.content) params.set('content', query.content);
   if (query.sort && query.sort !== 'grade') params.set('sort', query.sort);
+  // Written only when it is not the mode's own default, for the same reason the
+  // sort is: the plain address has to stay the plain address.
+  if (query.direction && query.direction !== ORGANIZER_DEFAULT_DIRECTION[query.sort ?? 'grade']) {
+    params.set('direction', query.direction);
+  }
   if (query.all) params.set('per', 'all');
   if (query.page && query.page > 1) params.set('page', String(query.page));
 
@@ -116,6 +124,18 @@ function asSort(value: string | undefined): OrganizerSort {
   return ORGANIZER_SORTS.find((sort) => sort.value === value)?.value ?? 'grade';
 }
 
+function asDirection(value: string | undefined, sort: OrganizerSort): OrganizerDirection {
+  if (value === 'asc' || value === 'desc') return value;
+  return ORGANIZER_DEFAULT_DIRECTION[sort];
+}
+
+/** What the flip control should say, in the vocabulary of the mode it flips. */
+const DIRECTION_LABELS: Record<OrganizerSort, Record<OrganizerDirection, string>> = {
+  grade: { desc: 'Highest first ↓', asc: 'Lowest first ↑' },
+  newest: { desc: 'Newest first ↓', asc: 'Oldest first ↑' },
+  title: { asc: 'A to Z ↓', desc: 'Z to A ↑' },
+};
+
 export default async function OrganizerSubmissionsPage({
   searchParams,
 }: {
@@ -125,6 +145,7 @@ export default async function OrganizerSubmissionsPage({
     track?: string;
     content?: string;
     sort?: string;
+    direction?: string;
     page?: string;
     per?: string;
   }>;
@@ -138,6 +159,7 @@ export default async function OrganizerSubmissionsPage({
   const trackId = z.string().uuid().safeParse(params.track).data ?? null;
   const content = asContentStatus(params.content);
   const sort = asSort(params.sort);
+  const direction = asDirection(params.direction, sort);
   const showAll = params.per === 'all';
   const filters = { q, status, trackId, content };
 
@@ -159,6 +181,7 @@ export default async function OrganizerSubmissionsPage({
   const rows = await organizerSubmissions({
     ...filters,
     sort,
+    direction,
     ...(showAll ? {} : { limit: PAGE_SIZE, offset }),
   });
 
@@ -166,14 +189,14 @@ export default async function OrganizerSubmissionsPage({
   // read every submission, every document and the whole revision log on every
   // render of this page, whatever it was going to show.
   const ids = rows.map((row) => row.id);
-  const [contentRows, history, lastEdits, documents] = await Promise.all([
+  const [contentRows, history, lastEdits, files] = await Promise.all([
     contentRowsById(ids),
     recentRevisions(ids),
     lastEditBySubmission(ids),
-    documentsFor(ids),
+    fileSeriesBySubmission(ids),
   ]);
 
-  const current: Query = { q, status, track: trackId, content, sort, page, all: showAll };
+  const current: Query = { q, status, track: trackId, content, sort, direction, page, all: showAll };
   const contentCounts = {
     all: totals.total,
     draft: totals.draft,
@@ -205,15 +228,24 @@ export default async function OrganizerSubmissionsPage({
       contentStatus: extra?.contentStatus ?? 'draft',
       contentStatusLabel: CONTENT_STATUS_LABELS[extra?.contentStatus ?? 'draft'],
       hasContent: Boolean(extra?.slidesUrl || extra?.recordingUrl || extra?.resourcesNote),
-      // A supporting document is private, so this panel is the only place an
-      // organizer can find one. Without it the speaker's upload would be
-      // write-only: stored, access-controlled and unreachable by the people
-      // it was sent to.
-      documents: (documents.get(row.id) ?? []).map((document) => ({
-        href: uploadHref(document),
-        name: document.filename,
-        size: formatBytes(document.bytes),
+      // A supporting document is private, so this panel is the only place on
+      // this screen an organizer can find one. Without it the speaker's upload
+      // would be write-only: stored, access-controlled and unreachable by the
+      // people it was sent to.
+      //
+      // The latest version of each chain, with the count beside it. The row
+      // that would say "slides.pdf" twice with nothing to tell the copies apart
+      // is the defect this replaced.
+      files: (files.get(row.id) ?? []).map((series) => ({
+        href: series.latest.href,
+        detailHref: `/organizer/files/${series.seriesId}`,
+        name: series.latest.filename,
+        kindLabel: UPLOAD_KIND_LABELS[series.kind],
+        size: formatBytes(series.latest.bytes),
+        versionCount: series.versions.length,
+        commentCount: series.commentCount,
       })),
+      filesHref: `/organizer/files?submission=${row.id}`,
       lockedFields: knownLocks(extra?.lockedFields ?? []),
       revisionCount: extra?.revisionCount ?? 0,
       lastEdit: toEntry(lastEdits.get(row.id) ?? null, event.timezone),
@@ -286,7 +318,10 @@ export default async function OrganizerSubmissionsPage({
             `[data-testid^="submission-"]`, which a filter named
             `submission-search` would join silently: the count comes out five
             too high and nothing says why. */}
-        <form method="get" className="grid items-end gap-3 sm:grid-cols-[2fr_1fr_1fr_1fr_auto]">
+        <form
+          method="get"
+          className="grid items-end gap-3 sm:grid-cols-[2fr_1fr_1fr_1fr_1fr_auto]"
+        >
           <Field label="Search" hint="Title, abstract, speaker name and email.">
             <Input
               name="q"
@@ -324,6 +359,16 @@ export default async function OrganizerSubmissionsPage({
               ))}
             </Select>
           </Field>
+          {/* Its own control rather than three more entries in the sort list.
+              Six options that pair a mode with a direction is the shape that
+              grows quadratically the next time a mode is added, and it cannot
+              express "the ordering I have, reversed" in one place. */}
+          <Field label="Order">
+            <Select name="direction" defaultValue={direction} data-testid="board-direction">
+              <option value="desc">{DIRECTION_LABELS[sort].desc}</option>
+              <option value="asc">{DIRECTION_LABELS[sort].asc}</option>
+            </Select>
+          </Field>
           <Button type="submit" variant="secondary" data-testid="board-apply">
             Apply
           </Button>
@@ -349,6 +394,21 @@ export default async function OrganizerSubmissionsPage({
             {option.label} ({contentCounts[option.value ?? 'all']})
           </Link>
         ))}
+
+        {/* The same parameter the Order select writes, one click away and back
+            on page 1. Reversing a sort while staying on page 4 lands the reader
+            in the middle of an order they have not seen the top of. */}
+        <Link
+          href={submissionsHref({
+            ...current,
+            direction: direction === 'desc' ? 'asc' : 'desc',
+            page: 1,
+          })}
+          data-testid="board-flip-direction"
+          className="ml-auto rounded-md border border-line bg-white px-2 py-1 text-xs text-muted hover:text-ink"
+        >
+          {DIRECTION_LABELS[sort][direction === 'desc' ? 'asc' : 'desc']}
+        </Link>
       </div>
 
       <div

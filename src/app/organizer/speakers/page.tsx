@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { Badge, Button, Card, Empty, Input, PageHeader, Select } from '@/components/ui';
 import { dayLabel } from '@/lib/format';
 import { allTracks, getEvent } from '@/lib/queries';
-import { ROSTER_FILTERS, isRosterFilter, speakerRoster } from '@/lib/speakers';
+import { ROSTER_FILTERS, billing, isRosterFilter, speakerRoster } from '@/lib/speakers';
 import { Headshot } from '@/app/speakers/Headshot';
 import { grantRoleAction, revokeRoleAction } from './actions';
 import { BulkTaskForm } from './BulkTaskForm';
@@ -65,7 +65,12 @@ export default async function SpeakersPage({
           the bulk actions can post the same two values back. */}
       <form method="get" className="flex flex-wrap items-end gap-2">
         <div className="min-w-56 flex-1">
-          <Input name="q" defaultValue={q} placeholder="Search name or email" aria-label="Search" />
+          <Input
+            name="q"
+            defaultValue={q}
+            placeholder="Search name, email, job title or company"
+            aria-label="Search"
+          />
         </div>
         <Select name="filter" defaultValue={filter} aria-label="Filter" className="w-auto">
           {Object.entries(ROSTER_FILTERS).map(([value, label]) => (
@@ -109,7 +114,11 @@ export default async function SpeakersPage({
           {people.map((person) => {
             const missingBio = person.accepted > 0 && !person.bio;
             const missingHeadshot = person.accepted > 0 && !person.headshotUrl;
-            const unconfirmed = person.accepted > person.confirmed;
+            // Declines come out of the chase count for the same reason the
+            // record screen draws them as a third state: they are an answer, and
+            // a badge that reads "not confirmed" against somebody who has said
+            // no sends an organizer to ask a question that has been answered.
+            const unconfirmed = person.accepted > person.confirmed + person.declined;
             return (
               <Card
                 key={person.id}
@@ -125,6 +134,13 @@ export default async function SpeakersPage({
                     </Link>{' '}
                     {person.isBot ? <Badge tone="accent">bot</Badge> : null}
                   </p>
+                  {/* The byline is its own line and simply absent when both
+                      halves are empty, which is still most of the roster. */}
+                  {billing(person.title, person.company) ? (
+                    <p className="text-xs text-ink" data-testid={`roster-billing-${person.id}`}>
+                      {billing(person.title, person.company)}
+                    </p>
+                  ) : null}
                   <p className="text-xs text-muted">{person.email}</p>
                   <p className="flex flex-wrap items-center gap-2 text-xs text-muted">
                     <span>
@@ -133,6 +149,11 @@ export default async function SpeakersPage({
                     {missingBio ? <Badge tone="warn">bio missing</Badge> : null}
                     {missingHeadshot ? <Badge tone="warn">headshot missing</Badge> : null}
                     {unconfirmed ? <Badge tone="warn">not confirmed</Badge> : null}
+                    {person.declined > 0 ? (
+                      <Badge tone="bad" data-testid={`roster-declined-${person.id}`}>
+                        {person.declined} declined
+                      </Badge>
+                    ) : null}
                     {person.overdue > 0 ? (
                       <Badge tone="bad">{person.overdue} overdue</Badge>
                     ) : null}

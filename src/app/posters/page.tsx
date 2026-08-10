@@ -1,10 +1,21 @@
 import Link from 'next/link';
-import { Badge, Button, Card, Empty, Input, Notice, PageHeader, Select } from '@/components/ui';
+import {
+  Badge,
+  Button,
+  Card,
+  Empty,
+  Input,
+  Notice,
+  PageHeader,
+  Select,
+  ShowMoreText,
+} from '@/components/ui';
 import { currentUser } from '@/lib/auth';
 import { inEventZone } from '@/lib/format';
 import { posterGalleryGate } from '@/lib/poster';
 import { POSTERS_PER_PAGE, posterGallery } from '@/lib/poster-queries';
 import { allTracks, getEvent } from '@/lib/queries';
+import { billing } from '@/lib/speakers';
 import { BookmarkButton } from './BookmarkButton';
 import { PosterKindBadge, PosterMedia } from './PosterMedia';
 
@@ -149,42 +160,60 @@ export default async function PostersPage({
       ) : null}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {rows.map((poster) => (
-          <Card
-            key={poster.id}
-            className="flex flex-col gap-2 p-3"
-            style={{ borderLeft: `3px solid ${poster.trackColour ?? '#cbd5e1'}` }}
-            data-testid={`poster-${poster.id}`}
-          >
-            {poster.posterUrl ? (
-              <PosterMedia url={poster.posterUrl} title={poster.title} variant="card" />
-            ) : null}
-
-            <Link href={`/posters/${poster.id}`} className="font-medium text-ink hover:underline">
-              {poster.title}
-            </Link>
-            <p className="text-xs text-muted">{poster.speakerName ?? 'Unnamed'}</p>
-
-            <div className="flex flex-wrap items-center gap-1.5">
-              {poster.boardNumber ? (
-                <Badge tone="accent">Board {poster.boardNumber}</Badge>
+        {rows.map((poster) => {
+          const billed = billing(poster.speakerTitle, poster.speakerCompany);
+          return (
+            <Card
+              key={poster.id}
+              className="flex flex-col gap-2 p-3"
+              style={{ borderLeft: `3px solid ${poster.trackColour ?? '#cbd5e1'}` }}
+              data-testid={`poster-${poster.id}`}
+            >
+              {poster.posterUrl ? (
+                <PosterMedia url={poster.posterUrl} title={poster.title} variant="card" />
               ) : null}
-              {poster.trackName ? <Badge>{poster.trackName}</Badge> : null}
-              {poster.posterUrl ? <PosterKindBadge url={poster.posterUrl} /> : null}
-            </div>
 
-            <div className="mt-auto flex items-center justify-between pt-1">
-              <Link href={`/posters/${poster.id}`} className="text-xs text-muted hover:text-ink">
-                Full size →
+              <Link href={`/posters/${poster.id}`} className="font-medium text-ink hover:underline">
+                {poster.title}
               </Link>
-              <BookmarkButton
-                submissionId={poster.id}
-                bookmarked={poster.bookmarked}
-                signedIn={Boolean(user)}
+              {/* Who is standing at the board, and what they do. A hall of
+                  thirty boards is walked by people looking for a person as
+                  often as for a topic, and the name on its own answered only
+                  half of that. */}
+              <p className="text-xs text-muted" data-testid="poster-billing">
+                {poster.speakerName ?? 'Unnamed'}
+                {billed ? ` · ${billed}` : ''}
+              </p>
+              {/* Posters carry no date or time on purpose: they have no slot and
+                  stand for the run of the event, which is what the page header
+                  already says. The abstract is the field that was missing. */}
+              <ShowMoreText
+                text={poster.abstract}
+                className="text-xs text-muted"
+                testId="poster-more"
               />
-            </div>
-          </Card>
-        ))}
+
+              <div className="flex flex-wrap items-center gap-1.5">
+                {poster.boardNumber ? (
+                  <Badge tone="accent">Board {poster.boardNumber}</Badge>
+                ) : null}
+                {poster.trackName ? <Badge>{poster.trackName}</Badge> : null}
+                {poster.posterUrl ? <PosterKindBadge url={poster.posterUrl} /> : null}
+              </div>
+
+              <div className="mt-auto flex items-center justify-between pt-1">
+                <Link href={`/posters/${poster.id}`} className="text-xs text-muted hover:text-ink">
+                  Full size →
+                </Link>
+                <BookmarkButton
+                  submissionId={poster.id}
+                  bookmarked={poster.bookmarked}
+                  signedIn={Boolean(user)}
+                />
+              </div>
+            </Card>
+          );
+        })}
       </div>
 
       {pageCount > 1 ? (

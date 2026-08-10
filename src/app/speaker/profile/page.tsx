@@ -105,6 +105,8 @@ export default async function SpeakerProfilePage({
       <ProfileForm
         email={user.email}
         name={user.name}
+        title={user.title}
+        company={user.company}
         bio={user.bio}
         headshotUrl={user.headshotUrl}
         hasUpload={Boolean(uploaded)}
