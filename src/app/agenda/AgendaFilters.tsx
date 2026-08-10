@@ -1,7 +1,6 @@
 import Link from 'next/link';
-import type { Room, Track } from '@/db/schema';
 import { Button, Card, Input, Select, cn } from '@/components/ui';
-import type { AgendaFilters as Filters } from '@/lib/agenda-filters';
+import type { AgendaFacets, AgendaFilters as Filters } from '@/lib/agenda-filters';
 import { agendaFilterQuery, hasActiveFilters } from '@/lib/agenda-filters';
 import { FORMAT_LABELS, LEVEL_LABELS } from '@/lib/format';
 
@@ -17,20 +16,22 @@ function href(filters: Filters, overrides: Partial<Filters>): string {
  */
 export function AgendaFilterBar({
   filters,
-  tracks,
-  rooms,
-  days,
+  facets,
   signedIn,
   matchCount,
 }: {
   filters: Filters;
-  tracks: Track[];
-  rooms: Room[];
-  days: { key: string; label: string }[];
+  /**
+   * Only values with a session behind them. Every list here used to be the
+   * whole table or the whole enum, so four of the twenty-five options on the
+   * deployed page led to an empty agenda. See `agendaFacets`.
+   */
+  facets: AgendaFacets;
   signedIn: boolean;
   matchCount: number;
 }) {
   const narrowed = hasActiveFilters(filters);
+  const { days, tracks, rooms, formats, levels } = facets;
 
   return (
     <Card className="space-y-3">
@@ -89,9 +90,9 @@ export function AgendaFilterBar({
           <span className="block text-xs font-medium text-muted">Format</span>
           <Select name="format" defaultValue={filters.format ?? ''} className="w-48">
             <option value="">Any format</option>
-            {Object.entries(FORMAT_LABELS).map(([value, text]) => (
+            {formats.map((value) => (
               <option key={value} value={value}>
-                {text}
+                {FORMAT_LABELS[value]}
               </option>
             ))}
           </Select>
@@ -101,9 +102,9 @@ export function AgendaFilterBar({
           <span className="block text-xs font-medium text-muted">Level</span>
           <Select name="level" defaultValue={filters.level ?? ''} className="w-36">
             <option value="">Any level</option>
-            {Object.entries(LEVEL_LABELS).map(([value, text]) => (
+            {levels.map((value) => (
               <option key={value} value={value}>
-                {text}
+                {LEVEL_LABELS[value]}
               </option>
             ))}
           </Select>

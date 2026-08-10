@@ -1,10 +1,10 @@
 import Link from 'next/link';
 import { Badge, Card, Empty, Notice, PageHeader, ShowMoreText } from '@/components/ui';
 import type { AgendaSearchParams, AgendaSlot } from '@/lib/agenda-filters';
-import { agendaDays, agendaSlots, hasActiveFilters, parseAgendaFilters } from '@/lib/agenda-filters';
+import { agendaFacets, agendaSlots, hasActiveFilters, parseAgendaFilters } from '@/lib/agenda-filters';
 import { currentUser } from '@/lib/auth';
 import { FORMAT_LABELS, dayKey, dayLabel, timeOfDay } from '@/lib/format';
-import { allRooms, allTracks, getEvent } from '@/lib/queries';
+import { getEvent } from '@/lib/queries';
 import { billing } from '@/lib/speakers';
 import { AgendaFilterBar } from './AgendaFilters';
 import { StarButton } from './StarButton';
@@ -43,11 +43,12 @@ export default async function AgendaPage({
     );
   }
 
-  const [entries, tracks, rooms, days] = await Promise.all([
+  // One facet query rather than three table reads. The filter bar offers only
+  // values that have a session behind them, which is the rule `agendaDays`
+  // already applied to the day picker on its own.
+  const [entries, facets] = await Promise.all([
     agendaSlots(filters, event.timezone, user?.id ?? null),
-    allTracks(),
-    allRooms(),
-    agendaDays(event.timezone),
+    agendaFacets(event.timezone),
   ]);
 
   // Group by day, then by start time. The query already orders by start then
@@ -96,9 +97,7 @@ export default async function AgendaPage({
 
       <AgendaFilterBar
         filters={filters}
-        tracks={tracks}
-        rooms={rooms}
-        days={days}
+        facets={facets}
         signedIn={user !== null}
         matchCount={sessionCount}
       />
