@@ -17,17 +17,24 @@ import {
  * pure function the server action validates with. A hidden question renders
  * nothing at all rather than a disabled input, so its value never reaches the
  * POST and cannot be revived by a branch reopening later.
+ *
+ * `initialAnswers` seeds the state once, on mount. These inputs are controlled,
+ * so a resumed draft cannot reach them through a `defaultValue` the way the
+ * fixed fields above are filled in; the parent remounts this subtree when it
+ * restores a draft, which is what makes a mount-time seed enough.
  */
 export function CustomQuestions({
   questions,
   format,
   trackId,
+  initialAnswers,
 }: {
   questions: QuestionShape[];
   format: string;
   trackId: string | null;
+  initialAnswers?: AnswerMap;
 }) {
-  const [answers, setAnswers] = useState<AnswerMap>({});
+  const [answers, setAnswers] = useState<AnswerMap>(initialAnswers ?? {});
   const visible = visibleQuestions(questions, { format, trackId }, answers);
 
   if (questions.length === 0) return null;

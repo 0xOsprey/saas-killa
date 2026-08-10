@@ -34,6 +34,7 @@ export default async function CfpPage() {
         description={`Open until ${dayLabel(event.cfpClosesAt, event.timezone)}. Reviewers grade abstracts without seeing who wrote them.`}
       />
       <CfpForm
+        eventId={event.id}
         questions={questions}
         tracks={tracks}
         knownEmail={user?.email ?? null}
