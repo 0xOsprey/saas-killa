@@ -295,11 +295,27 @@ export async function agendaSlots(
     .orderBy(asc(slots.startsAt), asc(rooms.position), asc(rooms.name));
 }
 
-/** Days that have any slot at all, for the day filter. */
+/**
+ * Days the public agenda actually has a session on, for the day filter.
+ *
+ * Not "days that have any slot at all", which is what this used to be. A slot
+ * exists the moment an organizer lays a time band across the rooms, long before
+ * anything is placed in it, and an unplaced band is invisible to `agendaSlots`:
+ * it carries neither a submission nor a label, so it matches neither leg. The
+ * filter bar was reading a different table than the page below it, and offering
+ * a day that renders "No sessions match these filters" is a filter that lies.
+ *
+ * The predicate is the session leg of `agendaSlots` and nothing else, which is
+ * also what `populated` in the agenda page uses to decide a day is worth a
+ * heading. A day whose only content is a break has no heading, so it gets no
+ * filter entry either. Same rule, stated once on each side of the page.
+ */
 export async function agendaDays(timezone: string): Promise<{ key: string; label: string }[]> {
   const rows = await db
     .selectDistinct({ startsAt: slots.startsAt })
     .from(slots)
+    .innerJoin(submissions, eq(submissions.id, slots.submissionId))
+    .where(and(eq(submissions.status, 'accepted'), eq(submissions.contentStatus, 'approved')))
     .orderBy(asc(slots.startsAt));
 
   const days = new Map<string, { key: string; label: string }>();

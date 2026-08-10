@@ -1,4 +1,5 @@
 import { guardRoute } from '@/lib/auth';
+import { isUuid } from '@/lib/ids';
 import { fileExportById, readExportBytes } from '@/lib/uploads';
 
 /**
@@ -13,8 +14,6 @@ import { fileExportById, readExportBytes } from '@/lib/uploads';
  * `guardRoute` rather than `requireRole`, which throws: a thrown authorisation
  * error in a route handler is a 500 that reads like an outage.
  */
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function notFound(): Response {
   return new Response('Not found', {
@@ -31,7 +30,7 @@ export async function GET(
   if (gate instanceof Response) return gate;
 
   const { id } = await params;
-  if (!UUID.test(id)) return notFound();
+  if (!isUuid(id)) return notFound();
 
   const row = await fileExportById(id);
   if (!row || row.status !== 'ready') return notFound();

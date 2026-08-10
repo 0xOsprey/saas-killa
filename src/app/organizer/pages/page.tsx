@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Badge, Button, Card, Empty, Field, Input, Notice, PageHeader, Textarea } from '@/components/ui';
+import { uuidOrNull } from '@/lib/ids';
 import { allPages, pageForEdit } from '@/lib/portal-pages';
 import { deletePage, savePage, setPagePublished } from './actions';
 
@@ -18,7 +19,11 @@ export default async function OrganizerPagesScreen({
 }) {
   const params = await searchParams;
   const pages = await allPages();
-  const editing = params.edit ? await pageForEdit(params.edit) : null;
+  // An `?edit=` naming a page that was since deleted, or a hand-edited one, has
+  // to fall back to the blank "new page" form rather than 22P02 the screen —
+  // which is what `pageForEdit` returning null already means here.
+  const editId = uuidOrNull(params.edit);
+  const editing = editId ? await pageForEdit(editId) : null;
   const toDelete = pages.find((page) => page.id === params.confirmDelete);
 
   return (

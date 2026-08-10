@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { Badge, Button, Card, Empty, Notice, PageHeader } from '@/components/ui';
 import { acceleventsConfig, recentRuns, runById } from '@/lib/accelevents';
 import { inEventZone } from '@/lib/format';
+import { uuidOrNull } from '@/lib/ids';
 import { getEvent } from '@/lib/queries';
 import { runAcceleventsExport } from './actions';
 
@@ -27,7 +28,11 @@ export default async function IntegrationsScreen({
   const params = await searchParams;
   const config = acceleventsConfig();
   const [event, runs] = await Promise.all([getEvent(), recentRuns()]);
-  const opened = params.run ? await runById(params.run) : null;
+  // `?run=` is a link into one past push, so it gets bookmarked and outlives
+  // the row it names. A non-uuid would 22P02 the screen; no run just means no
+  // detail card, and the run list below it is the point of the page anyway.
+  const runId = uuidOrNull(params.run);
+  const opened = runId ? await runById(runId) : null;
   const dryRun = config.mode === 'dry_run';
 
   return (

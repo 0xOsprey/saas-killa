@@ -1,5 +1,6 @@
 import { Button, Card, Empty, Field, Input, LinkButton, Notice, PageHeader } from '@/components/ui';
 import { inEventZone } from '@/lib/format';
+import { uuidOrNull } from '@/lib/ids';
 import { getEvent } from '@/lib/queries';
 import { EXPORT_GROUPINGS } from '@/lib/export-grouping';
 import {
@@ -64,8 +65,12 @@ export default async function OrganizerFilesPage({
     .filter((series) => series.submissionId && preselect.has(series.submissionId))
     .map((series) => series.seriesId);
 
+  // An unparseable `?export=` is no export rather than an error: this is a
+  // link handed out after a job finishes, so it gets bookmarked and outlives
+  // the row it named. The library behind it still renders, minus the panel.
+  const exportId = uuidOrNull(params.export);
   const [job, recent] = await Promise.all([
-    params.export ? fileExportById(params.export) : Promise.resolve(null),
+    exportId ? fileExportById(exportId) : Promise.resolve(null),
     recentFileExports(),
   ]);
 

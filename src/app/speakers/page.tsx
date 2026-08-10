@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { Badge, Button, Card, Empty, Input, Notice, PageHeader, Select } from '@/components/ui';
 import { currentUser } from '@/lib/auth';
+import { uuidOrNull } from '@/lib/ids';
 import { allTracks, getEvent } from '@/lib/queries';
 import { billing, speakerDirectory } from '@/lib/speakers';
 import { Headshot } from './Headshot';
@@ -25,7 +26,11 @@ export default async function SpeakerDirectoryPage({
 }) {
   const params = await searchParams;
   const q = params.q?.trim() ?? '';
-  const trackId = params.track ?? '';
+  // Same reason as `/posters`: this directory is public, and a `?track=` that
+  // is not a uuid would reach the cast and 22P02 the page for a signed-out
+  // visitor. Falling back to '' also lands the Select on "Every track", so the
+  // control agrees with the list it is filtering.
+  const trackId = uuidOrNull(params.track) ?? '';
 
   const [event, user] = await Promise.all([getEvent(), currentUser()]);
   const isOrganizer = user?.roles.includes('organizer') ?? false;

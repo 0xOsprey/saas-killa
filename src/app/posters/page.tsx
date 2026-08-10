@@ -12,6 +12,7 @@ import {
 } from '@/components/ui';
 import { currentUser } from '@/lib/auth';
 import { inEventZone } from '@/lib/format';
+import { uuidOrNull } from '@/lib/ids';
 import { posterGalleryGate } from '@/lib/poster';
 import { POSTERS_PER_PAGE, posterGallery } from '@/lib/poster-queries';
 import { allTracks, getEvent } from '@/lib/queries';
@@ -77,7 +78,11 @@ export default async function PostersPage({
   const mineOnly = params.mine === '1' && Boolean(user);
   const filters = {
     q: params.q ?? '',
-    trackId: params.track || null,
+    // A `?track=` that is not a uuid is a stale bookmark, not a request for an
+    // error page: it reaches Postgres as a cast and 22P02s the whole gallery.
+    // This page is public and signed-out, so that crash is one dead link away
+    // from any visitor. An unparseable filter is simply no filter.
+    trackId: uuidOrNull(params.track),
     mineOnly,
     page,
   };

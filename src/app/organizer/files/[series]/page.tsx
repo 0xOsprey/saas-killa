@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { Badge, Card, LinkButton, PageHeader } from '@/components/ui';
 import { FileCommentThread, FileVersionList } from '@/app/files/FilePanels';
 import { inEventZone } from '@/lib/format';
+import { isUuid } from '@/lib/ids';
 import { getEvent } from '@/lib/queries';
 import {
   UPLOAD_KIND_LABELS,
@@ -27,6 +28,12 @@ export default async function OrganizerFileDetailPage({
   searchParams: Promise<{ commented?: string }>;
 }) {
   const { series: seriesId } = await params;
+  // Checked before the fetch, not after. `[series]` also catches every URL
+  // under `/organizer/files/` that matches no other route — `/exports` with the
+  // id left off is the one people actually reach — and a segment that is not a
+  // uuid is a page that does not exist, not an error page.
+  if (!isUuid(seriesId)) notFound();
+
   const [event, series, flash] = await Promise.all([
     getEvent(),
     fileSeriesById(seriesId),

@@ -10,6 +10,7 @@ import { fileExports, submissions, uploadComments, uploads, users } from '@/db/s
 import type { FileExport, Upload, UploadKind } from '@/db/schema';
 import { writableBy } from '@/lib/abstracts';
 import { contentIsPublic } from '@/lib/content';
+import { isUuid, uuidsOnly } from '@/lib/ids';
 import { posterGalleryGate } from '@/lib/poster';
 import { getEvent } from '@/lib/queries';
 import { UPLOAD_DIR } from '@/lib/upload-dir';
@@ -398,6 +399,18 @@ export async function fileSeriesList(
   if (opts.submissionIds?.length === 0) return [];
   if (opts.seriesIds?.length === 0) return [];
 
+  // Both id filters are cast to uuid by Postgres, so a single hand-edited path
+  // segment reaching either one raises 22P02 and 500s whichever page asked —
+  // which is how `/organizer/files/exports` crashed rather than 404ing. The
+  // guard sits here, at the one place both filters are spelled, so that no
+  // future caller has to remember it. Dropping an id that cannot exist and
+  // answering empty is the same answer the query would give for a well-formed
+  // id with no rows behind it.
+  const submissionIds = opts.submissionIds && uuidsOnly(opts.submissionIds);
+  const seriesIds = opts.seriesIds && uuidsOnly(opts.seriesIds);
+  if (submissionIds?.length === 0) return [];
+  if (seriesIds?.length === 0) return [];
+
   const rows = await db
     .select({
       upload: uploads,
@@ -413,7 +426,7 @@ export async function fileSeriesList(
     .leftJoin(speakers, eq(speakers.id, submissions.speakerId))
     .where(
       and(
-        opts.submissionIds ? inArray(uploads.submissionId, opts.submissionIds) : undefined,
+        submissionIds ? inArray(uploads.submissionId, submissionIds) : undefined,
         opts.kinds ? inArray(uploads.kind, opts.kinds) : undefined,
         // Two `in` clauses rather than `coalesce(series_id, id) in (…)`, which
         // is the same predicate and reads better, but cannot be written here: an
@@ -424,8 +437,8 @@ export async function fileSeriesList(
         //
         // A chain id is always the head upload's own id, so a row belongs to it
         // either by carrying it in `series_id` or by being it.
-        opts.seriesIds
-          ? or(inArray(uploads.seriesId, opts.seriesIds), inArray(uploads.id, opts.seriesIds))
+        seriesIds
+          ? or(inArray(uploads.seriesId, seriesIds), inArray(uploads.id, seriesIds))
           : undefined,
       ),
     );
@@ -674,7 +687,8 @@ async function commentCounts(seriesIds: string[]): Promise<Map<string, number>> 
 /** Every note on a set of chains, oldest first, which is how a thread reads. */
 export async function commentsForSeries(seriesIds: string[]): Promise<Map<string, FileComment[]>> {
   const byId = new Map<string, FileComment[]>();
-  if (seriesIds.length === 0) return byId;
+  const ids = uuidsOnly(seriesIds);
+  if (ids.length === 0) return byId;
 
   const rows = await db
     .select({
@@ -688,7 +702,7 @@ export async function commentsForSeries(seriesIds: string[]): Promise<Map<string
     })
     .from(uploadComments)
     .innerJoin(users, eq(users.id, uploadComments.authorId))
-    .where(inArray(uploadComments.seriesId, seriesIds))
+    .where(inArray(uploadComments.seriesId, ids))
     .orderBy(asc(uploadComments.createdAt));
 
   for (const row of rows) {
@@ -1005,6 +1019,11 @@ export async function runFileExport(opts: {
 }
 
 export async function fileExportById(id: string): Promise<FileExport | null> {
+  // `?export=` on the files library is a link handed out after a job finishes,
+  // so it gets bookmarked and edited. A non-uuid has no row by definition, and
+  // saying so is the contract already; letting it reach the cast would 500 the
+  // whole library over a dead confirmation panel.
+  if (!isUuid(id)) return null;
   const [row] = await db.select().from(fileExports).where(eq(fileExports.id, id)).limit(1);
   return row ?? null;
 }
