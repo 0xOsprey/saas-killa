@@ -10,10 +10,10 @@ import { BulkTaskForm } from './BulkTaskForm';
 import { InviteSpeakerForm } from './InviteSpeakerForm';
 import { ReminderForm } from './ReminderForm';
 
-function Panel({ summary, children }: { summary: string; children: ReactNode }) {
+function Panel({ summary, children, open }: { summary: string; children: ReactNode; open?: boolean }) {
   return (
     <Card className="p-0">
-      <details className="group">
+      <details className="group" open={open}>
         <summary className="cursor-pointer list-none px-4 py-3 text-sm font-medium text-ink">
           <span className="mr-2 text-muted group-open:hidden">＋</span>
           <span className="mr-2 hidden text-muted group-open:inline">－</span>
@@ -28,11 +28,12 @@ function Panel({ summary, children }: { summary: string; children: ReactNode }) 
 export default async function SpeakersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; filter?: string }>;
+  searchParams: Promise<{ q?: string; filter?: string; fromContact?: string }>;
 }) {
   const params = await searchParams;
   const q = params.q?.trim() ?? '';
   const filter = isRosterFilter(params.filter) ? params.filter : 'all';
+  const inviteOpen = Boolean(params.fromContact);
 
   const [event, tracks, people] = await Promise.all([
     getEvent(),
@@ -89,7 +90,10 @@ export default async function SpeakersPage({
         ) : null}
       </form>
 
-      <Panel summary="Invite a speaker — files a submission for them, even with the CFP closed">
+      <Panel
+        summary="Invite a speaker — files a submission for them, even with the CFP closed"
+        open={inviteOpen}
+      >
         <InviteSpeakerForm tracks={tracks} />
       </Panel>
 

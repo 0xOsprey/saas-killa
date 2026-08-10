@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useLayoutEffect, useMemo, useState } from 'react';
 import { Menu } from 'lucide-react';
 import * as Lucide from 'lucide-react';
 import { cn } from '@/components/ui';
@@ -30,11 +30,18 @@ export function AppShell({
   const [activePath, setActivePath] = useState('');
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     setActivePath(pathname);
   }, [pathname]);
 
   const sections = useMemo(() => (user ? roleSections(user.roles) : []), [user]);
+
+  const homeHref = useMemo(() => {
+    if (!user) return '/';
+    if (user.roles.includes('organizer')) return '/organizer';
+    if (user.roles.includes('reviewer')) return '/review';
+    return '/speaker';
+  }, [user]);
 
   return (
     <div className="flex min-h-screen flex-col bg-surface">
@@ -49,7 +56,7 @@ export function AppShell({
             <Menu className="h-5 w-5" />
           </button>
 
-          <Link href="/" className="text-sm font-semibold tracking-tight text-ink">
+          <Link href={homeHref} className="text-sm font-semibold tracking-tight text-ink">
             {eventName ?? 'Saas Killa'}
           </Link>
 

@@ -16,6 +16,29 @@ function isActive(href: string, activePath: string): boolean {
   return activePath === base || activePath.startsWith(base + '/');
 }
 
+function computeActiveHref(
+  links: Array<{ href: string }>,
+  activePath: string,
+): string | null {
+  const matches = links
+    .map((link) => ({
+      href: link.href,
+      base: linkBase(link.href),
+      active: isActive(link.href, activePath),
+    }))
+    .filter((m) => m.active);
+
+  if (matches.length === 0) return null;
+
+  matches.sort((a, b) => {
+    if (b.base.length !== a.base.length) return b.base.length - a.base.length;
+    // Prefer the exact href (no query string) on a tie.
+    return (a.href.includes('?') ? 1 : 0) - (b.href.includes('?') ? 1 : 0);
+  });
+
+  return matches[0]?.href ?? null;
+}
+
 export function Sidebar({
   user,
   sections,
@@ -29,6 +52,14 @@ export function Sidebar({
   mobileOpen: boolean;
   onClose: () => void;
 }) {
+  const activeHref = useMemo(() => {
+    const allLinks = [
+      ...PUBLIC_LINKS,
+      ...sections.flatMap((section) => section.links),
+    ];
+    return computeActiveHref(allLinks, activePath);
+  }, [sections, activePath]);
+
   return (
     <>
       {mobileOpen && (
@@ -64,7 +95,7 @@ export function Sidebar({
           <Section
             title="Public"
             links={PUBLIC_LINKS}
-            activePath={activePath}
+            activeHref={activeHref}
             onClick={onClose}
             className="lg:hidden"
           />
@@ -74,7 +105,7 @@ export function Sidebar({
               key={section.title}
               title={section.title}
               links={section.links}
-              activePath={activePath}
+              activeHref={activeHref}
               onClick={onClose}
             />
           ))}
@@ -87,35 +118,16 @@ export function Sidebar({
 function Section({
   title,
   links,
-  activePath,
+  activeHref,
   onClick,
   className,
 }: {
   title: string;
   links: NavSection['links'];
-  activePath: string;
+  activeHref: string | null;
   onClick: () => void;
   className?: string;
 }) {
-  // A parent route like /organizer must not light up when the active path is
-  // /organizer/submissions; choose the deepest matching link instead.
-  const activeHref = useMemo(() => {
-    const matches = links
-      .map((link) => ({
-        href: link.href,
-        base: linkBase(link.href),
-        active: isActive(link.href, activePath),
-      }))
-      .filter((m) => m.active);
-    if (matches.length === 0) return null;
-    matches.sort((a, b) => {
-      if (b.base.length !== a.base.length) return b.base.length - a.base.length;
-      // Prefer the exact href (no query string) on a tie.
-      return (a.href.includes('?') ? 1 : 0) - (b.href.includes('?') ? 1 : 0);
-    });
-    return matches[0]?.href ?? null;
-  }, [links, activePath]);
-
   return (
     <div className={cn('mb-6', className)}>
       <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-muted">
