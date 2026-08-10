@@ -84,10 +84,6 @@ export default async function ContactsDirectoryPage({
   // so a directory where no company has more than two people still reads as a
   // ranking instead of seven bars all one pixel wide.
   const topCompanyMax = kpis.topCompanies[0]?.count ?? 1;
-  // The two criteria the email composer shares a vocabulary with. `filter` is
-  // literally the same `ROSTER_FILTERS` key on both screens, which is why it
-  // can be handed over rather than translated.
-  const carriedToComposer = criteria.filter((chip) => chip.key === 'q' || chip.key === 'filter');
 
   return (
     <div className="space-y-5">
@@ -103,18 +99,16 @@ export default async function ContactsDirectoryPage({
             >
               Email these contacts
             </Link>
-            {/* The composer re-resolves its own audience from `q` and `filter`,
-                which is what makes the number on its send button trustworthy,
-                and it has no vocabulary yet for the three attribute filters.
-                They are carried in the link anyway so they arrive the day it
-                does, and said out loud meanwhile, because the failure this
-                prevents is a bulk send that quietly goes to everyone. */}
-            {carriedToComposer.length < criteria.length ? (
-              <p className="text-xs text-muted" data-testid="contacts-email-caveat">
-                The composer narrows on the search box and the saved view only. Company, job title
-                and tag do not carry, so check its recipient list before sending.
-              </p>
-            ) : null}
+            {/* No caveat under this link any more. It used to warn that company,
+                job title and tag did not reach the composer, which was true when
+                the composer knew only `q` and `filter`. It now re-resolves its
+                audience through `announcementAudience` → `contactDirectory` over
+                the whole of `ContactFilters`, so every filter on this screen
+                narrows the send the same way it narrows the list: a `tag=ai`
+                directory hands the composer 2 recipients, unfiltered hands it 38.
+                Leaving the warning up told an organizer to distrust a number
+                that is now correct, which is its own way of causing the bulk
+                send to everyone that it was written to prevent. */}
           </div>
         }
       />
