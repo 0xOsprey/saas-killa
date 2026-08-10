@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, exists, ilike, inArray, ne, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, count, desc, eq, exists, ilike, inArray, ne, or, sql, type SQL } from 'drizzle-orm';
 import { db } from '@/db';
 import {
   reviews,
@@ -817,6 +817,33 @@ export async function abstractIndex(filters: AbstractFilters = {}): Promise<Abst
     .where(conditions.length > 0 ? and(...conditions) : undefined)
     .groupBy(submissions.id, tracks.name, users.name, users.email)
     .orderBy(ordering, asc(submissions.title));
+}
+
+export async function abstractStatusCounts(filters: AbstractFilters = {}): Promise<Record<string, number>> {
+  const conditions: SQL[] = [];
+  const q = filters.q?.trim();
+  if (q) {
+    const pattern = `%${q}%`;
+    const match = or(
+      ilike(submissions.title, pattern),
+      ilike(submissions.abstract, pattern),
+      sql`array_to_string(${submissions.keywords}, ' ') ilike ${pattern}`,
+    );
+    if (match) conditions.push(match);
+  }
+  if (filters.trackId) conditions.push(eq(submissions.trackId, filters.trackId));
+
+  const rows = await db
+    .select({ status: submissions.status, count: count() })
+    .from(submissions)
+    .innerJoin(users, eq(users.id, submissions.speakerId))
+    .leftJoin(tracks, eq(tracks.id, submissions.trackId))
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .groupBy(submissions.status);
+
+  const out: Record<string, number> = {};
+  for (const row of rows) out[row.status] = row.count;
+  return out;
 }
 
 export type ExportRow = {

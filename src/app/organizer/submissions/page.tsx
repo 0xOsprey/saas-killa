@@ -14,6 +14,7 @@ import {
 } from '@/components/ui';
 import { contentStatusEnum, submissionStatusEnum } from '@/db/schema';
 import type { ContentStatus, SubmissionStatus } from '@/db/schema';
+import { StatusTabs } from '@/components/StatusTabs';
 import { evaluatorConfigured } from '@/lib/ai-evaluator';
 import {
   CONTENT_STATUS_LABELS,
@@ -32,6 +33,7 @@ import {
   ORGANIZER_DEFAULT_DIRECTION,
   ORGANIZER_SORTS,
   organizerReviewComments,
+  organizerStatusCounts,
   organizerSubmissionCount,
   organizerSubmissions,
   organizerTotals,
@@ -165,11 +167,12 @@ export default async function OrganizerSubmissionsPage({
   const showAll = params.per === 'all';
   const filters = { q, status, trackId, content };
 
-  const [matching, totals, tracks, event] = await Promise.all([
+  const [matching, totals, tracks, event, statusCounts] = await Promise.all([
     organizerSubmissionCount(filters),
     organizerTotals(),
     allTracks(),
     getEvent(),
+    organizerStatusCounts({ q, trackId, content }),
   ]);
 
   // Clamp rather than render an empty page 9: a filter narrowed from the page
@@ -206,6 +209,15 @@ export default async function OrganizerSubmissionsPage({
     pending: totals.pending,
     approved: totals.approved,
   };
+  const allStatusCount = Object.values(statusCounts).reduce((a, b) => a + b, 0);
+  const statusTabs = [
+    { value: null, label: 'All', count: allStatusCount },
+    ...submissionStatusEnum.enumValues.map((value) => ({
+      value,
+      label: STATUS_LABELS[value],
+      count: statusCounts[value] ?? 0,
+    })),
+  ];
   const sortLabel = ORGANIZER_SORTS.find((option) => option.value === sort)!.label;
 
   const commentsBySubmission = new Map<string, ReviewCommentRow[]>();
@@ -318,6 +330,12 @@ export default async function OrganizerSubmissionsPage({
         </Notice>
       ) : null}
 
+      <StatusTabs
+        tabs={statusTabs}
+        active={status}
+        buildHref={(value) => submissionsHref({ ...current, status: value as SubmissionStatus | null, page: 1 })}
+      />
+
       <Card>
         {/* A GET form, so the filtered board is an address: linkable, reloadable
             and back-button-able. It carries no `page`, which is what makes
@@ -331,8 +349,9 @@ export default async function OrganizerSubmissionsPage({
             too high and nothing says why. */}
         <form
           method="get"
-          className="grid items-end gap-3 sm:grid-cols-[2fr_1fr_1fr_1fr_1fr_auto]"
+          className="grid items-end gap-3 sm:grid-cols-[2fr_1fr_1fr_1fr_auto]"
         >
+          <input type="hidden" name="status" value={status ?? ''} />
           <Field label="Search" hint="Title, abstract, speaker name and email.">
             <Input
               name="q"
@@ -340,16 +359,6 @@ export default async function OrganizerSubmissionsPage({
               placeholder="observability"
               data-testid="board-search"
             />
-          </Field>
-          <Field label="Decision">
-            <Select name="status" defaultValue={status ?? ''} data-testid="board-status">
-              <option value="">Every status</option>
-              {STATUS_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </Select>
           </Field>
           <Field label="Track">
             <Select name="track" defaultValue={trackId ?? ''} data-testid="board-track">

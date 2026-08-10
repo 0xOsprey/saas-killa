@@ -12,12 +12,14 @@ import {
   ScoreDots,
   Select,
 } from '@/components/ui';
+import { StatusTabs } from '@/components/StatusTabs';
 import { submissionStatusEnum } from '@/db/schema';
 import type { SubmissionStatus } from '@/db/schema';
 import {
   ABSTRACT_SORTS,
   ABSTRACT_SORT_LABELS,
   abstractIndex,
+  abstractStatusCounts,
   type AbstractSort,
   type SortDirection,
 } from '@/lib/abstracts';
@@ -65,14 +67,36 @@ export default async function AbstractsIndexPage({
         ? 'asc'
         : 'desc';
 
-  const [event, tracks, rows] = await Promise.all([
+  const [event, tracks, rows, counts] = await Promise.all([
     getEvent(),
     allTracks(),
     abstractIndex({ q, trackId, status, sort, direction }),
+    abstractStatusCounts({ q, trackId }),
   ]);
 
   const edited = rows.filter((row) => row.revisionCount > 0).length;
   const graded = rows.filter((row) => row.meanScore !== null).length;
+
+  function tabHref(tabStatus: string | null): string {
+    const params = new URLSearchParams();
+    if (q) params.set('q', q);
+    if (trackId) params.set('track', trackId);
+    if (tabStatus) params.set('status', tabStatus);
+    if (sort && sort !== 'title') params.set('sort', sort);
+    if (direction) params.set('direction', direction);
+    const search = params.toString();
+    return search ? `/organizer/abstracts?${search}` : '/organizer/abstracts';
+  }
+
+  const allCount = Object.values(counts).reduce((a, b) => a + b, 0);
+  const statusTabs = [
+    { value: null, label: 'All', count: allCount },
+    ...submissionStatusEnum.enumValues.map((value) => ({
+      value,
+      label: STATUS_LABELS[value],
+      count: counts[value] ?? 0,
+    })),
+  ];
 
   // The reverse of whatever is showing, carrying every filter with it. Built as
   // a link rather than a second form control because a chair flipping the
@@ -107,8 +131,11 @@ export default async function AbstractsIndexPage({
         }
       />
 
+      <StatusTabs tabs={statusTabs} active={status} buildHref={tabHref} />
+
       <Card>
-        <form method="get" className="grid items-end gap-3 sm:grid-cols-[2fr_1fr_1fr_auto]">
+        <form method="get" className="grid items-end gap-3 sm:grid-cols-[2fr_1fr_auto]">
+          <input type="hidden" name="status" value={status ?? ''} />
           <Field label="Search" hint="Title, abstract text and keywords.">
             <Input name="q" defaultValue={q} placeholder="observability" data-testid="abstract-search" />
           </Field>
@@ -118,16 +145,6 @@ export default async function AbstractsIndexPage({
               {tracks.map((track) => (
                 <option key={track.id} value={track.id}>
                   {track.name}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Status">
-            <Select name="status" defaultValue={status ?? ''}>
-              <option value="">Every status</option>
-              {submissionStatusEnum.enumValues.map((value) => (
-                <option key={value} value={value}>
-                  {STATUS_LABELS[value]}
                 </option>
               ))}
             </Select>

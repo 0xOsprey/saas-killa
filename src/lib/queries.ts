@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, ilike, inArray, lte, ne, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, count, desc, eq, ilike, inArray, lte, ne, or, sql, type SQL } from 'drizzle-orm';
 import { db } from '@/db';
 import { events, reviews, rooms, slots, submissions, tracks, users } from '@/db/schema';
 import type {
@@ -307,6 +307,21 @@ export async function organizerSubmissionCount(filters: OrganizerFilters = {}): 
     .where(conditions.length > 0 ? and(...conditions) : undefined);
 
   return row?.matching ?? 0;
+}
+
+export async function organizerStatusCounts(filters: Omit<OrganizerFilters, 'status'> = {}): Promise<Record<string, number>> {
+  const conditions = organizerConditions(filters);
+
+  const rows = await db
+    .select({ status: submissions.status, count: count() })
+    .from(submissions)
+    .innerJoin(users, eq(users.id, submissions.speakerId))
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .groupBy(submissions.status);
+
+  const out: Record<string, number> = {};
+  for (const row of rows) out[row.status] = row.count;
+  return out;
 }
 
 export type OrganizerTotals = {
