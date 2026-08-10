@@ -270,6 +270,9 @@ export default async function SpeakerDetailPage({
                       {task.completedAt ? <Badge tone="good">done</Badge> : null}
                       {overdue ? <Badge tone="bad">overdue</Badge> : null}
                     </p>
+                    {task.instructions ? (
+                      <p className="whitespace-pre-wrap text-xs text-ink">{task.instructions}</p>
+                    ) : null}
                     <p className="text-xs text-muted">
                       {task.dueAt
                         ? `Due ${dayLabel(task.dueAt, event.timezone)} at ${timeOfDay(task.dueAt, event.timezone)}`

@@ -1,0 +1,1 @@
+ALTER TABLE "speaker_tasks" ADD COLUMN "instructions" text;

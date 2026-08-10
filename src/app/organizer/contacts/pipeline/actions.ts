@@ -33,7 +33,8 @@ export async function enrollContactAction(formData: FormData): Promise<void> {
   const contactId = z.string().uuid().safeParse(formData.get('contactId'));
   if (!contactId.success) backToBoard({ error: 'Pick somebody to add first.' });
 
-  const result = await addToPipeline(contactId.data, actor.id);
+  const stageId = z.string().uuid().nullable().parse(formData.get('stageId'));
+  const result = await addToPipeline(contactId.data, actor.id, stageId ?? undefined);
   if (result.ok) backToBoard({ moved: `Added to ${result.stage}.` });
 
   backToBoard({

@@ -74,6 +74,20 @@ export default async function ContactRecordPage({ params }: { params: Promise<{ 
             >
               Edit identity fields
             </Link>
+            <Link
+              href={`/organizer/speakers?${new URLSearchParams({
+                fromContact: user.id,
+                email: user.email,
+                ...(user.name ? { name: user.name } : {}),
+                ...(user.title ? { speakerTitle: user.title } : {}),
+                ...(user.company ? { company: user.company } : {}),
+                ...(user.bio ? { bio: user.bio } : {}),
+              }).toString()}`}
+              className="rounded-md border border-line px-3 py-2 text-sm font-medium text-ink hover:bg-slate-50"
+              data-testid="invite-to-speak"
+            >
+              Invite to speak
+            </Link>
             <Link href="/organizer/contacts" className="px-2 py-2 text-sm text-muted hover:text-ink">
               Back to contacts
             </Link>
@@ -274,6 +288,9 @@ export default async function ContactRecordPage({ params }: { params: Promise<{ 
               {tasks.map((task) => (
                 <li key={task.id} className="flex flex-wrap items-center gap-2">
                   <span className="text-ink">{task.label}</span>
+                  {task.instructions ? (
+                    <span className="text-xs text-muted">{task.instructions}</span>
+                  ) : null}
                   <Badge tone="neutral">{TASK_KIND_LABELS[task.kind]}</Badge>
                   {task.completedAt ? (
                     <Badge tone="good">done {stamp(task.completedAt)}</Badge>

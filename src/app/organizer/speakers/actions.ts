@@ -262,6 +262,7 @@ const taskSchema = z.object({
   userId: z.string().uuid(),
   kind: z.enum(speakerTaskKindEnum.enumValues),
   label: z.string().min(1, 'Give the task a label').max(200),
+  instructions: z.string().max(2000).nullable(),
   dueAt: z.string().nullable(),
   submissionId: z.string().uuid().nullable(),
 });
@@ -274,6 +275,7 @@ export async function createSpeakerTaskAction(formData: FormData): Promise<void>
     userId: formData.get('userId'),
     kind: formData.get('kind'),
     label: optional(formData.get('label')),
+    instructions: optional(formData.get('instructions')),
     dueAt: optional(formData.get('dueAt')),
     submissionId: optional(formData.get('submissionId')),
   });
@@ -282,6 +284,7 @@ export async function createSpeakerTaskAction(formData: FormData): Promise<void>
     userId: input.userId,
     kind: input.kind,
     label: input.label,
+    instructions: input.instructions,
     submissionId: input.submissionId,
     dueAt: input.dueAt ? wallClockToInstant(input.dueAt, event.timezone) : null,
   });
@@ -377,6 +380,7 @@ const bulkTaskSchema = z.object({
   q: z.string().nullable(),
   kind: z.enum(speakerTaskKindEnum.enumValues),
   label: z.string().min(1, 'Give the task a label').max(200),
+  instructions: z.string().max(2000).nullable(),
   dueAt: z.string().nullable(),
 });
 
@@ -400,6 +404,7 @@ export async function bulkCreateTasksAction(
     q: optional(formData.get('q')),
     kind: formData.get('kind'),
     label: optional(formData.get('label')),
+    instructions: optional(formData.get('instructions')),
     dueAt: optional(formData.get('dueAt')),
   });
   if (!parsed.success) {
@@ -428,6 +433,7 @@ export async function bulkCreateTasksAction(
       userId: target.id,
       kind: input.kind,
       label: input.label,
+      instructions: input.instructions,
       dueAt,
     });
     created += 1;

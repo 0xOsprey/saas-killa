@@ -1,7 +1,7 @@
 'use client';
 
 import { useActionState } from 'react';
-import { Button, Field, Input, Notice, Select } from '@/components/ui';
+import { Button, Field, Input, Notice, Select, Textarea } from '@/components/ui';
 import { TASK_KIND_LABELS } from '@/lib/speaker-labels';
 import { bulkCreateTasksAction, type BulkTaskState } from './actions';
 
@@ -45,6 +45,16 @@ export function BulkTaskForm({
           <Input type="datetime-local" name="dueAt" />
         </Field>
       </div>
+
+      <Field label="Instructions" hint="Optional. Shown to every speaker this task is added for.">
+        <Textarea
+          name="instructions"
+          maxLength={2000}
+          placeholder="For file requests: what you need, size, format, background."
+          className="min-h-20"
+          data-testid="bulk-task-instructions"
+        />
+      </Field>
 
       <div className="flex flex-wrap items-center gap-3">
         <Button type="submit" disabled={pending || targetCount === 0}>

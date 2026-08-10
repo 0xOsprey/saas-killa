@@ -682,6 +682,7 @@ export const speakerTasks = pgTable(
     }),
     kind: speakerTaskKindEnum('kind').notNull(),
     label: text('label').notNull(),
+    instructions: text('instructions'),
     dueAt: timestamp('due_at', { withTimezone: true }),
     completedAt: timestamp('completed_at', { withTimezone: true }),
     lastRemindedAt: timestamp('last_reminded_at', { withTimezone: true }),

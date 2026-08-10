@@ -2,11 +2,16 @@
 
 import Link from 'next/link';
 import * as Lucide from 'lucide-react';
+import { useMemo } from 'react';
 import { cn } from '@/components/ui';
 import { PUBLIC_LINKS, type NavSection, type NavUser } from '@/lib/nav-links';
 
+function linkBase(href: string): string {
+  return href.split('?')[0] ?? href;
+}
+
 function isActive(href: string, activePath: string): boolean {
-  const [base] = href.split('?');
+  const base = linkBase(href);
   if (!activePath) return false;
   return activePath === base || activePath.startsWith(base + '/');
 }
@@ -33,7 +38,8 @@ export function Sidebar({
           aria-hidden="true"
         />
       )}
-      <aside
+      <nav
+        aria-label="Sidebar"
         className={cn(
           'z-40 w-56 shrink-0 border-r border-line bg-white',
           'fixed left-0 top-14 h-[calc(100vh-3.5rem)] transform transition-transform',
@@ -73,7 +79,7 @@ export function Sidebar({
             />
           ))}
         </div>
-      </aside>
+      </nav>
     </>
   );
 }
@@ -91,6 +97,25 @@ function Section({
   onClick: () => void;
   className?: string;
 }) {
+  // A parent route like /organizer must not light up when the active path is
+  // /organizer/submissions; choose the deepest matching link instead.
+  const activeHref = useMemo(() => {
+    const matches = links
+      .map((link) => ({
+        href: link.href,
+        base: linkBase(link.href),
+        active: isActive(link.href, activePath),
+      }))
+      .filter((m) => m.active);
+    if (matches.length === 0) return null;
+    matches.sort((a, b) => {
+      if (b.base.length !== a.base.length) return b.base.length - a.base.length;
+      // Prefer the exact href (no query string) on a tie.
+      return (a.href.includes('?') ? 1 : 0) - (b.href.includes('?') ? 1 : 0);
+    });
+    return matches[0]?.href ?? null;
+  }, [links, activePath]);
+
   return (
     <div className={cn('mb-6', className)}>
       <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-muted">
@@ -98,7 +123,7 @@ function Section({
       </p>
       <ul className="space-y-0.5">
         {links.map((link) => {
-          const active = isActive(link.href, activePath);
+          const active = link.href === activeHref;
           const Icon = link.icon ? (Lucide as any)[link.icon] : undefined;
           return (
             <li key={link.href}>

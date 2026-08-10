@@ -118,6 +118,7 @@ export type SpeakerTaskRow = {
   submissionId: string | null;
   kind: SpeakerTaskKind;
   label: string;
+  instructions: string | null;
   dueAt: Date | null;
   completedAt: Date | null;
   submissionTitle: string | null;
@@ -135,6 +136,7 @@ export async function speakerTasksFor(userId: string): Promise<SpeakerTaskRow[]>
       submissionId: speakerTasks.submissionId,
       kind: speakerTasks.kind,
       label: speakerTasks.label,
+      instructions: speakerTasks.instructions,
       dueAt: speakerTasks.dueAt,
       completedAt: speakerTasks.completedAt,
       submissionTitle: submissions.title,

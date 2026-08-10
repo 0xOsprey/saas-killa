@@ -67,6 +67,7 @@ export type OpenTask = {
   id: string;
   kind: SpeakerTaskKind;
   label: string;
+  instructions: string | null;
   dueAt: Date | null;
   lastRemindedAt: Date | null;
   submissionId: string | null;
@@ -229,6 +230,7 @@ export async function openTasksByUser(userIds: string[]): Promise<Map<string, Op
       userId: speakerTasks.userId,
       kind: speakerTasks.kind,
       label: speakerTasks.label,
+      instructions: speakerTasks.instructions,
       dueAt: speakerTasks.dueAt,
       lastRemindedAt: speakerTasks.lastRemindedAt,
       submissionId: speakerTasks.submissionId,
@@ -244,6 +246,7 @@ export async function openTasksByUser(userIds: string[]): Promise<Map<string, Op
       id: row.id,
       kind: row.kind,
       label: row.label,
+      instructions: row.instructions,
       dueAt: row.dueAt,
       lastRemindedAt: row.lastRemindedAt,
       submissionId: row.submissionId,
@@ -301,6 +304,7 @@ export async function speakerDetail(userId: string): Promise<SpeakerDetail | nul
         submissionId: speakerTasks.submissionId,
         kind: speakerTasks.kind,
         label: speakerTasks.label,
+        instructions: speakerTasks.instructions,
         dueAt: speakerTasks.dueAt,
         completedAt: speakerTasks.completedAt,
         lastRemindedAt: speakerTasks.lastRemindedAt,

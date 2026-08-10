@@ -448,6 +448,9 @@ function TaskRow({
     >
       <div className="min-w-0 flex-1">
         <p className={cn('text-sm', done ? 'text-muted line-through' : 'text-ink')}>{task.label}</p>
+        {task.instructions ? (
+          <p className="whitespace-pre-wrap text-xs text-ink">{task.instructions}</p>
+        ) : null}
         <p className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted">
           <span>{TASK_KIND_LABELS[task.kind]}</span>
           {showSubmission && task.submissionTitle ? <span>· {task.submissionTitle}</span> : null}

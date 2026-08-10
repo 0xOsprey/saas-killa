@@ -1,4 +1,4 @@
-import { Button, Field, Input, Select } from '@/components/ui';
+import { Button, Field, Input, Select, Textarea } from '@/components/ui';
 import { TASK_KIND_LABELS } from '@/lib/speaker-labels';
 import { createSpeakerTaskAction } from '../actions';
 
@@ -51,6 +51,16 @@ export function TaskForm({
           </Select>
         </Field>
       </div>
+
+      <Field label="Instructions" hint="Optional. Shown to the speaker alongside the task.">
+        <Textarea
+          name="instructions"
+          maxLength={2000}
+          placeholder="For file requests: what you need, size, format, background."
+          className="min-h-20"
+          data-testid="task-instructions"
+        />
+      </Field>
 
       <Button type="submit" variant="secondary" data-testid="task-add">
         Add task

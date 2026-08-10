@@ -89,6 +89,20 @@ export default async function PipelineScreen({
               ))}
             </Select>
           </label>
+          <label className="block flex-1 space-y-1.5">
+            <span className="block text-sm font-medium text-ink">Starting stage</span>
+            <Select
+              name="stageId"
+              defaultValue={stages[0]?.id ?? ''}
+              data-testid="enroll-stage"
+            >
+              {stages.map((stage) => (
+                <option key={stage.id} value={stage.id}>
+                  {stage.name}
+                </option>
+              ))}
+            </Select>
+          </label>
           <Button type="submit" data-testid="enroll-submit">
             Add to pipeline
           </Button>

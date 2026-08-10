@@ -1,11 +1,11 @@
 'use server';
 
-import { asc, eq } from 'drizzle-orm';
+import { asc, eq, isNotNull } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { db } from '@/db';
-import { rooms, tracks } from '@/db/schema';
+import { rooms, slots, tracks } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
 
 function revalidateRooms() {
@@ -35,11 +35,42 @@ export async function createRoom(formData: FormData): Promise<void> {
   const existing = await db.select({ position: rooms.position }).from(rooms);
   const nextPosition = existing.reduce((max, row) => Math.max(max, row.position), -1) + 1;
 
-  await db.insert(rooms).values({
-    name: input.name,
-    capacity: input.capacity,
-    position: nextPosition,
-  });
+  const [created] = await db
+    .insert(rooms)
+    .values({
+      name: input.name,
+      capacity: input.capacity,
+      position: nextPosition,
+    })
+    .returning({ id: rooms.id });
+  if (!created) return;
+
+  // A room created after time bands exist needs a slot in each one, otherwise
+  // the schedule grid ends up with a ragged right-hand column and no drop box.
+  const timeBands = await db
+    .selectDistinct({ startsAt: slots.startsAt, endsAt: slots.endsAt })
+    .from(slots);
+
+  if (timeBands.length > 0) {
+    const labels = await db
+      .selectDistinct({ startsAt: slots.startsAt, label: slots.label })
+      .from(slots)
+      .where(isNotNull(slots.label));
+    const labelByStart = new Map(labels.map((l) => [l.startsAt.toISOString(), l.label]));
+
+    await db
+      .insert(slots)
+      .values(
+        timeBands.map((band) => ({
+          roomId: created.id,
+          startsAt: band.startsAt,
+          endsAt: band.endsAt,
+          label: labelByStart.get(band.startsAt.toISOString()) ?? null,
+        })),
+      )
+      .onConflictDoNothing();
+  }
+
   revalidateRooms();
 }
 

@@ -204,7 +204,7 @@ export type EnrollResult =
   | { ok: false; reason: 'no-stages' | 'already-on-board' };
 
 /**
- * Put a contact on the board at the first stage.
+ * Put a contact on the board at a chosen stage, or the first one by default.
  *
  * The card and its entry event are written in one transaction because the
  * history is the only record of when somebody entered the pipeline, and a card
@@ -212,21 +212,35 @@ export type EnrollResult =
  * is what makes a double submit land once: the contact is the primary key, so
  * the second insert has nowhere to go and the event is not written either.
  */
-export async function addToPipeline(contactId: string, actorId: string): Promise<EnrollResult> {
-  const [first] = await db
-    .select()
-    .from(pipelineStages)
-    .orderBy(asc(pipelineStages.position))
-    .limit(1);
-  if (!first) return { ok: false, reason: 'no-stages' };
+export async function addToPipeline(
+  contactId: string,
+  actorId: string,
+  targetStageId?: string,
+): Promise<EnrollResult> {
+  let stage: PipelineStage | undefined;
+  if (targetStageId) {
+    [stage] = await db
+      .select()
+      .from(pipelineStages)
+      .where(eq(pipelineStages.id, targetStageId))
+      .limit(1);
+  }
+  if (!stage) {
+    [stage] = await db
+      .select()
+      .from(pipelineStages)
+      .orderBy(asc(pipelineStages.position))
+      .limit(1);
+  }
+  if (!stage) return { ok: false, reason: 'no-stages' };
 
   return db.transaction(async (tx) => {
     const inserted = await tx
       .insert(pipelineCards)
       .values({
         contactId,
-        stageId: first.id,
-        position: await tailPosition(tx, first.id),
+        stageId: stage.id,
+        position: await tailPosition(tx, stage.id),
       })
       .onConflictDoNothing()
       .returning({ contactId: pipelineCards.contactId });
@@ -236,10 +250,10 @@ export async function addToPipeline(contactId: string, actorId: string): Promise
     await tx.insert(pipelineEvents).values({
       contactId,
       fromStageId: null,
-      toStageId: first.id,
+      toStageId: stage.id,
       actorId,
     });
-    return { ok: true, stage: first.name };
+    return { ok: true, stage: stage.name };
   });
 }
 

@@ -1,5 +1,6 @@
 'use client';
 
+import { useSearchParams } from 'next/navigation';
 import { useActionState } from 'react';
 import { Button, Field, Input, Notice, Select, Textarea } from '@/components/ui';
 import type { Track } from '@/db/schema';
@@ -15,15 +16,31 @@ const EMPTY: InviteState = {};
  */
 export function InviteSpeakerForm({ tracks }: { tracks: Track[] }) {
   const [state, formAction, pending] = useActionState(inviteSpeakerAction, EMPTY);
+  const search = useSearchParams() ?? new URLSearchParams();
+  const fromContact = search.get('fromContact');
+  const initial = {
+    email: search.get('email') ?? '',
+    name: search.get('name') ?? '',
+    speakerTitle: search.get('speakerTitle') ?? '',
+    company: search.get('company') ?? '',
+    bio: search.get('bio') ?? '',
+  };
 
   return (
     <form action={formAction} className="space-y-3">
+      {fromContact ? <input type="hidden" name="fromContact" value={fromContact} /> : null}
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Their email">
-          <Input type="email" name="email" required placeholder="keynote@example.com" />
+          <Input
+            type="email"
+            name="email"
+            required
+            placeholder="keynote@example.com"
+            defaultValue={initial.email}
+          />
         </Field>
         <Field label="Their name">
-          <Input name="name" required maxLength={120} />
+          <Input name="name" required maxLength={120} defaultValue={initial.name} />
         </Field>
       </div>
 
@@ -40,6 +57,7 @@ export function InviteSpeakerForm({ tracks }: { tracks: Track[] }) {
             maxLength={120}
             placeholder="Principal Engineer"
             data-testid="invite-title"
+            defaultValue={initial.speakerTitle}
           />
         </Field>
         <Field label="Company">
@@ -48,6 +66,7 @@ export function InviteSpeakerForm({ tracks }: { tracks: Track[] }) {
             maxLength={120}
             placeholder="Latticework Systems"
             data-testid="invite-company"
+            defaultValue={initial.company}
           />
         </Field>
       </div>
@@ -56,7 +75,13 @@ export function InviteSpeakerForm({ tracks }: { tracks: Track[] }) {
         label="Speaker bio"
         hint="Optional. About the person, not the talk. Shown on the public directory."
       >
-        <Textarea name="bio" maxLength={4000} className="min-h-20" data-testid="invite-bio" />
+        <Textarea
+          name="bio"
+          maxLength={4000}
+          className="min-h-20"
+          data-testid="invite-bio"
+          defaultValue={initial.bio}
+        />
       </Field>
 
       {/* "Talk title", not "Title": the field above it is a job title, and one
