@@ -3,24 +3,12 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
-import { Badge, cn } from '@/components/ui';
-import {
-  EVENT_SECTION,
-  ORGANIZATION_SECTION,
-  PUBLIC_LINKS,
-  REVIEWER_SECTION,
-  SPEAKER_SECTION,
-  type NavSection,
-  type NavUser,
-} from '@/lib/nav-links';
+import { Menu } from 'lucide-react';
+import { cn } from '@/components/ui';
+import { PUBLIC_LINKS, roleSections } from '@/lib/nav-links';
+import type { CurrentUser } from '@/lib/auth';
 import { Sidebar } from './Sidebar';
-
-function roleSections(roles: string[]): NavSection[] {
-  if (roles.includes('organizer')) return [ORGANIZATION_SECTION, EVENT_SECTION];
-  if (roles.includes('reviewer')) return [REVIEWER_SECTION];
-  if (roles.includes('speaker')) return [SPEAKER_SECTION];
-  return [];
-}
+import { UserMenu } from './UserMenu';
 
 function isActive(href: string, activePath: string): boolean {
   const [base] = href.split('?');
@@ -33,7 +21,7 @@ export function AppShell({
   eventName,
   children,
 }: {
-  user: NavUser | null;
+  user: CurrentUser | null;
   eventName: string | null;
   children: React.ReactNode;
 }) {
@@ -57,13 +45,10 @@ export function AppShell({
             className="-ml-2 rounded-md p-2 text-muted hover:bg-subtle hover:text-ink lg:hidden"
             aria-label="Open menu"
           >
-            <MenuIcon className="h-5 w-5" />
+            <Menu className="h-5 w-5" />
           </button>
 
-          <Link
-            href="/"
-            className="text-sm font-semibold tracking-tight text-ink"
-          >
+          <Link href="/" className="text-sm font-semibold tracking-tight text-ink">
             {eventName ?? 'Saas Killa'}
           </Link>
 
@@ -84,28 +69,18 @@ export function AppShell({
             ))}
           </nav>
 
-          <div className="ml-auto flex items-center gap-3 text-sm">
+          <div className="ml-auto flex items-center text-sm">
             {user ? (
-              <>
-                <span
-                  className="hidden text-muted sm:inline"
-                  data-testid="current-user"
-                >
-                  {user.email}
-                </span>
-                {user.roles.includes('organizer') && (
-                  <Badge tone="accent">organizer</Badge>
-                )}
-                <form method="post" action="/auth/logout">
-                  <button
-                    type="submit"
-                    className="text-muted hover:text-ink"
-                    data-testid="sign-out"
-                  >
-                    Sign out
-                  </button>
-                </form>
-              </>
+              <UserMenu
+                user={user}
+                homeHref={
+                  user.roles.includes('organizer')
+                    ? '/organizer'
+                    : user.roles.includes('reviewer')
+                      ? '/review'
+                      : '/speaker'
+                }
+              />
             ) : (
               <Link
                 href="/login"
@@ -137,23 +112,5 @@ export function AppShell({
         </main>
       </div>
     </div>
-  );
-}
-
-function MenuIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 20 20"
-      fill="currentColor"
-      aria-hidden="true"
-    >
-      <path
-        fillRule="evenodd"
-        d="M2 4.75A.75.75 0 012.75 4h14.5a.75.75 0 010 1.5H2.75A.75.75 0 012 4.75zM2 10a.75.75 0 01.75-.75h14.5a.75.75 0 010 1.5H2.75A.75.75 0 012 10zm0 5.25a.75.75 0 01.75-.75h14.5a.75.75 0 010 1.5H2.75a.75.75 0 01-.75-.75z"
-        clipRule="evenodd"
-      />
-    </svg>
   );
 }

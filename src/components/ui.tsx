@@ -7,6 +7,63 @@ export function cn(...parts: Parameters<typeof clsx>) {
   return twMerge(clsx(...parts));
 }
 
+function initials(name: string | null | undefined, email?: string | null): string {
+  if (name?.trim()) {
+    const parts = name.trim().split(/\s+/).filter(Boolean);
+    const first = parts[0]!.charAt(0);
+    const last = parts.length > 1 ? parts[parts.length - 1]!.charAt(0) : '';
+    return (first + last).toUpperCase() || first.toUpperCase() || '?';
+  }
+  const safeEmail = email ?? '';
+  const [local] = safeEmail.split('@');
+  const source = local ?? safeEmail;
+  return source.slice(0, 2).toUpperCase() || source.charAt(0).toUpperCase() || '?';
+}
+
+const AVATAR_SIZES = {
+  sm: 'h-7 w-7 text-[10px]',
+  md: 'h-8 w-8 text-xs',
+  lg: 'h-11 w-11 text-sm',
+} as const;
+
+export function Avatar({
+  src,
+  name,
+  email,
+  size = 'md',
+  className,
+}: {
+  src?: string | null;
+  name?: string | null;
+  email?: string | null;
+  size?: keyof typeof AVATAR_SIZES;
+  className?: string;
+}) {
+  const label = name?.trim() || email || 'Avatar';
+  return (
+    <span
+      className={cn(
+        'inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-accent-soft font-medium uppercase text-accent',
+        AVATAR_SIZES[size],
+        className,
+      )}
+      aria-label={label}
+      title={label}
+      role="img"
+    >
+      {src ? (
+        <img
+          src={src}
+          alt={label}
+          className="h-full w-full object-cover"
+        />
+      ) : (
+        <span aria-hidden="true">{initials(name, email)}</span>
+      )}
+    </span>
+  );
+}
+
 const BUTTON_BASE =
   'inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium ' +
   'transition-colors disabled:cursor-not-allowed disabled:opacity-50 ' +
@@ -72,7 +129,7 @@ export function Field({
 export function Card({ className, ...props }: ComponentProps<'div'>) {
   return (
     <div
-      className={cn('rounded-lg border border-line bg-white p-4 shadow-sm', className)}
+      className={cn('overflow-hidden rounded-lg border border-line bg-white p-4 shadow-sm', className)}
       {...props}
     />
   );
@@ -81,9 +138,9 @@ export function Card({ className, ...props }: ComponentProps<'div'>) {
 const BADGE_TONES = {
   neutral: 'bg-slate-100 text-slate-700',
   accent: 'bg-accent-soft text-accent',
-  good: 'bg-emerald-50 text-emerald-700',
-  bad: 'bg-red-50 text-red-700',
-  warn: 'bg-amber-50 text-amber-800',
+  good: 'bg-emerald-100 text-emerald-700',
+  bad: 'bg-red-100 text-red-700',
+  warn: 'bg-amber-100 text-amber-800',
 } as const;
 
 export function Badge({
@@ -234,3 +291,98 @@ export function ScoreDots({ score }: { score: number | null }) {
     </span>
   );
 }
+
+export function Dropdown({ className, ...props }: ComponentProps<'details'>) {
+  return <details className={cn('relative inline-block', className)} {...props} />;
+}
+
+export function DropdownTrigger({ className, ...props }: ComponentProps<'summary'>) {
+  return <summary className={cn('cursor-pointer list-none', className)} {...props} />;
+}
+
+export function DropdownMenu({ className, ...props }: ComponentProps<'ul'>) {
+  return (
+    <ul
+      className={cn(
+        'absolute right-0 z-50 mt-1 min-w-[12rem] overflow-hidden rounded-lg border border-line bg-white py-1 shadow-lg',
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+type DropdownItemProps = {
+  href?: string;
+} & Omit<ComponentProps<'button'>, 'href'>;
+
+export function DropdownItem({
+  href,
+  className,
+  children,
+  disabled,
+  type: _type,
+  ref,
+  ...props
+}: DropdownItemProps) {
+  const classes = cn(
+    'block w-full px-4 py-2 text-left text-sm text-ink transition-colors hover:bg-slate-50',
+    className,
+  );
+  if (href) {
+    return (
+      <li>
+        <Link
+          href={href}
+          className={classes}
+          {...(props as unknown as Omit<
+            ComponentProps<typeof Link>,
+            'href' | 'className' | 'children' | 'ref' | 'disabled' | 'type'
+          >)}
+        >
+          {children}
+        </Link>
+      </li>
+    );
+  }
+  return (
+    <li>
+      <button
+        ref={ref}
+        type={_type ?? 'button'}
+        disabled={disabled}
+        className={classes}
+        {...props}
+      >
+        {children}
+      </button>
+    </li>
+  );
+}
+
+export function Table({ className, ...props }: ComponentProps<'table'>) {
+  return <table className={cn('w-full text-left text-sm', className)} {...props} />;
+}
+
+export function TableHeader({ className, ...props }: ComponentProps<'thead'>) {
+  return <thead className={cn('border-b border-line bg-slate-50 text-xs uppercase text-muted', className)} {...props} />;
+}
+
+export function TableBody({ className, ...props }: ComponentProps<'tbody'>) {
+  return <tbody className={cn('divide-y divide-line bg-white', className)} {...props} />;
+}
+
+export function TableRow({ className, ...props }: ComponentProps<'tr'>) {
+  return <tr className={cn('hover:bg-slate-50', className)} {...props} />;
+}
+
+export function TableHead({ className, ...props }: ComponentProps<'th'>) {
+  return <th className={cn('px-4 py-3 font-medium', className)} {...props} />;
+}
+
+export function TableCell({ className, ...props }: ComponentProps<'td'>) {
+  return <td className={cn('px-4 py-3', className)} {...props} />;
+}
+
+export { Tabs, TabList, Tab, TabPanel } from './Tabs';
+export { Sheet, SheetTrigger, SheetContent, SheetHeader, SheetTitle, SheetClose } from './Sheet';

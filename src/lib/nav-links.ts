@@ -1,6 +1,11 @@
-export type NavUser = { email: string; name: string | null; roles: string[] };
+export type NavUser = {
+  email: string;
+  name: string | null;
+  roles: string[];
+  headshotUrl?: string | null;
+};
 
-export type NavLink = { href: string; label: string };
+export type NavLink = { href: string; label: string; icon?: string };
 
 export type NavSection = {
   title: string;
@@ -8,71 +13,99 @@ export type NavSection = {
 };
 
 export const PUBLIC_LINKS: NavLink[] = [
-  { href: '/agenda', label: 'Agenda' },
-  { href: '/posters', label: 'Posters' },
-  { href: '/speakers', label: 'Speakers' },
-  { href: '/awards', label: 'Awards' },
+  { href: '/agenda', label: 'Agenda', icon: 'Calendar' },
+  { href: '/posters', label: 'Posters', icon: 'Image' },
+  { href: '/speakers', label: 'Speakers', icon: 'Users' },
+  { href: '/awards', label: 'Awards', icon: 'Award' },
 ];
 
-/**
- * The organization's own people, not this event's. Split out of the event tabs
- * and rendered above them because a contact directory nested inside one event's
- * menu reads as that event's roster, which is the thing it is not: these rows
- * outlive any single conference and carry the history across all of them.
- */
-export const ORGANIZATION_SECTION: NavSection = {
-  title: 'Organization',
+export const DASHBOARD_SECTION: NavSection = {
+  title: 'Dashboard',
+  links: [{ href: '/organizer', label: 'Overview', icon: 'LayoutDashboard' }],
+};
+
+export const PROGRAM_SECTION: NavSection = {
+  title: 'Program',
   links: [
-    { href: '/organizer/contacts', label: 'Contacts' },
-    { href: '/organizer/contacts/pipeline', label: 'Pipeline' },
-    { href: '/organizer/contacts/import', label: 'Import' },
+    { href: '/organizer/cfp', label: 'Call for papers', icon: 'FileText' },
+    { href: '/organizer/rounds', label: 'Review rounds', icon: 'ListChecks' },
+    { href: '/organizer/submissions', label: 'Submissions', icon: 'Inbox' },
+    { href: '/organizer/abstracts', label: 'Abstracts', icon: 'FileText' },
+    { href: '/organizer/files', label: 'Files', icon: 'Folder' },
+    { href: '/organizer/schedule', label: 'Schedule', icon: 'Calendar' },
+    { href: '/organizer/rooms', label: 'Rooms & tracks', icon: 'MapPin' },
+    { href: '/organizer/posters', label: 'Posters', icon: 'Image' },
   ],
 };
 
-/**
- * Ordered by the shape of the job rather than alphabetically: open the call,
- * decide on what came in, build the programme, then run the event's people and
- * prizes. Settings sits last because it is the tab you visit once.
- */
-export const EVENT_SECTION: NavSection = {
-  title: 'This event',
+export const COLLECT_AND_REVIEW_SECTION: NavSection = {
+  title: 'Collect & review',
   links: [
-    { href: '/organizer', label: 'Overview' },
-    { href: '/organizer/cfp', label: 'Call for papers' },
-    { href: '/organizer/rounds', label: 'Review rounds' },
-    { href: '/organizer/submissions', label: 'Submissions' },
-    { href: '/organizer/abstracts', label: 'Abstracts' },
-    { href: '/organizer/files', label: 'Files' },
-    { href: '/organizer/evaluators', label: 'Evaluators' },
-    { href: '/organizer/schedule', label: 'Schedule' },
-    { href: '/organizer/rooms', label: 'Rooms & tracks' },
-    { href: '/organizer/posters', label: 'Posters' },
-    { href: '/organizer/speakers', label: 'Speakers' },
-    { href: '/organizer/onboarding', label: 'Onboarding' },
-    { href: '/organizer/awards', label: 'Awards' },
-    { href: '/organizer/pages', label: 'Speaker info' },
-    { href: '/organizer/email', label: 'Email log' },
-    { href: '/organizer/embed', label: 'Embed' },
-    { href: '/organizer/integrations', label: 'Accelevents' },
-    { href: '/organizer/settings', label: 'Settings' },
+    { href: '/organizer/evaluators', label: 'Evaluators', icon: 'Users' },
+    { href: '/organizer/email', label: 'Email log', icon: 'Mail' },
+    { href: '/organizer/embed', label: 'Embed', icon: 'Code' },
   ],
 };
 
-export const SPEAKER_SECTION: NavSection = {
+export const PORTALS_SECTION: NavSection = {
+  title: 'Portals',
+  links: [
+    { href: '/organizer/speakers', label: 'Speakers', icon: 'Users' },
+    { href: '/organizer/onboarding', label: 'Onboarding', icon: 'CheckSquare' },
+    { href: '/organizer/pages', label: 'Pages', icon: 'FileText' },
+    { href: '/organizer/awards', label: 'Awards', icon: 'Award' },
+  ],
+};
+
+export const CONFIGURE_SECTION: NavSection = {
+  title: 'Configure',
+  links: [
+    { href: '/organizer/settings', label: 'Settings', icon: 'Settings' },
+    { href: '/organizer/integrations', label: 'Integrations', icon: 'Plug' },
+  ],
+};
+
+export const CRM_SECTION: NavSection = {
+  title: 'CRM',
+  links: [
+    { href: '/organizer/contacts', label: 'Contacts', icon: 'Users' },
+    { href: '/organizer/contacts/pipeline', label: 'Pipeline', icon: 'GitCommit' },
+    { href: '/organizer/contacts/import', label: 'Import', icon: 'Upload' },
+  ],
+};
+
+export const SPEAKER_PORTAL_SECTION: NavSection = {
   title: 'Speaker portal',
   links: [
-    { href: '/speaker', label: 'My submissions' },
-    { href: '/speaker/pages', label: 'Speaker info' },
-    { href: '/speaker/availability', label: 'Availability' },
-    { href: '/speaker/profile', label: 'Profile' },
+    { href: '/speaker', label: 'My submissions', icon: 'FileText' },
+    { href: '/speaker/content', label: 'Content', icon: 'FileCheck' },
+    { href: '/speaker/pages', label: 'Speaker info', icon: 'Info' },
+    { href: '/speaker/availability', label: 'Availability', icon: 'Clock' },
+    { href: '/speaker/profile', label: 'Profile', icon: 'User' },
   ],
 };
 
 export const REVIEWER_SECTION: NavSection = {
-  title: 'Committee',
+  title: 'Collect & review',
   links: [
-    { href: '/review', label: 'Review queue' },
-    { href: '/review?tab=done', label: 'My reviews' },
-    { href: '/awards/judge', label: 'Judge awards' },
+    { href: '/review', label: 'Review queue', icon: 'ListChecks' },
+    { href: '/review?tab=done', label: 'My reviews', icon: 'CheckCircle' },
+    { href: '/awards/judge', label: 'Judge awards', icon: 'Award' },
   ],
 };
+
+export function roleSections(roles: string[]): NavSection[] {
+  if (roles.includes('organizer')) {
+    return [
+      DASHBOARD_SECTION,
+      PROGRAM_SECTION,
+      COLLECT_AND_REVIEW_SECTION,
+      PORTALS_SECTION,
+      CONFIGURE_SECTION,
+      CRM_SECTION,
+    ];
+  }
+  if (roles.includes('reviewer')) return [REVIEWER_SECTION];
+  if (roles.includes('speaker')) return [SPEAKER_PORTAL_SECTION];
+  return [];
+}

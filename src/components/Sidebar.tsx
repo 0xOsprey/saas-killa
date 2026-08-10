@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { Badge, cn } from '@/components/ui';
+import * as Lucide from 'lucide-react';
+import { cn } from '@/components/ui';
 import { PUBLIC_LINKS, type NavSection, type NavUser } from '@/lib/nav-links';
 
 function isActive(href: string, activePath: string): boolean {
@@ -50,7 +51,7 @@ export function Sidebar({
               className="rounded-md p-1 text-muted hover:bg-subtle hover:text-ink"
               aria-label="Close menu"
             >
-              <CloseIcon className="h-5 w-5" />
+              <Lucide.X className="h-5 w-5" />
             </button>
           </div>
 
@@ -71,35 +72,6 @@ export function Sidebar({
               onClick={onClose}
             />
           ))}
-
-          {user ? (
-            <div className="mt-auto border-t border-line pt-4 lg:hidden">
-              <p className="mb-2 text-xs text-muted">{user.email}</p>
-              <div className="mb-3 flex flex-wrap gap-1">
-                {user.roles.includes('organizer') && <Badge tone="accent">organizer</Badge>}
-                {user.roles.includes('reviewer') && <Badge tone="neutral">reviewer</Badge>}
-              </div>
-              <form method="post" action="/auth/logout">
-                <button
-                  type="submit"
-                  className="text-sm text-muted hover:text-ink"
-                  data-testid="sign-out"
-                >
-                  Sign out
-                </button>
-              </form>
-            </div>
-          ) : (
-            <div className="mt-auto border-t border-line pt-4 lg:hidden">
-              <Link
-                href="/login"
-                className="text-sm text-muted hover:text-ink"
-                onClick={onClose}
-              >
-                Sign in
-              </Link>
-            </div>
-          )}
         </div>
       </aside>
     </>
@@ -121,12 +93,13 @@ function Section({
 }) {
   return (
     <div className={cn('mb-6', className)}>
-      <p className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted">
+      <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-muted">
         {title}
       </p>
       <ul className="space-y-0.5">
         {links.map((link) => {
           const active = isActive(link.href, activePath);
+          const Icon = link.icon ? (Lucide as any)[link.icon] : undefined;
           return (
             <li key={link.href}>
               <Link
@@ -134,12 +107,13 @@ function Section({
                 onClick={onClick}
                 aria-current={active ? 'page' : undefined}
                 className={cn(
-                  'block rounded-md px-3 py-1.5 text-sm transition-colors',
+                  'flex items-center gap-2.5 rounded-md border-l-2 px-3 py-1.5 text-sm transition-colors',
                   active
-                    ? 'bg-accent-soft font-medium text-accent'
-                    : 'text-muted hover:bg-subtle hover:text-ink',
+                    ? 'border-accent bg-accent-soft font-medium text-accent'
+                    : 'border-transparent text-muted hover:bg-subtle hover:text-ink',
                 )}
               >
+                {Icon ? <Icon className="h-4 w-4 shrink-0" aria-hidden="true" /> : null}
                 {link.label}
               </Link>
             </li>
@@ -147,19 +121,5 @@ function Section({
         })}
       </ul>
     </div>
-  );
-}
-
-function CloseIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 20 20"
-      fill="currentColor"
-      aria-hidden="true"
-    >
-      <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
-    </svg>
   );
 }
