@@ -1,10 +1,11 @@
 import Link from 'next/link';
-import { Badge, Card, Empty, Notice, PageHeader } from '@/components/ui';
+import { Badge, Card, Empty, Notice, PageHeader, ShowMoreText } from '@/components/ui';
 import type { AgendaSearchParams, AgendaSlot } from '@/lib/agenda-filters';
 import { agendaDays, agendaSlots, hasActiveFilters, parseAgendaFilters } from '@/lib/agenda-filters';
 import { currentUser } from '@/lib/auth';
 import { FORMAT_LABELS, dayKey, dayLabel, timeOfDay } from '@/lib/format';
 import { allRooms, allTracks, getEvent } from '@/lib/queries';
+import { billing } from '@/lib/speakers';
 import { AgendaFilterBar } from './AgendaFilters';
 import { StarButton } from './StarButton';
 
@@ -18,6 +19,7 @@ type Bucket = {
   /** Label to the rooms it covers. A venue-wide break is one slot per room. */
   blocks: Map<string, string[]>;
 };
+
 
 export default async function AgendaPage({
   searchParams,
@@ -142,37 +144,60 @@ export default async function AgendaPage({
 
                 {bucket.sessions.length > 0 ? (
                   <div className="grid gap-2 sm:grid-cols-2">
-                    {bucket.sessions.map((entry) => (
-                      <Card
-                        key={entry.slotId}
-                        className="flex items-start justify-between gap-2 p-3"
-                        style={{ borderLeft: `3px solid ${entry.trackColour ?? '#cbd5e1'}` }}
-                      >
-                        <div className="min-w-0">
-                          <Link
-                            href={`/agenda/${entry.submissionId}`}
-                            className="font-medium text-ink hover:underline"
-                          >
-                            {entry.title}
-                          </Link>
-                          <p className="mt-0.5 text-xs text-muted">
-                            {entry.speakerName ?? 'Speaker to be confirmed'} · {entry.roomName}
-                          </p>
-                          <div className="mt-2 flex flex-wrap gap-1.5">
-                            {entry.trackName ? <Badge>{entry.trackName}</Badge> : null}
-                            {entry.format ? (
-                              <Badge tone="neutral">{FORMAT_LABELS[entry.format]}</Badge>
+                    {bucket.sessions.map((entry) => {
+                      const billed = billing(entry.speakerTitle, entry.speakerCompany);
+                      return (
+                        <Card
+                          key={entry.slotId}
+                          className="flex items-start justify-between gap-2 p-3"
+                          style={{ borderLeft: `3px solid ${entry.trackColour ?? '#cbd5e1'}` }}
+                        >
+                          <div className="min-w-0">
+                            <Link
+                              href={`/agenda/${entry.submissionId}`}
+                              className="font-medium text-ink hover:underline"
+                            >
+                              {entry.title}
+                            </Link>
+                            {/* The date and time in full, on the card itself.
+                                The band header down the left already carries
+                                the start, but a card read on its own answered
+                                "which room" and never "when", and the room now
+                                rides on this line rather than the byline's. */}
+                            <p className="mt-0.5 text-xs text-muted" data-testid="agenda-when">
+                              {dayLabel(entry.startsAt, event.timezone)} ·{' '}
+                              {timeOfDay(entry.startsAt, event.timezone)} to{' '}
+                              {timeOfDay(entry.endsAt, event.timezone)} · {entry.roomName}
+                            </p>
+                            <p className="text-xs text-muted" data-testid="agenda-billing">
+                              {entry.speakerName ?? 'Speaker to be confirmed'}
+                              {billed ? ` · ${billed}` : ''}
+                            </p>
+                            {entry.abstract ? (
+                              <div className="mt-1">
+                                <ShowMoreText
+                                  text={entry.abstract}
+                                  className="text-xs text-muted"
+                                  testId="agenda-more"
+                                />
+                              </div>
                             ) : null}
+                            <div className="mt-2 flex flex-wrap gap-1.5">
+                              {entry.trackName ? <Badge>{entry.trackName}</Badge> : null}
+                              {entry.format ? (
+                                <Badge tone="neutral">{FORMAT_LABELS[entry.format]}</Badge>
+                              ) : null}
+                            </div>
                           </div>
-                        </div>
-                        <StarButton
-                          submissionId={entry.submissionId}
-                          starred={entry.bookmarkedByMe}
-                          signedIn={user !== null}
-                          count={entry.bookmarkCount}
-                        />
-                      </Card>
-                    ))}
+                          <StarButton
+                            submissionId={entry.submissionId}
+                            starred={entry.bookmarkedByMe}
+                            signedIn={user !== null}
+                            count={entry.bookmarkCount}
+                          />
+                        </Card>
+                      );
+                    })}
                   </div>
                 ) : null}
               </div>

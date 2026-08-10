@@ -43,7 +43,7 @@ export function AgendaFilterBar({
           <Input
             type="search"
             name="q"
-            placeholder="Title or abstract"
+            placeholder="Title, abstract or speaker"
             defaultValue={filters.q ?? ''}
             data-testid="agenda-search"
           />

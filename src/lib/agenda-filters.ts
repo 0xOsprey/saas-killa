@@ -126,6 +126,14 @@ export type AgendaSlot = {
   trackName: string | null;
   trackColour: string | null;
   speakerName: string | null;
+  /**
+   * The speaker's byline, carried unjoined. A session card bills the person as
+   * well as naming them, and the two halves arrive here rather than pre-joined
+   * because the agenda page and the embed renderer format them differently and
+   * a host consuming the JSON feed wants the fields.
+   */
+  speakerTitle: string | null;
+  speakerCompany: string | null;
   bookmarkCount: number;
   bookmarkedByMe: boolean;
   /**
@@ -178,16 +186,44 @@ export async function agendaSlots(
         )})`
     : sql<boolean>`false`;
 
-  // Only accepted work is public. A submission placed and later withdrawn would
-  // otherwise keep its slot on the published agenda.
-  const sessionLeg: SQL[] = [eq(submissions.status, 'accepted')];
+  // Two gates, and they answer different questions.
+  //
+  // `status = 'accepted'` is the programme committee's decision. A submission
+  // placed and later withdrawn would otherwise keep its slot on the published
+  // agenda.
+  //
+  // `contentStatus = 'approved'` is the moderation gate, and it was missing.
+  // Public visibility keyed off schedule placement alone, so a session sitting
+  // at Content: Draft that had never been submitted for review, let alone
+  // approved, was live on /agenda and in every embed the moment an organizer
+  // dropped it on the grid. Approval has to withhold the session itself, not
+  // only the slides attached to it: `contentIsPublic` in lib/content.ts already
+  // gates the individual fields, and a field-level gate cannot stop the talk
+  // being listed.
+  //
+  // This is stricter than `contentIsPublic`, which grandfathers a populated
+  // draft. There is no equivalent clause here on purpose. A session-level
+  // grandfather would be indistinguishable from the bug.
+  const sessionLeg: SQL[] = [
+    eq(submissions.status, 'accepted'),
+    eq(submissions.contentStatus, 'approved'),
+  ];
   if (filters.trackId) sessionLeg.push(eq(submissions.trackId, filters.trackId));
   if (filters.format) sessionLeg.push(eq(submissions.format, filters.format));
   if (filters.level) sessionLeg.push(eq(submissions.audienceLevel, filters.level));
   if (filters.q) {
     const pattern = likePattern(filters.q);
+    // The speaker's name is in the search because it is what an attendee types.
+    // Someone looking for a talk half-remembers the person more often than the
+    // title, and searching a surname against title and abstract alone returned
+    // an empty agenda. `users` is already left-joined for the byline, so this
+    // costs nothing extra.
     sessionLeg.push(
-      or(ilike(submissions.title, pattern), ilike(submissions.abstract, pattern)) as SQL,
+      or(
+        ilike(submissions.title, pattern),
+        ilike(submissions.abstract, pattern),
+        ilike(users.name, pattern),
+      ) as SQL,
     );
   }
   if (filters.mine) {
@@ -242,6 +278,8 @@ export async function agendaSlots(
       trackName: tracks.name,
       trackColour: tracks.colour,
       speakerName: users.name,
+      speakerTitle: users.title,
+      speakerCompany: users.company,
       bookmarkCount,
       bookmarkedByMe,
       // A break has no submission, so the left join gives null and the VEVENT

@@ -8,6 +8,7 @@ import { currentUser } from '@/lib/auth';
 import { contentIsPublic } from '@/lib/content';
 import { FORMAT_LABELS, LEVEL_LABELS, dayLabel, timeOfDay } from '@/lib/format';
 import { getEvent } from '@/lib/queries';
+import { billing } from '@/lib/speakers';
 import { StarButton } from '../StarButton';
 
 export default async function SubmissionDetailPage({
@@ -36,10 +37,18 @@ export default async function SubmissionDetailPage({
       contentStatus: submissions.contentStatus,
       posterUrl: submissions.posterUrl,
       speakerName: users.name,
+      speakerTitle: users.title,
+      speakerCompany: users.company,
       speakerBio: users.bio,
       trackName: tracks.name,
       trackColour: tracks.colour,
       startsAt: slots.startsAt,
+      // The end as well as the start. A detail page reading "10:00" answers
+      // when to turn up and not whether the talk collides with the next thing
+      // an attendee wanted, which is the question this page is opened to
+      // settle. The agenda grid gets away with a start alone because the band
+      // it sits in supplies the rest.
+      endsAt: slots.endsAt,
       roomName: rooms.name,
       roomCapacity: rooms.capacity,
       // The query builder, not a hand-written template: an interpolated column
@@ -99,7 +108,12 @@ export default async function SubmissionDetailPage({
         title={row.title}
         description={
           row.startsAt && row.roomName
-            ? `${dayLabel(row.startsAt, event.timezone)} at ${timeOfDay(row.startsAt, event.timezone)} · ${row.roomName}${row.roomCapacity ? ` · seats ${row.roomCapacity}` : ''}`
+            ? // `endsAt` comes off the same slot row as `startsAt`, so it is
+              // never the missing half of a placed talk. The fallback is there
+              // for the type, not for a state anyone can reach.
+              `${dayLabel(row.startsAt, event.timezone)}, ${timeOfDay(row.startsAt, event.timezone)}${
+                row.endsAt ? ` to ${timeOfDay(row.endsAt, event.timezone)}` : ''
+              } · ${row.roomName}${row.roomCapacity ? ` · seats ${row.roomCapacity}` : ''}`
             : 'Not scheduled yet'
         }
         action={
@@ -141,6 +155,11 @@ export default async function SubmissionDetailPage({
 
       <Card className="space-y-1">
         <h2 className="text-sm font-semibold text-ink">{row.speakerName ?? 'Speaker'}</h2>
+        {/* Between the name and the bio, and gone when neither column is set,
+            so a speaker who has filled in nothing still gets a clean card. */}
+        {billing(row.speakerTitle, row.speakerCompany) ? (
+          <p className="text-sm text-ink">{billing(row.speakerTitle, row.speakerCompany)}</p>
+        ) : null}
         <p className="whitespace-pre-wrap text-sm text-muted">
           {row.speakerBio ?? 'No bio provided.'}
         </p>
