@@ -13,6 +13,7 @@ import {
   Textarea,
   cn,
 } from '@/components/ui';
+import type { ReviewCommentRow } from '@/lib/queries';
 import {
   approveContent,
   bulkApproveContent,
@@ -46,6 +47,7 @@ export type BoardRow = {
   statusTone: 'neutral' | 'good' | 'bad' | 'warn' | 'accent';
   averageScore: number | null;
   reviewCount: number;
+  reviews: ReviewCommentRow[];
   notified: boolean;
   scheduled: boolean;
   contentStatus: 'draft' | 'pending' | 'approved';
@@ -246,6 +248,29 @@ function Row({
           </Badge>
         </div>
       </div>
+
+      {row.reviews.length > 0 ? (
+        <details className="rounded-md border border-line p-3" data-testid={`reviews-${row.id}`}>
+          <summary className="cursor-pointer text-xs font-medium text-ink">
+            Reviewer comments ({row.reviews.length})
+          </summary>
+          <ul className="mt-2 space-y-2">
+            {row.reviews.map((review, index) => (
+              <li key={`${review.reviewerEmail}-${index}`} className="text-xs">
+                <span className="font-medium text-ink">{review.reviewerName ?? review.reviewerEmail}</span>
+                {review.score !== null ? (
+                  <span className="ml-2 tabular-nums text-muted">{review.score.toFixed(1)}</span>
+                ) : null}
+                {review.comment ? (
+                  <p className="mt-0.5 whitespace-pre-wrap text-muted">{review.comment}</p>
+                ) : (
+                  <p className="mt-0.5 text-muted italic">No comment</p>
+                )}
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
 
       {row.lockedFields.length > 0 ? (
         <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted">

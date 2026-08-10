@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, ilike, inArray, ne, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, inArray, lte, ne, or, sql, type SQL } from 'drizzle-orm';
 import { db } from '@/db';
 import { events, reviews, rooms, slots, submissions, tracks, users } from '@/db/schema';
 import type {
@@ -84,6 +84,14 @@ export type OrganizerRow = {
   averageScore: number | null;
   decisionEmailedAt: Date | null;
   scheduled: boolean;
+};
+
+export type ReviewCommentRow = {
+  submissionId: string;
+  reviewerName: string | null;
+  reviewerEmail: string;
+  score: number;
+  comment: string | null;
 };
 
 export const ORGANIZER_SORTS = [
@@ -244,6 +252,46 @@ export async function organizerSubmissions(options: OrganizerQuery = {}): Promis
 
   if (options.limit === undefined) return rows;
   return rows.limit(options.limit).offset(options.offset ?? 0);
+}
+
+/**
+ * The latest human reviewer comments per submission, for the decision board.
+ * A chair deciding on a proposal should not have to leave the submissions list
+ * to find the reasoning behind the average score.
+ */
+export async function organizerReviewComments(
+  submissionIds: string[],
+): Promise<ReviewCommentRow[]> {
+  if (submissionIds.length === 0) return [];
+
+  const ranked = db
+    .select({
+      submissionId: reviews.submissionId,
+      reviewerName: users.name,
+      reviewerEmail: users.email,
+      score: sql<number>`coalesce(${reviews.overrideScore}, ${reviews.score})`.as('score'),
+      comment: reviews.comment,
+      rowNumber: sql<number>`row_number() over (partition by ${reviews.submissionId} order by ${reviews.createdAt} desc)`.as(
+        'row_number',
+      ),
+    })
+    .from(reviews)
+    .innerJoin(users, eq(users.id, reviews.reviewerId))
+    .where(and(inArray(reviews.submissionId, submissionIds), eq(reviews.source, 'human')))
+    .as('ranked');
+
+  const rows = await db
+    .select()
+    .from(ranked)
+    .where(lte(ranked.rowNumber, 5));
+
+  return rows.map((row) => ({
+    submissionId: row.submissionId,
+    reviewerName: row.reviewerName,
+    reviewerEmail: row.reviewerEmail,
+    score: row.score,
+    comment: row.comment,
+  }));
 }
 
 /** How many submissions the same filters match, for the pager. */

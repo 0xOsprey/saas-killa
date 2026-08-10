@@ -31,11 +31,13 @@ import {
   getEvent,
   ORGANIZER_DEFAULT_DIRECTION,
   ORGANIZER_SORTS,
+  organizerReviewComments,
   organizerSubmissionCount,
   organizerSubmissions,
   organizerTotals,
   type OrganizerDirection,
   type OrganizerSort,
+  type ReviewCommentRow,
 } from '@/lib/queries';
 import { UPLOAD_KIND_LABELS, fileSeriesBySubmission, formatBytes } from '@/lib/uploads';
 import { gradePending, notifyDecided } from './actions';
@@ -189,11 +191,12 @@ export default async function OrganizerSubmissionsPage({
   // read every submission, every document and the whole revision log on every
   // render of this page, whatever it was going to show.
   const ids = rows.map((row) => row.id);
-  const [contentRows, history, lastEdits, files] = await Promise.all([
+  const [contentRows, history, lastEdits, files, reviewComments] = await Promise.all([
     contentRowsById(ids),
     recentRevisions(ids),
     lastEditBySubmission(ids),
     fileSeriesBySubmission(ids),
+    organizerReviewComments(ids),
   ]);
 
   const current: Query = { q, status, track: trackId, content, sort, direction, page, all: showAll };
@@ -204,6 +207,13 @@ export default async function OrganizerSubmissionsPage({
     approved: totals.approved,
   };
   const sortLabel = ORGANIZER_SORTS.find((option) => option.value === sort)!.label;
+
+  const commentsBySubmission = new Map<string, ReviewCommentRow[]>();
+  for (const comment of reviewComments) {
+    const held = commentsBySubmission.get(comment.submissionId);
+    if (held) held.push(comment);
+    else commentsBySubmission.set(comment.submissionId, [comment]);
+  }
 
   const board: BoardRow[] = rows.map((row) => {
     const extra = contentRows.get(row.id);
@@ -223,6 +233,7 @@ export default async function OrganizerSubmissionsPage({
       statusTone: STATUS_TONE[row.status],
       averageScore: row.averageScore,
       reviewCount: row.reviewCount,
+      reviews: commentsBySubmission.get(row.id) ?? [],
       notified: Boolean(row.decisionEmailedAt),
       scheduled: row.scheduled,
       contentStatus: extra?.contentStatus ?? 'draft',
