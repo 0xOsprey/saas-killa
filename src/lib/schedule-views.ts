@@ -18,11 +18,12 @@ import { dayKey, dayLabel, timeOfDay } from './format';
  */
 export const SCHEDULE_VIEWS = {
   grid: 'Grid',
+  list: 'List',
   day: 'Day',
   week: 'Week',
-  list: 'List',
-  track: 'Track',
-  room: 'Room',
+  month: 'Month',
+  room: 'Rooms',
+  conflicts: 'Conflicts',
 } as const;
 
 export type ScheduleView = keyof typeof SCHEDULE_VIEWS;

@@ -3,14 +3,13 @@ import {
   asWeek,
   byDay,
   byRoom,
-  byTrack,
   type Group,
   type ReadingView,
   type ScheduleEntry,
 } from '@/lib/schedule-views';
 
 /**
- * The four reading views: list, week, track and room.
+ * The reading views: list, week, month, rooms and conflicts.
  *
  * All server-rendered and all links-free. Placement happens in the grid, so
  * nothing here is interactive; the job is answering a question about a schedule
@@ -182,9 +181,13 @@ export function ScheduleViews({
     );
   }
 
-  const groups =
-    view === 'track' ? byTrack(entries) : view === 'room' ? byRoom(entries) : byDay(entries);
-  const show = view === 'track' ? 'room' : view === 'room' ? 'day' : 'room';
+  const readEntries =
+    view === 'conflicts'
+      ? entries.filter((entry) => entry.conflicted || entry.roomConflicted || entry.unavailable || entry.overCapacity)
+      : entries;
+
+  const groups = view === 'room' ? byRoom(entries) : byDay(readEntries);
+  const show = view === 'room' ? 'day' : 'room';
 
   return (
     <div className="space-y-4" data-testid={`schedule-${view}`}>
