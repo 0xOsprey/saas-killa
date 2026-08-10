@@ -6,7 +6,13 @@ import { FORMAT_LABELS, STATUS_LABELS, dayLabel, timeOfDay } from '@/lib/format'
 import { getEvent } from '@/lib/queries';
 import { TASK_KIND_LABELS } from '@/lib/speaker-labels';
 import { billing, speakerDetail } from '@/lib/speakers';
-import { formatBytes, headshotUpload, uploadHref } from '@/lib/uploads';
+import {
+  UPLOAD_KINDS,
+  acceptAttribute,
+  formatBytes,
+  headshotUpload,
+  uploadHref,
+} from '@/lib/uploads';
 import { Headshot } from '@/app/speakers/Headshot';
 import {
   completeSpeakerTaskAction,
@@ -174,7 +180,15 @@ export default async function SpeakerDetailPage({
 
       <Card className="space-y-4">
         <div className="flex items-center gap-3">
-          <Headshot src={user.headshotUrl} name={user.name} size="lg" />
+          {/*
+            The testid is on a wrapper. `Headshot` renders either an `img` or an
+            initials tile and takes no pass-through props, and this record needs
+            one stable handle for "the photo on file", whichever of the two is
+            on screen.
+          */}
+          <span data-testid="speaker-headshot" data-headshot-url={user.headshotUrl ?? ''}>
+            <Headshot src={user.headshotUrl} name={user.name} size="lg" />
+          </span>
           <div className="min-w-0">
             <h2 className="text-sm font-semibold text-ink">Profile</h2>
             {/*
@@ -217,6 +231,8 @@ export default async function SpeakerDetailPage({
           bio={user.bio}
           travelNotes={user.travelNotes}
           headshotUrl={user.headshotUrl}
+          headshotAccept={acceptAttribute('headshot')}
+          headshotLimit={formatBytes(UPLOAD_KINDS.headshot.maxBytes)}
         />
       </Card>
 

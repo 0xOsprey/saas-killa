@@ -21,7 +21,7 @@ import { sendAndLog } from '@/lib/email';
 import { wallClockToInstant } from '@/lib/format';
 import { getEvent } from '@/lib/queries';
 import { hasSubmissions, isRosterFilter, speakerRoster } from '@/lib/speakers';
-import { linkField } from '@/lib/uploads';
+import { linkField, replaceHeadshot, saveUpload, uploadHref } from '@/lib/uploads';
 import { speakerInviteMail, taskReminderMail } from './mail';
 
 const REMINDER_COOLDOWN_MS = 24 * 60 * 60 * 1000;
@@ -81,7 +81,12 @@ export async function revokeRoleAction(formData: FormData): Promise<void> {
   revalidatePath('/organizer/speakers');
 }
 
-export type ProfileState = { error?: string; saved?: boolean };
+export type ProfileState = {
+  error?: string;
+  saved?: boolean;
+  /** The stored name of a headshot this save uploaded, for the confirmation line. */
+  uploaded?: string;
+};
 
 const profileSchema = z.object({
   userId: z.string().uuid(),
@@ -106,6 +111,26 @@ const profileSchema = z.object({
  * Organizer editing of a speaker profile. Conference staff routinely hold the
  * headshot and the corrected job title before the speaker gets round to logging
  * in, and until now nothing in the app could write any of the three.
+ *
+ * The photo arrives two ways and both end in the same column. A pasted URL is
+ * the text field; a file goes through `saveUpload`, the same disk, the same
+ * magic-byte sniffing and the same `/files/<id>` address the speaker's own
+ * upload uses, and then `replaceHeadshot` points the profile at it. There is
+ * deliberately no second storage path for organizer-supplied photos: a headshot
+ * uploaded here has to be the same object the public directory, the agenda and
+ * the file-meta line already know how to read.
+ *
+ * The upload is part of this form rather than a form of its own, which is where
+ * it differs from `/speaker/profile`. That page keeps them apart because its
+ * client component holds a live preview that a redirect would leave stale; this
+ * one previews straight off the server prop, and an organizer correcting a bio
+ * and attaching a photo in one sitting should not lose the typing they have not
+ * saved yet to a redirect fired by the other control.
+ *
+ * `ownerId` is the speaker, not the organizer pressing the button. The row is
+ * that person's headshot: it is what `headshotUpload` looks up when the record
+ * renders the file, what `replaceHeadshot` scopes its cleanup to, and what lets
+ * the speaker take their own photo down from their own profile later.
  */
 export async function updateSpeakerProfileAction(
   _prev: ProfileState,
@@ -127,6 +152,31 @@ export async function updateSpeakerProfileAction(
   }
   const input = parsed.data;
 
+  // An empty file input still posts, as a zero-byte File with no name. That is
+  // "no photo attached this time", not a failed upload, and it must not blank
+  // the column or refuse the rest of the form.
+  const file = formData.get('headshotFile');
+  const attached = file instanceof File && file.size > 0;
+
+  let headshotUrl = input.headshotUrl;
+  let uploaded: string | undefined;
+
+  if (attached) {
+    const result = await saveUpload({ file, kind: 'headshot', ownerId: input.userId });
+    // The refusal is the speaker-facing sentence `saveUpload` composed — which
+    // rule was hit and what the file actually is — not a generic failure. The
+    // rest of the form is not written: an organizer who picked the wrong file
+    // gets one message and one press to fix, with their typing still on screen.
+    if (!result.ok) return { error: result.reason };
+
+    await replaceHeadshot(input.userId, result.upload);
+    // Overrides whatever the URL field posted. The field is showing the path of
+    // the photo this upload just replaced, and letting it win would point the
+    // profile at bytes `replaceHeadshot` has already deleted.
+    headshotUrl = uploadHref(result.upload);
+    uploaded = result.upload.filename;
+  }
+
   await db
     .update(users)
     .set({
@@ -135,13 +185,16 @@ export async function updateSpeakerProfileAction(
       company: input.company,
       bio: input.bio,
       travelNotes: input.travelNotes,
-      headshotUrl: input.headshotUrl,
+      headshotUrl,
     })
     .where(eq(users.id, input.userId));
 
   refreshSpeakerScreens(input.userId);
   revalidatePath('/agenda');
-  return { saved: true };
+  // The speaker's own copy of this profile prints the same photo and bio.
+  revalidatePath('/speaker');
+  revalidatePath('/speaker/profile');
+  return { saved: true, ...(uploaded ? { uploaded } : {}) };
 }
 
 const attendanceSchema = z.object({

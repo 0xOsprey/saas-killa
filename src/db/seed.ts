@@ -275,7 +275,12 @@ async function main() {
     .insert(users)
     .values({
       email: organizerEmail,
-      name: 'Programme chair',
+      // A person, not a job title. Every other seeded account is a named human
+      // and the organizer was the one generic string among them, which reads on
+      // screen as a role logging in rather than somebody doing a job. It also
+      // means the revision history, which prints `users.name`, attributed every
+      // edit to "Programme chair".
+      name: 'Jordan Alvarez',
       bio: 'Runs the programme committee.',
     })
     .returning();
