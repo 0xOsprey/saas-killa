@@ -7,6 +7,7 @@ import {
   pgEnum,
   pgTable,
   primaryKey,
+  real,
   text,
   timestamp,
   uniqueIndex,
@@ -118,6 +119,31 @@ export const integrationRunStatusEnum = pgEnum('integration_run_status', [
   'failed',
 ]);
 
+/**
+ * How a bulk file export ended. The archive is built while the organizer waits,
+ * so 'queued' and 'generating' are short-lived; they are still separate states
+ * because the row is what the screen reads, and a build that dies mid-way has to
+ * be distinguishable from one nobody started. 'failed' keeps the reason.
+ */
+export const fileExportStatusEnum = pgEnum('file_export_status', [
+  'queued',
+  'generating',
+  'ready',
+  'failed',
+]);
+
+/**
+ * The shapes one scorecard criterion can take.
+ *
+ * Deliberately three. 'numeric' is the only kind that reaches the weighted mean,
+ * so the arithmetic behind `reviews.score` never has to decide what a sentence is
+ * worth; 'select' and 'text' are recorded verbatim in `reviews.answers` and read
+ * by a person. Nothing here renders to a client-side widget, for the same reason
+ * `question_kind` is short: a scorecard an organizer configures is only useful if
+ * it cannot be configured into something that fails to submit.
+ */
+export const criterionKindEnum = pgEnum('criterion_kind', ['numeric', 'select', 'text']);
+
 /** What a speaker still owes: each row in speaker_tasks is one of these. */
 export const speakerTaskKindEnum = pgEnum('speaker_task_kind', [
   'headshot',
@@ -157,8 +183,25 @@ export const users = pgTable(
     id: uuid('id').primaryKey().defaultRandom(),
     email: text('email').notNull(),
     name: text('name'),
+    /**
+     * How a speaker is billed: job title and employer, shown beside the name on
+     * the roster, the public directory, the agenda card and the embed feed.
+     *
+     * On the person rather than on `submissionAuthors.affiliation`, which
+     * credits one contributor on one paper and is right to stay there. Someone
+     * who changes job changes it once, here, and every talk they are on follows.
+     */
+    title: text('title'),
+    company: text('company'),
     bio: text('bio'),
     headshotUrl: text('headshot_url'),
+    /**
+     * Travel and access requirements, kept on the person rather than on a
+     * submission. Someone who needs step-free access or a visa letter needs it
+     * for every talk they are on, and a copy per proposal is a copy that goes
+     * stale on one of them.
+     */
+    travelNotes: text('travel_notes'),
     /** The AI evaluator owns a user row so its grades attribute like anyone's. */
     isBot: boolean('is_bot').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -366,6 +409,45 @@ export const reviews = pgTable(
      * Both humans and the AI evaluators fill this in; it was AI-only in v1.
      */
     rubric: jsonb('rubric').$type<Record<string, number>>(),
+    /**
+     * The non-numeric half of the scorecard: one string per 'select' or 'text'
+     * criterion, keyed the same way `rubric` is.
+     *
+     * A second column rather than a wider `rubric`, because `rubric` is typed as
+     * numbers and four separate consumers already read it that way. A dropdown
+     * answer put in there would be a string arriving where an average is
+     * computed, and the failure would be a silent NaN in a committee's mean
+     * rather than a type error anyone could see.
+     */
+    answers: jsonb('answers').$type<Record<string, string>>(),
+    /**
+     * The weighted mean before it was rounded into `score`.
+     *
+     * `score` is an integer because every consumer that wants one number reads
+     * it, and it cannot stop being one without breaking them. But rounding is
+     * what makes a weighted grade indistinguishable from an unweighted one: a
+     * scorecard weighted 2:1 over 4 and 2 is 3.33 and an even one is 3.0, and
+     * both round to 3. This column is what lets an aggregate show the committee
+     * the difference their weights actually made. Null on every grade filed
+     * before per-round scorecards existed, so readers coalesce to `score`.
+     */
+    weightedScore: real('weighted_score'),
+    /**
+     * A human's replacement for this grade's number, with who did it and why.
+     *
+     * The original `score` is deliberately left alone. An override is a claim
+     * about a grade, and a claim that overwrites what it disagrees with cannot
+     * be checked afterwards; keeping both is what makes "the machine said 5 and
+     * the chair said 3" a readable sentence rather than a lost one. Aggregates
+     * read `coalesce(override_score, score)`, so the override is what counts
+     * without the AI's own answer being destroyed to make it count.
+     */
+    overrideScore: integer('override_score'),
+    overrideReason: text('override_reason'),
+    overriddenById: uuid('overridden_by_id').references((): AnyPgColumn => users.id, {
+      onDelete: 'set null',
+    }),
+    overriddenAt: timestamp('overridden_at', { withTimezone: true }),
     model: text('model'),
     /** Which evaluator persona produced an AI grade. Null for human grades. */
     personaId: uuid('persona_id'),
@@ -644,12 +726,99 @@ export const uploads = pgTable(
     /** The sniffed type, not the declared one. This is what gets served back. */
     contentType: text('content_type').notNull(),
     bytes: integer('bytes').notNull(),
+    /**
+     * The first upload in this file's version chain, or null when this row is
+     * itself the first.
+     *
+     * Re-uploading into a deliverable slot writes a new row carrying the
+     * predecessor's series rather than overwriting anything, so every earlier
+     * version keeps its own id, its own bytes and its own `/files/<id>` address.
+     * `submissions.slides_url` moves on to the newest member; the older file is
+     * still there and still served.
+     *
+     * Null rather than backfilled to the row's own id. Every upload that
+     * predates versioning is a chain of one, and reading it as `series_id ?? id`
+     * says so without a data migration that has to be right the first time.
+     *
+     * No foreign key, deliberately. A chain outlives its head — a speaker may
+     * drop v1 and keep v2 — and a cascade off `uploads.id` would take the
+     * survivors and the thread hanging off them with it.
+     */
+    seriesId: uuid('series_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index('uploads_owner_idx').on(t.ownerId),
     index('uploads_submission_idx').on(t.submissionId),
+    index('uploads_series_idx').on(t.seriesId),
   ],
+);
+
+/**
+ * A note on a file, from a speaker or an organizer, in one thread both sides
+ * read.
+ *
+ * Hung on the version chain rather than on one `uploads` row, which is why this
+ * column is `series_id` and not `upload_id`. The conversation a conference has
+ * about a deck is about the deck: a speaker asks a question on Tuesday's file,
+ * uploads a better one on Friday, and the organizer answering on Monday is
+ * answering that same question. Keyed to the row, the reply would land on a file
+ * the speaker had already replaced and neither of them would see the other.
+ *
+ * Never edited and never deleted, on the same reasoning as
+ * `submission_revisions`: attribution that can be rewritten afterwards is not
+ * attribution.
+ */
+export const uploadComments = pgTable(
+  'upload_comments',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    /** `uploads.series_id ?? uploads.id`. No foreign key: see `uploads.seriesId`. */
+    seriesId: uuid('series_id').notNull(),
+    authorId: uuid('author_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    body: text('body').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('upload_comments_series_idx').on(t.seriesId, t.createdAt)],
+);
+
+/**
+ * One organizer's request for an archive of speaker files.
+ *
+ * A row rather than a streamed response, because "did that export work" is a
+ * question asked after the tab is closed. The archive is written to the upload
+ * directory under a generated name and handed back by a route that checks the
+ * role, so a link copied out of the address bar is not a public door onto every
+ * supporting document a committee was ever sent.
+ *
+ * `uploadIds` is the exact set of files written, resolved to the latest version
+ * of each at the moment of the build. Keeping it means a finished archive can
+ * say what it holds without opening it, and an organizer who exported yesterday
+ * can see they got yesterday's deck.
+ */
+export const fileExports = pgTable(
+  'file_exports',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    requestedById: uuid('requested_by_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    status: fileExportStatusEnum('status').notNull().default('queued'),
+    /** 'session', 'speaker' or 'flat'. Decides the folder each entry lands in. */
+    grouping: text('grouping').notNull().default('session'),
+    uploadIds: jsonb('upload_ids').$type<string[]>().notNull().default([]),
+    /** `<uuid>.zip` under the upload directory. Null until the build finishes. */
+    storedName: text('stored_name'),
+    fileCount: integer('file_count').notNull().default(0),
+    bytes: integer('bytes').notNull().default(0),
+    /** Why a build stopped, in words an organizer can act on. */
+    error: text('error'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+  },
+  (t) => [index('file_exports_requested_idx').on(t.requestedById, t.createdAt)],
 );
 
 /**
@@ -831,8 +1000,131 @@ export const reviewRounds = pgTable('review_rounds', {
   dueAt: timestamp('due_at', { withTimezone: true }),
   /** Set when an organizer closes the round. No grade may be filed after this. */
   closedAt: timestamp('closed_at', { withTimezone: true }),
+  /**
+   * Whether reviewers in this round see who wrote what.
+   *
+   * Defaulted on, and the default is the interesting half: blind review used to
+   * be a property of two queries selecting no speaker column, which made it
+   * unbreakable and unconfigurable at the same time. Those queries still select
+   * no speaker column. Turning this off makes the page fetch the billing
+   * separately rather than widening them, so the thing that guarantees a blind
+   * round is still structural and an open round is an explicit second query
+   * somebody has to have written.
+   */
+  blind: boolean('blind').notNull().default(true),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * One field on one round's scorecard.
+ *
+ * Rounds used to share four criteria hardcoded in `src/lib/rubric.ts`, which
+ * made "a shortlist round scored out of 10" unsayable and "add a recommendation
+ * dropdown" a code change. A round with no rows here is seeded from those same
+ * four, so every grade already filed still reads against the criteria it was
+ * filed under.
+ *
+ * `key` is the join to `reviews.rubric` and `reviews.answers`, and it never
+ * changes: renaming the label of a criterion is a display edit, renaming its key
+ * would orphan every score stored under the old one.
+ *
+ * Archived rather than deleted, for the reason `form_questions.archived_at`
+ * exists: a score whose criterion is gone is unreadable, and the scores are what
+ * the committee actually decided on.
+ */
+export const roundCriteria = pgTable(
+  'round_criteria',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    roundId: uuid('round_id')
+      .notNull()
+      .references(() => reviewRounds.id, { onDelete: 'cascade' }),
+    key: text('key').notNull(),
+    label: text('label').notNull(),
+    kind: criterionKindEnum('kind').notNull().default('numeric'),
+    /** The question under the field, shown to the reviewer. */
+    helpText: text('help_text'),
+    /** The ends of a 'numeric' scale. Ignored by the other two kinds. */
+    scaleMin: integer('scale_min').notNull().default(1),
+    scaleMax: integer('scale_max').notNull().default(5),
+    /** Choices for a 'select'. Ignored by the other two kinds. */
+    options: jsonb('options').$type<string[]>().notNull().default([]),
+    /**
+     * How much this criterion counts in the weighted mean. 0 drops it entirely.
+     * Only 'numeric' reads it, because only a number can be averaged.
+     */
+    weight: integer('weight').notNull().default(1),
+    position: integer('position').notNull().default(0),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('round_criteria_round_key_idx').on(t.roundId, t.key),
+    index('round_criteria_round_position_idx').on(t.roundId, t.position),
+  ],
+);
+
+/**
+ * Who is on a round's committee.
+ *
+ * The `reviewer` role says somebody may review at all; this says which passes
+ * they sit on, so a specialist pulled in for a shortlist is not carrying the
+ * whole first round. An empty pool means the round is open to everyone holding
+ * the role, which is how the app behaved before pools existed and is what keeps
+ * an organizer who never opens this screen from finding their distributor has
+ * nobody to hand work to.
+ */
+export const roundReviewers = pgTable(
+  'round_reviewers',
+  {
+    roundId: uuid('round_id')
+      .notNull()
+      .references(() => reviewRounds.id, { onDelete: 'cascade' }),
+    reviewerId: uuid('reviewer_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    addedAt: timestamp('added_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.roundId, t.reviewerId] }),
+    index('round_reviewers_reviewer_idx').on(t.reviewerId),
+  ],
+);
+
+/**
+ * A reviewer's declaration that they cannot judge a submission fairly.
+ *
+ * Scoped to the round rather than to the pair alone, because a conflict is a
+ * statement about one reading: the colleague who co-wrote the paper in round one
+ * may have left by the shortlist, and an organizer re-forming a committee needs
+ * to ask again rather than inherit an answer.
+ *
+ * The assignment row is deliberately left in place. Deleting it would make the
+ * recusal indistinguishable from work that was never handed out, and the number
+ * an organizer needs is how much of the pile is uncovered *because* somebody
+ * stepped back.
+ */
+export const reviewConflicts = pgTable(
+  'review_conflicts',
+  {
+    roundId: uuid('round_id')
+      .notNull()
+      .references(() => reviewRounds.id, { onDelete: 'cascade' }),
+    submissionId: uuid('submission_id')
+      .notNull()
+      .references(() => submissions.id, { onDelete: 'cascade' }),
+    reviewerId: uuid('reviewer_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    /** In the reviewer's own words. Optional: the declaration is the point. */
+    reason: text('reason'),
+    declaredAt: timestamp('declared_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.roundId, t.submissionId, t.reviewerId] }),
+    index('review_conflicts_reviewer_idx').on(t.reviewerId),
+  ],
+);
 
 /**
  * A question an organizer added to the submission form.
@@ -896,8 +1188,149 @@ export const submissionAnswers = pgTable(
   ],
 );
 
+/**
+ * The contact layer.
+ *
+ * Everything below hangs off `users` rather than off `submissions`, and that is
+ * the point of it. The roster at /organizer/speakers answers "who is speaking at
+ * this event"; the tags an organizer files someone under, the note about why
+ * they declined last time and where they sit in the invitation pipeline are all
+ * facts about the person that outlive any one proposal. Hanging them on a
+ * submission would lose them the moment it was withdrawn, and would duplicate
+ * them for anyone who submits twice.
+ */
+
+/** An organizer's private note on a person. Never rendered outside /organizer. */
+export const contactNotes = pgTable(
+  'contact_notes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    contactId: uuid('contact_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    authorId: uuid('author_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    body: text('body').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('contact_notes_contact_idx').on(t.contactId, t.createdAt)],
+);
+
+/**
+ * A free-text label on a person, lowercased at the boundary.
+ *
+ * A join table rather than a `text[]` column so a filter is an index lookup and
+ * so the tag vocabulary can be read back without scanning every contact. The
+ * primary key is what stops the same tag being applied twice.
+ */
+export const contactTags = pgTable(
+  'contact_tags',
+  {
+    contactId: uuid('contact_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    tag: text('tag').notNull(),
+    addedAt: timestamp('added_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.contactId, t.tag] }), index('contact_tags_tag_idx').on(t.tag)],
+);
+
+/**
+ * A saved filter, so a segment an organizer builds once is something they can
+ * come back to rather than a query string they have to rebuild.
+ *
+ * `query` stores the serialized search parameters, not a row set. A segment is a
+ * question and it has to keep answering it as contacts change; freezing the
+ * membership would turn "speakers with no headshot" into a stale list the day
+ * after someone uploads one.
+ */
+export const contactSegments = pgTable(
+  'contact_segments',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    name: text('name').notNull(),
+    query: text('query').notNull(),
+    createdById: uuid('created_by_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('contact_segments_name_idx').on(lower(t.name))],
+);
+
+/**
+ * A column on the invitation pipeline board.
+ *
+ * Stages are rows rather than an enum because the board is the part of a contact
+ * database an organizer is most likely to want to shape to their own process,
+ * and an enum would make adding "Awaiting contract" a migration.
+ */
+export const pipelineStages = pgTable(
+  'pipeline_stages',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    name: text('name').notNull(),
+    position: integer('position').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('pipeline_stages_position_idx').on(t.position)],
+);
+
+/**
+ * One person's card on the board. A person is on the board at most once, which
+ * is why the contact is the primary key rather than a surrogate id.
+ */
+export const pipelineCards = pgTable(
+  'pipeline_cards',
+  {
+    contactId: uuid('contact_id')
+      .primaryKey()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    stageId: uuid('stage_id')
+      .notNull()
+      .references(() => pipelineStages.id, { onDelete: 'cascade' }),
+    position: integer('position').notNull().default(0),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('pipeline_cards_stage_idx').on(t.stageId, t.position)],
+);
+
+/**
+ * Every stage change, kept forever.
+ *
+ * The card carries where someone is now; this carries how they got there, which
+ * is the half an organizer actually asks about later ("when did we invite
+ * them?"). `fromStageId` is nullable because the first move is an entry onto the
+ * board from nowhere.
+ */
+export const pipelineEvents = pgTable(
+  'pipeline_events',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    contactId: uuid('contact_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    fromStageId: uuid('from_stage_id').references(() => pipelineStages.id, {
+      onDelete: 'set null',
+    }),
+    toStageId: uuid('to_stage_id').references(() => pipelineStages.id, { onDelete: 'set null' }),
+    actorId: uuid('actor_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('pipeline_events_contact_idx').on(t.contactId, t.createdAt)],
+);
+
 export type User = typeof users.$inferSelect;
+export type ContactNote = typeof contactNotes.$inferSelect;
+export type ContactTag = typeof contactTags.$inferSelect;
+export type ContactSegment = typeof contactSegments.$inferSelect;
+export type PipelineStage = typeof pipelineStages.$inferSelect;
+export type PipelineCard = typeof pipelineCards.$inferSelect;
+export type PipelineEvent = typeof pipelineEvents.$inferSelect;
 export type ReviewRound = typeof reviewRounds.$inferSelect;
+export type RoundCriterion = typeof roundCriteria.$inferSelect;
+export type CriterionKind = (typeof criterionKindEnum.enumValues)[number];
+export type RoundReviewer = typeof roundReviewers.$inferSelect;
+export type ReviewConflict = typeof reviewConflicts.$inferSelect;
 export type FormQuestion = typeof formQuestions.$inferSelect;
 export type SubmissionAnswer = typeof submissionAnswers.$inferSelect;
 export type QuestionKind = (typeof questionKindEnum.enumValues)[number];
@@ -913,6 +1346,9 @@ export type SubmissionRevision = typeof submissionRevisions.$inferSelect;
 export type SubmissionAuthor = typeof submissionAuthors.$inferSelect;
 export type SpeakerTask = typeof speakerTasks.$inferSelect;
 export type Upload = typeof uploads.$inferSelect;
+export type UploadComment = typeof uploadComments.$inferSelect;
+export type FileExport = typeof fileExports.$inferSelect;
+export type FileExportStatus = (typeof fileExportStatusEnum.enumValues)[number];
 export type Bookmark = typeof bookmarks.$inferSelect;
 export type EvaluatorPersona = typeof evaluatorPersonas.$inferSelect;
 export type EmailLogRow = typeof emailLog.$inferSelect;

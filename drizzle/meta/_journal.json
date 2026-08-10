@@ -78,6 +78,41 @@
       "when": 1786246177558,
       "tag": "0010_worthless_white_tiger",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1786326841354,
+      "tag": "0011_majestic_abomination",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1786327612065,
+      "tag": "0012_legal_yellow_claw",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1786327815383,
+      "tag": "0013_faulty_glorian",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1786329987776,
+      "tag": "0014_chilly_colleen_wing",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1786330997289,
+      "tag": "0015_absurd_the_hunter",
+      "breakpoints": true
     }
   ]
 }
