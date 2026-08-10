@@ -7,6 +7,12 @@ import { EMBED_CSS } from './embed';
  *   <div data-sessionboard="agenda"></div>
  *   <script src="https://…/embed/embed.js" async></script>
  *
+ * The div also carries the configuration: `data-track`, `data-day`, `data-q`,
+ * `data-format`, `data-level` and `data-room` narrow what it fetches, and
+ * `data-fields` names the optional fields to keep. `/organizer/embed` writes
+ * all of them, and they are attributes rather than a query string because the
+ * host pastes one script tag and one div, not a URL.
+ *
  * Written as a string rather than compiled from a module because it is served
  * as an asset to a page we do not control, so it cannot be part of the app's
  * bundle and cannot assume anything the app provides. Consequences worth
@@ -86,6 +92,15 @@ export function embedScript(): string {
     return text.length <= limit ? text : text.slice(0, limit).replace(/\\s+$/, '') + '\\u2026';
   }
 
+  // The same rule as billing() in lib/speakers.ts, restated because this file
+  // is a string served to somebody else's page and can import nothing. If the
+  // wording changes there it has to change here: the whole design of the three
+  // embed surfaces is that a host cannot tell which one they pasted in.
+  function billing(title, company) {
+    if (title && company) return title + ' at ' + company;
+    return title || company || '';
+  }
+
   function renderSpeakers(feed) {
     var wrap = el('div', 'sb-embed');
     if (!feed.published) {
@@ -116,7 +131,13 @@ export function embedScript(): string {
 
       var body = el('div', 'sb-body');
       body.appendChild(link('sb-name', speaker.url, speaker.name || 'Unnamed speaker'));
-      body.appendChild(el('p', 'sb-meta', speaker.talks + ' in the programme'));
+      var billed = billing(speaker.title, speaker.company);
+      if (billed) body.appendChild(el('p', 'sb-role', billed));
+      // A field switched off with data-fields is missing from the feed rather
+      // than null, so every read here has to survive the key not being there.
+      if (speaker.talks !== undefined) {
+        body.appendChild(el('p', 'sb-meta', speaker.talks + ' in the programme'));
+      }
       if (speaker.bio) body.appendChild(el('p', 'sb-bio', excerpt(speaker.bio, 170)));
 
       var tags = (speaker.tracks || []).concat((speaker.keywords || []).slice(0, 4));
@@ -166,8 +187,30 @@ export function embedScript(): string {
           entry.url ? link('sb-title', entry.url, entry.title) : el('span', 'sb-title', entry.title)
         );
 
-        var meta = [entry.speaker, entry.room, entry.track, entry.format].filter(Boolean).join(' \\u00b7 ');
+        var when = entry.time ? day.label + ', ' + entry.time + ' to ' + entry.endTime : day.label;
+        var meta = [
+          when,
+          entry.speaker,
+          billing(entry.speakerTitle, entry.speakerCompany),
+          entry.room,
+          entry.track,
+          entry.format
+        ].filter(Boolean).join(' \\u00b7 ');
         if (meta) body.appendChild(el('p', 'sb-meta', meta));
+
+        // The same markup renderAgendaHtml emits, so both surfaces clamp and
+        // expand off the one stylesheet rather than drifting apart.
+        if (entry.description) {
+          var fold = el('details', 'sb-fold');
+          var summary = el('summary');
+          summary.appendChild(el('span', 'sb-desc', entry.description));
+          var toggle = el('span', 'sb-toggle');
+          toggle.appendChild(el('span', 'sb-more', 'Show more'));
+          toggle.appendChild(el('span', 'sb-less', 'Show less'));
+          summary.appendChild(toggle);
+          fold.appendChild(summary);
+          body.appendChild(fold);
+        }
 
         item.appendChild(body);
         list.appendChild(item);
@@ -188,6 +231,12 @@ export function embedScript(): string {
       var value = node.getAttribute('data-' + OPTIONS[i]);
       if (value) query.push(OPTIONS[i] + '=' + encodeURIComponent(value));
     }
+    // data-fields is read with getAttribute rather than a truthiness test on
+    // purpose. An empty data-fields="" is a real instruction, meaning every
+    // optional field is off, and it is the one value a falsy check would drop
+    // on the floor and silently turn back into "send everything".
+    var fields = node.getAttribute('data-fields');
+    if (fields !== null) query.push('fields=' + encodeURIComponent(fields));
     return ROOT + '/embed/' + name + '.json' + (query.length ? '?' + query.join('&') : '');
   }
 

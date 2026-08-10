@@ -6,9 +6,10 @@ export function OPTIONS(): Response {
 
 /**
  * The schedule itinerary as data, grouped into days. Takes the same narrowing
- * parameters as `/agenda` (`track`, `day`, `room`, `format`, `level`, `q`) and
- * discards anything malformed rather than erroring, because a hand-edited
- * `?track=banana` on somebody else's website has to render an agenda.
+ * parameters as `/agenda` (`track`, `day`, `room`, `format`, `level`, `q`),
+ * plus `fields=` to drop the keys a host does not want, and discards anything
+ * malformed rather than erroring, because a hand-edited `?track=banana` on
+ * somebody else's website has to render an agenda.
  */
 export async function GET(request: Request): Promise<Response> {
   const params = Object.fromEntries(new URL(request.url).searchParams);
