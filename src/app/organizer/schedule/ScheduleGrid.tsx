@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { Notice, cn } from '@/components/ui';
-import { clearSlot, placeSubmission, type PlacementResult } from './actions';
+import { clearSlot, placeSubmission } from './actions';
 
 export type PoolItem = {
   id: string;
@@ -27,6 +27,12 @@ export type Cell = {
   /** Set when the box is a named non-session block rather than a placement. */
   label: string | null;
   conflicted: boolean;
+  /**
+   * Another talk is running in this room while this one is. Separate from
+   * `conflicted`, which is about the speaker: the two are resolved by different
+   * moves, and a box can carry both at once.
+   */
+  roomConflicted: boolean;
   /**
    * The speaker declared this window unavailable. An object rather than the
    * note itself: a declaration with no note is still a declaration, and a bare
@@ -77,10 +83,18 @@ export function ScheduleGrid({
 }) {
   const [held, setHeld] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
-  const [evicted, setEvicted] = useState<PlacementResult['evicted']>(null);
+  /**
+   * The talk the last placement displaced, and the box it was displaced from.
+   *
+   * `where` is read off the cell that was dropped on rather than returned by the
+   * server action, because the client already knows which box it just wrote to
+   * and the action would have to format a time in the event's timezone to say
+   * the same thing.
+   */
+  const [evicted, setEvicted] = useState<{ title: string; where: string } | null>(null);
   const [pending, startTransition] = useTransition();
 
-  function place(slotId: string, submissionId: string) {
+  function place(slotId: string, submissionId: string, where: string) {
     const data = new FormData();
     data.set('slotId', slotId);
     data.set('submissionId', submissionId);
@@ -88,7 +102,7 @@ export function ScheduleGrid({
       const result = await placeSubmission(data);
       // Cleared on every placement, so the notice always describes the move
       // just made rather than one from five drags ago.
-      setEvicted(result.evicted);
+      setEvicted(result.evicted ? { title: result.evicted.title, where } : null);
       setHeld(null);
     });
   }
@@ -118,6 +132,17 @@ export function ScheduleGrid({
    * so a talk renders under a room it is not in.
    */
   const columnOfRoom = new Map(rooms.map((room, index) => [room.id, String(index + 2)]));
+  const nameOfRoom = new Map(rooms.map((room) => [room.id, room.name]));
+
+  /**
+   * Where a box is, in the words an organizer reads off the grid. The notice
+   * after a displacement names the box the talk was displaced from, because
+   * "that box was taken" is only useful to someone who still remembers which
+   * box they dropped on.
+   */
+  function boxLabel(band: Band, cell: Cell): string {
+    return `${band.dayLabel} ${band.timeLabel} · ${nameOfRoom.get(cell.roomId) ?? 'this room'}`;
+  }
 
   let lastDay = '';
 
@@ -158,11 +183,20 @@ export function ScheduleGrid({
       </aside>
 
       <div className="space-y-3">
+        {/*
+          Red rather than amber, and named a room conflict rather than described
+          as a box being taken. One box holds one talk, so this is the same rule
+          the persistent room warning above enforces, caught at the one moment it
+          cannot survive into a recompute: the displaced talk is unplaced by the
+          time the page reloads, and nothing in the database still says the two
+          were ever asked to share a room.
+        */}
         {evicted ? (
-          <Notice tone="warn">
+          <Notice tone="bad">
             <span data-testid="eviction-notice">
-              That box was taken. “{evicted.title}” is back in the unscheduled pool, on the left.
-              Nothing was emailed.
+              Room conflict: {evicted.where} was already running “{evicted.title}”. One box holds
+              one talk, so that one is back in the unscheduled pool on the left. Nothing was
+              emailed.
             </span>
           </Notice>
         ) : null}
@@ -217,17 +251,17 @@ export function ScheduleGrid({
                       // A drop onto a labelled block is a placement too; the
                       // action clears the label as part of the same write. A
                       // drop onto the box it came from is a no-op worth skipping.
-                      if (id && id !== cell.submissionId) place(cell.slotId, id);
+                      if (id && id !== cell.submissionId) place(cell.slotId, id, boxLabel(band, cell));
                     }}
                     onClick={() => {
-                      if (held) place(cell.slotId, held);
+                      if (held) place(cell.slotId, held, boxLabel(band, cell));
                       else if (cell.submissionId) setHeld(cell.submissionId);
                     }}
                     onKeyDown={(e) => {
                       if (e.key !== 'Enter' && e.key !== ' ') return;
                       if (e.target !== e.currentTarget) return;
                       e.preventDefault();
-                      if (held) place(cell.slotId, held);
+                      if (held) place(cell.slotId, held, boxLabel(band, cell));
                       else if (cell.submissionId) setHeld(cell.submissionId);
                     }}
                     tabIndex={0}
@@ -248,7 +282,7 @@ export function ScheduleGrid({
                         : cell.label
                           ? 'border-slate-300 bg-slate-100'
                           : 'border-dashed border-line bg-slate-50 hover:border-accent hover:bg-accent-soft',
-                      cell.conflicted && 'border-red-300 bg-red-50',
+                      (cell.conflicted || cell.roomConflicted) && 'border-red-300 bg-red-50',
                       cell.unavailable !== null && 'border-amber-300 bg-amber-50',
                       held === cell.submissionId && 'ring-2 ring-accent/40',
                       over === cell.slotId && 'border-accent bg-accent-soft ring-2 ring-accent/40',
@@ -267,6 +301,14 @@ export function ScheduleGrid({
                         {cell.conflicted ? (
                           <span className="mt-1 block font-medium text-red-700">
                             speaker double-booked
+                          </span>
+                        ) : null}
+                        {cell.roomConflicted ? (
+                          <span
+                            className="mt-1 block font-medium text-red-700"
+                            data-testid={`room-conflict-${cell.slotId}`}
+                          >
+                            room double-booked
                           </span>
                         ) : null}
                         {cell.unavailable ? (

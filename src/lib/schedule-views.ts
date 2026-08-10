@@ -55,12 +55,28 @@ export type ScheduleEntry = {
   trackName: string | null;
   trackColour: string | null;
   conflicted: boolean;
+  /**
+   * Two talks are running in this room at once. Kept distinct from `conflicted`,
+   * which is the speaker being in two rooms, rather than folded into one
+   * "clashing" flag. The room view exists to answer a room question, and a
+   * merged flag would leave "is anything colliding in Studio?" answerable only
+   * by going back to the grid, which is the view an organizer came here to stop
+   * trusting.
+   */
+  roomConflicted: boolean;
   unavailable: boolean;
   overCapacity: boolean;
 };
 
+/**
+ * The slot ids carrying each warning, computed once by the schedule page and
+ * handed down. Recomputing per view is what this shape exists to prevent: six
+ * views each deriving their own conflicts is six chances for one of them to
+ * disagree with the grid about what is wrong.
+ */
 export type Warnings = {
   conflicted: Set<string>;
+  roomConflicted: Set<string>;
   unavailable: Set<string>;
   overCapacity: Set<string>;
 };
@@ -88,6 +104,7 @@ export function toScheduleEntries(
     trackName: row.trackName,
     trackColour: row.trackColour,
     conflicted: warnings.conflicted.has(row.slotId),
+    roomConflicted: warnings.roomConflicted.has(row.slotId),
     unavailable: warnings.unavailable.has(row.slotId),
     overCapacity: warnings.overCapacity.has(row.slotId),
   }));

@@ -101,6 +101,12 @@ export async function placements(ids?: string[]): Promise<Placement[]> {
             trackName: row.trackName,
             trackColour: row.trackColour,
             speakerName: row.speakerName,
+            // The byline is a screen thing. A VEVENT has a summary, a location
+            // and an organizer, and no field that would carry "Principal
+            // Engineer at Latticework Systems", so the two columns are not
+            // selected rather than fetched and dropped.
+            speakerTitle: null,
+            speakerCompany: null,
             // Nobody bookmarks their own talk into an invitation.
             bookmarkCount: 0,
             bookmarkedByMe: false,
@@ -218,6 +224,10 @@ export async function slotFromNoticeKey(
     trackName: null,
     trackColour: null,
     speakerName: placement.speakerName,
+    // A cancellation names the talk that is going away. `Placement` carries no
+    // byline and nothing downstream would print one.
+    speakerTitle: null,
+    speakerCompany: null,
     bookmarkCount: 0,
     bookmarkedByMe: false,
     // `cancellationFor` passes the next sequence explicitly, which overrides

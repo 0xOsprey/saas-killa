@@ -18,11 +18,23 @@ import {
  * recomputed, so a double-booking is red in every view that shows it.
  */
 
+/**
+ * Both double-bookings are named rather than sharing one badge. "double-booked"
+ * alone was the speaker's, and a room collision reading the same way would send
+ * an organizer to move the speaker when the thing to move is the talk.
+ */
 function Warnings({ entry }: { entry: ScheduleEntry }) {
-  if (!entry.conflicted && !entry.unavailable && !entry.overCapacity) return null;
+  if (!entry.conflicted && !entry.roomConflicted && !entry.unavailable && !entry.overCapacity) {
+    return null;
+  }
   return (
-    <span className="ml-2 inline-flex gap-1">
-      {entry.conflicted ? <Badge tone="bad">double-booked</Badge> : null}
+    <span className="ml-2 inline-flex flex-wrap gap-1">
+      {entry.conflicted ? <Badge tone="bad">speaker double-booked</Badge> : null}
+      {entry.roomConflicted ? (
+        <Badge tone="bad" data-testid={`view-room-conflict-${entry.slotId}`}>
+          room double-booked
+        </Badge>
+      ) : null}
       {entry.unavailable ? <Badge tone="warn">unavailable</Badge> : null}
       {entry.overCapacity ? <Badge tone="warn">room too small</Badge> : null}
     </span>
@@ -146,6 +158,14 @@ export function ScheduleViews({
                               >
                                 {entry.title ?? entry.label}
                               </span>
+                              {/*
+                                The same badges the other three views carry.
+                                Week is the densest view and was the only one
+                                showing a placement with nothing said about it,
+                                which made it the view most likely to be read as
+                                a clean schedule.
+                              */}
+                              <Warnings entry={entry} />
                               <span className="block text-muted">{entry.roomName}</span>
                             </li>
                           ))}

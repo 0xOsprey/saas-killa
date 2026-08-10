@@ -1,14 +1,16 @@
 'use server';
 
-import { eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { db } from '@/db';
 import { rooms, slots, submissions } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
-import { wallClockToInstant } from '@/lib/format';
-import { getEvent } from '@/lib/queries';
+import { overlaps, speakerBookings } from '@/lib/conflicts';
+import { FORMAT_MINUTES, wallClockToInstant } from '@/lib/format';
+import { getEvent, unscheduledAccepted } from '@/lib/queries';
+import { bookmarkDemand, openSlots } from './queries';
 
 function revalidateSchedule() {
   revalidatePath('/organizer/schedule');
@@ -83,6 +85,138 @@ export async function placeSubmission(formData: FormData): Promise<PlacementResu
   revalidateSchedule();
   // A talk dragged back onto its own box displaces itself, which is not news.
   return { evicted: occupant && occupant.id !== input.submissionId ? occupant : null };
+}
+
+/**
+ * Compare two ranking keys left to right, first difference wins. The keys are
+ * fixed-length tuples of numbers built in `autoSchedule`, so this is a plain
+ * lexicographic sort with no tie-break left to insertion order.
+ */
+function ranksBefore(a: number[], b: number[]): boolean {
+  for (let i = 0; i < a.length; i += 1) {
+    const left = a[i] ?? 0;
+    const right = b[i] ?? 0;
+    if (left !== right) return left < right;
+  }
+  return false;
+}
+
+/**
+ * Fill the empty boxes with the accepted talks that have no slot yet.
+ *
+ * Deterministic and local. There is no model call and nothing here reads
+ * `ANTHROPIC_API_KEY`: the assist an organizer wants at this point is not a
+ * judgement call, it is the tedium of dragging twenty talks onto a grid, and a
+ * control that renders disabled on a deployment with no key configured is an
+ * assist nobody can use.
+ *
+ * Three rules, in order of how much they matter.
+ *
+ * It never evicts. Only slots that are already empty are candidates, and the
+ * write carries `submission_id is null` in its own WHERE clause, so a talk
+ * dropped by hand between the read and the write survives and its box is simply
+ * skipped rather than overwritten.
+ *
+ * It never double-books a speaker. The check is `overlaps` from
+ * `src/lib/conflicts.ts`, the same predicate the banner on this page grades
+ * against, consulted against both the placements already on the grid and the
+ * ones made earlier in this same pass.
+ *
+ * After that it prefers a band the talk actually fits and a room big enough for
+ * the interest in it, in that order, then the earliest start. Those two are
+ * preferences and not conditions: a talk with nowhere ideal still gets placed,
+ * because a half-filled grid an organizer must finish by hand is worse than a
+ * full one they can adjust. Rooms carry no track, so there is nothing to match a
+ * talk's track against and no attempt is made to.
+ */
+export async function autoSchedule(): Promise<void> {
+  await requireRole('organizer');
+
+  const [open, pool, booked, demand] = await Promise.all([
+    openSlots(),
+    unscheduledAccepted(),
+    speakerBookings(),
+    bookmarkDemand(),
+  ]);
+
+  const busy = booked.map((row) => ({
+    speakerId: row.speakerId,
+    start: row.startsAt.getTime(),
+    end: row.endsAt.getTime(),
+  }));
+  const taken = new Set<string>();
+  const placements: { slotId: string; submissionId: string }[] = [];
+
+  // Most-starred first, so when the big rooms run out they have gone to the
+  // talks the most people said they wanted to be in the room for. Title breaks
+  // the tie, which keeps two runs over unchanged data identical.
+  const ordered = [...pool].sort(
+    (a, b) => (demand.get(b.id) ?? 0) - (demand.get(a.id) ?? 0) || a.title.localeCompare(b.title),
+  );
+
+  for (const talk of ordered) {
+    const minutes = FORMAT_MINUTES[talk.format];
+    const wanted = demand.get(talk.id) ?? 0;
+
+    let best: (typeof open)[number] | null = null;
+    let bestRank: number[] | null = null;
+
+    for (const slot of open) {
+      if (taken.has(slot.id)) continue;
+      const start = slot.startsAt.getTime();
+      const end = slot.endsAt.getTime();
+      if (busy.some((b) => b.speakerId === talk.speakerId && overlaps(start, end, b.start, b.end))) {
+        continue;
+      }
+
+      const rank = [
+        end - start < minutes * 60_000 ? 1 : 0,
+        slot.capacity !== null && wanted > slot.capacity ? 1 : 0,
+        start,
+        // Negated, so the roomiest of two equally early boxes wins.
+        -(slot.capacity ?? 0),
+      ];
+      if (bestRank === null || ranksBefore(rank, bestRank)) {
+        best = slot;
+        bestRank = rank;
+      }
+    }
+
+    if (!best) continue;
+    taken.add(best.id);
+    busy.push({
+      speakerId: talk.speakerId,
+      start: best.startsAt.getTime(),
+      end: best.endsAt.getTime(),
+    });
+    placements.push({ slotId: best.id, submissionId: talk.id });
+  }
+
+  // Counted from what the database actually changed, not from what was planned.
+  // The `is null` guard is what makes "never evicts" true against a hand
+  // placement that landed between the read and the write, and a run that reports
+  // the plan would claim a talk it had just declined to place.
+  let written = 0;
+  if (placements.length > 0) {
+    written = await db.transaction(async (tx) => {
+      let count = 0;
+      for (const placement of placements) {
+        const rows = await tx
+          .update(slots)
+          .set({ submissionId: placement.submissionId })
+          .where(and(eq(slots.id, placement.slotId), isNull(slots.submissionId)))
+          .returning({ id: slots.id });
+        count += rows.length;
+      }
+      return count;
+    });
+    revalidateSchedule();
+  }
+
+  // Both counts, always, including zero. A bulk action that says nothing on a
+  // press that placed nothing is indistinguishable from a button that does not
+  // work, and "there was nowhere to put them" is the answer an organizer needs.
+  redirect(`/organizer/schedule?placed=${written}&unplaced=${pool.length - written}`);
 }
 
 /**

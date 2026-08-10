@@ -4,9 +4,12 @@ import {
   availabilityConflicts,
   capacityWarnings,
   declinedPlacements,
+  roomConflicts,
   speakerConflicts,
+  unapprovedPlacements,
   withdrawnPlacements,
 } from '@/lib/conflicts';
+import { CONTENT_STATUS_LABELS } from '@/lib/content';
 import { dayKey, dayLabel, instantToWallClock, timeOfDay } from '@/lib/format';
 import { agenda, allRooms, getEvent, unscheduledAccepted } from '@/lib/queries';
 import {
@@ -20,7 +23,14 @@ import {
 import { pendingNotices } from '@/lib/schedule-notices';
 import { placements } from '@/lib/speaker-calendar';
 import { notifySchedule } from '../submissions/actions';
-import { addBreakBand, addTimeBand, clearBreakBand, deleteTimeBand, setAgendaPublished } from './actions';
+import {
+  addBreakBand,
+  addTimeBand,
+  autoSchedule,
+  clearBreakBand,
+  deleteTimeBand,
+  setAgendaPublished,
+} from './actions';
 import { slotLabels, timeBandImpact } from './queries';
 import { ScheduleFallback } from './ScheduleFallback';
 import { ScheduleGrid, type Band, type Cell } from './ScheduleGrid';
@@ -38,9 +48,11 @@ export default async function SchedulePage({
     entries,
     pool,
     conflicts,
+    collisions,
     unavailable,
     declined,
     withdrawn,
+    unapproved,
     tooSmall,
     labels,
   ] = await Promise.all([
@@ -49,14 +61,17 @@ export default async function SchedulePage({
     agenda(),
     unscheduledAccepted(),
     speakerConflicts(),
+    roomConflicts(),
     availabilityConflicts(),
     declinedPlacements(),
     withdrawnPlacements(),
+    unapprovedPlacements(),
     capacityWarnings(),
     slotLabels(),
   ]);
 
   const conflictedSlots = new Set(conflicts.flatMap((c) => c.slots.map((s) => s.slotId)));
+  const collidingSlots = new Set(collisions.flatMap((c) => c.slots.map((s) => s.slotId)));
   const unavailableSlots = new Map(unavailable.map((row) => [row.slotId, row.note]));
   const overCapacitySlots = new Map(
     tooSmall.map((row) => [row.slotId, { bookmarks: row.bookmarks, capacity: row.capacity }]),
@@ -64,11 +79,22 @@ export default async function SchedulePage({
 
   const view: ScheduleView = isScheduleView(params.view) ? params.view : 'grid';
 
+  // What the last auto-schedule press did, read back off the query string the
+  // action redirected to. A server action cannot hand a value to a server
+  // component, and this is the same door `confirmDelete` below comes through.
+  const count = (value: string | string[] | undefined): number | null => {
+    const parsed = Number.parseInt(typeof value === 'string' ? value : '', 10);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+  };
+  const placed = count(params.placed);
+  const unplaced = count(params.unplaced);
+
   // One flat, timezone-resolved row per slot. The grid still builds its own
   // bands below from the same `agenda()` rows; this is what the reading views
   // and the fallback form group, so all six views agree about what is placed.
   const flat = toScheduleEntries(entries, labels, event.timezone, {
     conflicted: conflictedSlots,
+    roomConflicted: collidingSlots,
     unavailable: new Set(unavailableSlots.keys()),
     overCapacity: new Set(overCapacitySlots.keys()),
   });
@@ -111,6 +137,7 @@ export default async function SchedulePage({
       trackColour: entry.trackColour,
       label: labels.get(entry.slotId) ?? null,
       conflicted: conflictedSlots.has(entry.slotId),
+      roomConflicted: collidingSlots.has(entry.slotId),
       unavailable: unavailableSlots.has(entry.slotId)
         ? { note: unavailableSlots.get(entry.slotId) ?? null }
         : null,
@@ -143,6 +170,22 @@ export default async function SchedulePage({
             <LinkButton href="/organizer/rooms" variant="secondary">
               Rooms &amp; tracks
             </LinkButton>
+            {/*
+              One press fills the empty boxes. It sits beside the other bulk
+              controls rather than over the unscheduled pool, because it acts on
+              the whole grid and an organizer reading the pool is already placing
+              one talk by hand.
+            */}
+            <form action={autoSchedule}>
+              <Button
+                type="submit"
+                variant="secondary"
+                disabled={pool.length === 0}
+                data-testid="auto-schedule"
+              >
+                Auto-schedule {pool.length} talk(s)
+              </Button>
+            </form>
             {/*
               Sending is a separate press from moving, for the same reason
               deciding is separate from `notifyDecided`: an organizer drags a
@@ -239,12 +282,44 @@ export default async function SchedulePage({
         </Notice>
       ) : null}
 
+      {placed !== null ? (
+        <Notice tone={placed > 0 ? 'good' : 'warn'}>
+          <span data-testid="auto-schedule-result">
+            Placed {placed} talk(s).
+            {unplaced !== null && unplaced > 0
+              ? ` ${unplaced} could not be placed: no free slot that leaves the speaker in one room at a time.`
+              : ''}{' '}
+            Nothing already on the grid was moved, and nobody was emailed.
+          </span>
+        </Notice>
+      ) : null}
+
       {conflicts.length > 0 ? (
         <Notice tone="bad">
           <span data-testid="conflict-warning">
             {conflicts.length} speaker(s) are booked into two rooms at the same time:{' '}
             {conflicts.map((c) => c.speakerName ?? c.speakerEmail).join(', ')}. The grid still
             accepts the placement; the warning stays until you move one.
+          </span>
+        </Notice>
+      ) : null}
+
+      {/*
+        Directly under the speaker warning because they are one rule read two
+        ways: a person cannot be in two places at once, and a place cannot hold
+        two talks at once. Both are computed from the database on every load, so
+        both outlive the drag that caused them.
+      */}
+      {collisions.length > 0 ? (
+        <Notice tone="bad">
+          <span data-testid="room-conflict-warning">
+            {collisions.length} room(s) are running two talks at overlapping times:{' '}
+            {collisions
+              .map((c) => `${c.roomName} (${c.slots.map((s) => s.title).join(', ')})`)
+              .join('; ')}
+            . A talk runs for as long as its format, not for as long as the band it sits in, so a
+            90 minute workshop dropped into a 45 minute band overlaps the next band in that room.
+            The grid still accepts the placement; the warning stays until you move one.
           </span>
         </Notice>
       ) : null}
@@ -305,6 +380,38 @@ export default async function SchedulePage({
               .map((row) => `${row.title} (${row.bookmarks} starred, ${row.roomName} seats ${row.capacity})`)
               .join(', ')}
             .
+          </span>
+        </Notice>
+      ) : null}
+
+      {/*
+        Last of the warnings, because it is the only one that is not about the
+        schedule being wrong. Everything above says an organizer has put a talk
+        somewhere it should not be; this says the talk is fine and the public
+        page is holding it back, which is a question they ask after pressing
+        Publish and finding /agenda shorter than the grid.
+
+        Naming the publish button is the point of the last sentence. Publishing
+        is the control an organizer reaches for when the public page looks
+        wrong, and it is not the one that fixes this.
+      */}
+      {unapproved.length > 0 ? (
+        <Notice tone="warn">
+          <span data-testid="unapproved-warning">
+            {unapproved.length} placed session(s) are not on the public agenda yet:{' '}
+            {unapproved
+              .map((row) => `${row.title} (${CONTENT_STATUS_LABELS[row.contentStatus]})`)
+              .join(', ')}
+            . The agenda lists an accepted session once its content is approved, so these stay off
+            it whether or not the agenda is published. Approve them on the{' '}
+            <Link
+              href="/organizer/submissions?status=accepted"
+              className="underline"
+              data-testid="unapproved-link"
+            >
+              submissions board
+            </Link>{' '}
+            and they appear.
           </span>
         </Notice>
       ) : null}

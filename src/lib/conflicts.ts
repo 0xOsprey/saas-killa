@@ -1,6 +1,42 @@
 import { and, asc, eq, isNotNull, ne, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { bookmarks, rooms, slots, speakerAvailability, submissions, users } from '@/db/schema';
+import type { ContentStatus } from '@/db/schema';
+import { FORMAT_MINUTES } from '@/lib/format';
+
+/**
+ * The half-open overlap test, in milliseconds, and the only definition of it in
+ * this file. A talk ending at 14:00 and the next starting at 14:00 are back to
+ * back, not overlapping.
+ *
+ * Exported because the auto-scheduler has to ask this before it writes rather
+ * than after. Two functions that each decide what "at the same time" means is
+ * how a placer comes to disagree with the banner that grades its work.
+ */
+export function overlaps(aStart: number, aEnd: number, bStart: number, bEnd: number): boolean {
+  return aStart < bEnd && aEnd > bStart;
+}
+
+export type SpeakerBooking = { speakerId: string; startsAt: Date; endsAt: Date };
+
+/**
+ * Every placement on the grid, as the interval its speaker is spoken for.
+ *
+ * The slot's own interval, not the format-extended one `roomConflicts` uses. It
+ * has to be the interval `speakerConflicts` tests, because this is what the
+ * auto-scheduler consults before placing, and a placer working to a stricter
+ * rule than the banner would refuse slots the screen says are free.
+ */
+export async function speakerBookings(): Promise<SpeakerBooking[]> {
+  return db
+    .select({
+      speakerId: submissions.speakerId,
+      startsAt: slots.startsAt,
+      endsAt: slots.endsAt,
+    })
+    .from(slots)
+    .innerJoin(submissions, eq(submissions.id, slots.submissionId));
+}
 
 export type SpeakerConflict = {
   speakerId: string;
@@ -68,6 +104,101 @@ export async function speakerConflicts(): Promise<SpeakerConflict[]> {
     }
   }
   return [...bySpeaker.values()];
+}
+
+export type RoomConflict = {
+  roomId: string;
+  roomName: string;
+  slots: { slotId: string; title: string; startsAt: Date; runsUntil: Date }[];
+};
+
+/**
+ * The other half of the double-booking rule: one room cannot run two talks at
+ * once either.
+ *
+ * What that means here follows from the table. `slots` is unique on (room,
+ * start), so two talks can never share one box, and dropping onto an occupied
+ * box moves the sitting talk out rather than stacking on it. Every overlap this
+ * can find is therefore between two different slots in the same room, and it
+ * arrives two ways.
+ *
+ * Bands are added at any start with any length, so a 90 minute band at 10:00 and
+ * a 45 minute band at 10:30 are separate rows in every room and both take a
+ * talk. And a talk is as long as its format says, not as long as the box it was
+ * dropped into, so a 90 minute workshop in a 45 minute band runs into the next
+ * band in that room even though the grid draws it inside one cell.
+ *
+ * Effective end is therefore `max(slot end, start + format length)`. A talk
+ * shorter than its band still holds the whole band, because the band is what the
+ * programme publishes and what the next talk waits for; only running over the
+ * end is a claim on somebody else's time.
+ *
+ * The overlap is computed in TypeScript rather than pushed into SQL, unlike
+ * `speakerConflicts`, because a format's length lives in `FORMAT_MINUTES`. A
+ * CASE expression restating those five numbers would be a second copy of how
+ * long a talk is, free to drift from the one the agenda, the `.ics` feeds and
+ * the Accelevents push all render from.
+ *
+ * Reported, never blocked, like every other warning on this grid.
+ */
+export async function roomConflicts(): Promise<RoomConflict[]> {
+  const placed = await db
+    .select({
+      slotId: slots.id,
+      roomId: slots.roomId,
+      roomName: rooms.name,
+      title: submissions.title,
+      format: submissions.format,
+      startsAt: slots.startsAt,
+      endsAt: slots.endsAt,
+    })
+    .from(slots)
+    .innerJoin(submissions, eq(submissions.id, slots.submissionId))
+    .innerJoin(rooms, eq(rooms.id, slots.roomId))
+    .orderBy(asc(rooms.name), asc(slots.startsAt));
+
+  type Placement = (typeof placed)[number] & { runsUntil: number };
+
+  const byRoom = new Map<string, Placement[]>();
+  for (const row of placed) {
+    const placement: Placement = {
+      ...row,
+      runsUntil: Math.max(
+        row.endsAt.getTime(),
+        row.startsAt.getTime() + FORMAT_MINUTES[row.format] * 60_000,
+      ),
+    };
+    const inRoom = byRoom.get(row.roomId);
+    if (inRoom) inRoom.push(placement);
+    else byRoom.set(row.roomId, [placement]);
+  }
+
+  const conflicts: RoomConflict[] = [];
+  for (const inRoom of byRoom.values()) {
+    // Pair by pair rather than a sweep. One room holds a day's worth of bands,
+    // so the quadratic is a rounding error, and every talk that overlaps any
+    // other has to be named in the warning rather than only the later one.
+    const overlapping = inRoom.filter((row) =>
+      inRoom.some(
+        (other) =>
+          other.slotId !== row.slotId &&
+          overlaps(row.startsAt.getTime(), row.runsUntil, other.startsAt.getTime(), other.runsUntil),
+      ),
+    );
+    const first = overlapping[0];
+    if (!first) continue;
+    conflicts.push({
+      roomId: first.roomId,
+      roomName: first.roomName,
+      slots: overlapping.map((row) => ({
+        slotId: row.slotId,
+        title: row.title,
+        startsAt: row.startsAt,
+        runsUntil: new Date(row.runsUntil),
+      })),
+    });
+  }
+  return conflicts;
 }
 
 export type AvailabilityConflict = {
@@ -198,6 +329,58 @@ export async function withdrawnPlacements(): Promise<WithdrawnPlacement[]> {
     .innerJoin(rooms, eq(rooms.id, slots.roomId))
     .where(eq(submissions.status, 'withdrawn'))
     .orderBy(asc(slots.startsAt), asc(users.email));
+}
+
+export type UnapprovedPlacement = {
+  slotId: string;
+  submissionId: string;
+  title: string;
+  roomName: string;
+  startsAt: Date;
+  contentStatus: ContentStatus;
+};
+
+/**
+ * A talk on the grid that the public agenda is withholding, because its content
+ * has not been approved.
+ *
+ * `agendaSlots` in `src/lib/agenda-filters.ts` gates on two columns: accepted by
+ * the committee, and `contentStatus = 'approved'`. Placement gates on the first
+ * one only. So an organizer can drop a talk into a box, press Publish, open
+ * `/agenda` and find nothing there, with the grid and the public page each
+ * telling the truth and neither explaining the other. That silence reads as a
+ * broken publish, which is the failure this exists to prevent.
+ *
+ * The content leg is the only one reported here. A withdrawn or unaccepted talk
+ * is withheld too, but by the status leg, and it already has a warning of its
+ * own above; naming it twice would offer "approve the content" as the remedy for
+ * a talk nobody is giving.
+ *
+ * `contentStatus` rides along because draft and pending are different problems
+ * wearing the same absence. Draft means the speaker has not sent it for review;
+ * pending means they have and it is sitting with an organizer. Only one of those
+ * is the organizer's move to make.
+ *
+ * There is no grandfather clause here, matching the gate exactly. `contentIsPublic`
+ * in `src/lib/content.ts` does grandfather a populated draft, but that governs
+ * individual fields on a page, not whether the session is listed at all, and a
+ * count computed from the looser rule would under-report the withheld set.
+ */
+export async function unapprovedPlacements(): Promise<UnapprovedPlacement[]> {
+  return db
+    .select({
+      slotId: slots.id,
+      submissionId: submissions.id,
+      title: submissions.title,
+      roomName: rooms.name,
+      startsAt: slots.startsAt,
+      contentStatus: submissions.contentStatus,
+    })
+    .from(slots)
+    .innerJoin(submissions, eq(submissions.id, slots.submissionId))
+    .innerJoin(rooms, eq(rooms.id, slots.roomId))
+    .where(and(eq(submissions.status, 'accepted'), ne(submissions.contentStatus, 'approved')))
+    .orderBy(asc(slots.startsAt), asc(submissions.title));
 }
 
 export type CapacityWarning = {

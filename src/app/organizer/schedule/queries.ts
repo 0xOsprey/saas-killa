@@ -1,6 +1,6 @@
-import { eq, isNotNull } from 'drizzle-orm';
+import { and, asc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import { db } from '@/db';
-import { slots, submissions } from '@/db/schema';
+import { bookmarks, rooms, slots, submissions } from '@/db/schema';
 
 /**
  * Reads for the schedule screen. Kept out of `actions.ts` on purpose: that file
@@ -25,6 +25,57 @@ export async function timeBandImpact(startsAt: Date): Promise<TimeBandImpact> {
     .sort();
 
   return { slots: rows.length, placed: titles.length, titles };
+}
+
+export type OpenSlot = {
+  id: string;
+  roomId: string;
+  capacity: number | null;
+  startsAt: Date;
+  endsAt: Date;
+};
+
+/**
+ * Boxes the auto-scheduler may write into: empty, and not a break.
+ *
+ * The label test is the half that matters. A named block is an empty slot as far
+ * as `submission_id` is concerned, so without it one press would fill lunch and
+ * registration with talks, which is a schedule nobody asked for and a tedious
+ * one to undo box by box.
+ */
+export async function openSlots(): Promise<OpenSlot[]> {
+  return db
+    .select({
+      id: slots.id,
+      roomId: slots.roomId,
+      capacity: rooms.capacity,
+      startsAt: slots.startsAt,
+      endsAt: slots.endsAt,
+    })
+    .from(slots)
+    .innerJoin(rooms, eq(rooms.id, slots.roomId))
+    .where(and(isNull(slots.submissionId), isNull(slots.label)))
+    .orderBy(asc(slots.startsAt), asc(rooms.position));
+}
+
+/**
+ * Bookmarks per submission, which is the only demand signal this app has.
+ *
+ * A separate read rather than a column on the pool, so the question "which talks
+ * still need a slot" keeps its single answer in `unscheduledAccepted()`. That
+ * filter carries a poster exclusion and an accepted-status check that are easy
+ * to get subtly wrong in a second copy.
+ */
+export async function bookmarkDemand(): Promise<Map<string, number>> {
+  const rows = await db
+    .select({
+      submissionId: bookmarks.submissionId,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(bookmarks)
+    .groupBy(bookmarks.submissionId);
+
+  return new Map(rows.map((row) => [row.submissionId, row.count]));
 }
 
 /**
