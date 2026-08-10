@@ -1,4 +1,5 @@
 import { and, eq, sql } from 'drizzle-orm';
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { z } from 'zod';
 import { db } from '@/db';
@@ -104,6 +105,15 @@ export default async function SubmissionDetailPage({
 
   return (
     <article className="mx-auto max-w-2xl space-y-5">
+      {/*
+        Getting back out. Browser back works and the nav carries an Agenda
+        link, but this page is what a shared session URL opens to, and from a
+        cold arrival neither of those reads as "the rest of the programme is
+        over here". One link costs nothing and answers it in place.
+      */}
+      <Link href="/agenda" className="text-sm text-accent hover:underline" data-testid="back-to-agenda">
+        ← Back to the agenda
+      </Link>
       <PageHeader
         title={row.title}
         description={
