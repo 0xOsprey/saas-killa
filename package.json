@@ -26,7 +26,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.68.0",
     "clsx": "^2.1.1",
-    "drizzle-orm": "^0.40.0",
+    "drizzle-orm": "^0.45.2",
     "next": "^15.3.0",
     "postgres": "^3.4.5",
     "react": "^19.1.0",
@@ -45,5 +45,13 @@
     "tailwindcss": "^4.0.0",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "postcss": "^8.5.23",
+      "sharp": "^0.35.0",
+      "esbuild": "^0.25.0"
+    },
+    "onlyBuiltDependencies": ["sharp", "esbuild"]
   }
 }
