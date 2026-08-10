@@ -1,7 +1,7 @@
 'use server';
 
 import { z } from 'zod';
-import { issueMagicLink, upsertUserByEmail } from '@/lib/auth';
+import { issueMagicLink, MagicLinkRateLimitError, upsertUserByEmail } from '@/lib/auth';
 import { magicLinkMail, sendSignInMail } from '@/lib/email';
 import { getEvent } from '@/lib/queries';
 
@@ -27,8 +27,13 @@ export async function requestMagicLink(
 
   const event = await getEvent();
   const user = await upsertUserByEmail(parsed.data.email);
-  const token = await issueMagicLink(user.id);
-  await sendSignInMail(magicLinkMail(user.email, token, event.name));
+  try {
+    const token = await issueMagicLink(user.id);
+    await sendSignInMail(magicLinkMail(user.email, token, event.name));
+  } catch (err) {
+    if (err instanceof MagicLinkRateLimitError) return { error: err.message };
+    throw err;
+  }
 
   return { sent: parsed.data.email };
 }

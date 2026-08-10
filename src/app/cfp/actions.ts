@@ -9,7 +9,7 @@ import {
   isDuplicateTitleError,
   titleAlreadyFiled,
 } from '@/lib/abstracts';
-import { currentUser, issueMagicLink, startSession, upsertUserByEmail } from '@/lib/auth';
+import { currentUser, issueMagicLink, MagicLinkRateLimitError, startSession, upsertUserByEmail } from '@/lib/auth';
 import {
   alertOrganizers,
   magicLinkMail,
@@ -185,9 +185,14 @@ export async function submitProposal(_prev: CfpState, formData: FormData): Promi
   // A first-time submitter has no session. Email them a link so the submission
   // is not stranded behind an account they never created.
   if (!signedIn) {
-    const token = await issueMagicLink(speaker.id);
-    await sendSignInMail(magicLinkMail(speaker.email, token, event.name));
-    await startSession(speaker.id);
+    try {
+      const token = await issueMagicLink(speaker.id);
+      await sendSignInMail(magicLinkMail(speaker.email, token, event.name));
+      await startSession(speaker.id);
+    } catch (err) {
+      if (err instanceof MagicLinkRateLimitError) return { error: err.message };
+      throw err;
+    }
   }
 
   // Every submitter gets a receipt, first-timer included. The sign-in link

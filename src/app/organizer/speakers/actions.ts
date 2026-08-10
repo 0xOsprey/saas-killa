@@ -16,7 +16,7 @@ import {
   userRoles,
   users,
 } from '@/db/schema';
-import { grantRole, issueMagicLink, requireRole, upsertUserByEmail } from '@/lib/auth';
+import { grantRole, issueMagicLink, MagicLinkRateLimitError, requireRole, upsertUserByEmail } from '@/lib/auth';
 import { sendAndLog } from '@/lib/email';
 import { wallClockToInstant } from '@/lib/format';
 import { getEvent } from '@/lib/queries';
@@ -613,17 +613,22 @@ export async function inviteSpeakerAction(
     .returning({ id: submissions.id });
   if (!created) return { error: 'The submission could not be created.' };
 
-  const token = await issueMagicLink(speaker.id);
-  await sendAndLog(
-    speakerInviteMail({
-      to: speaker.email,
-      speakerName: speaker.name ?? input.name,
-      title: input.title,
-      token,
-      eventName: event.name,
-    }),
-    { userId: speaker.id, kind: 'speaker_invite', submissionId: created.id },
-  );
+  try {
+    const token = await issueMagicLink(speaker.id);
+    await sendAndLog(
+      speakerInviteMail({
+        to: speaker.email,
+        speakerName: speaker.name ?? input.name,
+        title: input.title,
+        token,
+        eventName: event.name,
+      }),
+      { userId: speaker.id, kind: 'speaker_invite', submissionId: created.id },
+    );
+  } catch (err) {
+    if (err instanceof MagicLinkRateLimitError) return { error: err.message };
+    throw err;
+  }
 
   refreshSpeakerScreens(speaker.id);
   revalidatePath('/organizer/submissions');

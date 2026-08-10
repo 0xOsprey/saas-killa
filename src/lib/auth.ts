@@ -1,5 +1,5 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
-import { and, eq, gt, isNull, lte } from 'drizzle-orm';
+import { and, eq, gt, isNull, lte, sql } from 'drizzle-orm';
 import { cookies } from 'next/headers';
 import { db } from '@/db';
 import { authSessions, magicLinkTokens, userRoles, users } from '@/db/schema';
@@ -9,6 +9,8 @@ import { env } from './env';
 export const SESSION_COOKIE = 'sb_session';
 
 const MAGIC_LINK_TTL_MS = 15 * 60 * 1000;
+const MAGIC_LINK_WINDOW_MS = 10 * 60 * 1000;
+const MAGIC_LINK_LIMIT = 3;
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 function sha256(value: string): string {
@@ -58,12 +60,34 @@ export async function upsertUserByEmail(rawEmail: string, name?: string): Promis
   return created;
 }
 
+export class MagicLinkRateLimitError extends Error {
+  constructor() {
+    super('Too many sign-in links. Try again in 10 minutes.');
+    this.name = 'MagicLinkRateLimitError';
+  }
+}
+
+async function recentMagicLinkCount(userId: string): Promise<number> {
+  const cutoff = new Date(Date.now() - MAGIC_LINK_WINDOW_MS);
+  const [row] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(magicLinkTokens)
+    .where(and(eq(magicLinkTokens.userId, userId), gt(magicLinkTokens.createdAt, cutoff)));
+  return row?.count ?? 0;
+}
+
 /**
  * Mint a magic link. The raw token is returned to the caller so it can go into
  * the email; only its hash is written to the database, so a database read never
  * yields a usable link.
+ *
+ * A rolling window limits each user to three magic links per ten minutes. This
+ * is checked before insert so a token is never written when the limit is hit.
  */
 export async function issueMagicLink(userId: string): Promise<string> {
+  if ((await recentMagicLinkCount(userId)) >= MAGIC_LINK_LIMIT) {
+    throw new MagicLinkRateLimitError();
+  }
   const token = randomBytes(32).toString('base64url');
   await db.insert(magicLinkTokens).values({
     userId,
