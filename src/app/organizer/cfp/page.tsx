@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { Badge, Button, Card, Empty, Field, Input, Notice, PageHeader, Select } from '@/components/ui';
-import { dayLabel, instantToWallClock } from '@/lib/format';
+import { STATUS_LABELS, dayLabel, instantToWallClock } from '@/lib/format';
 import {
   assignmentRoster,
   reviewerCompletion,
@@ -29,7 +29,7 @@ const ERRORS: Record<string, string> = {
   'no-reviewers': 'Nobody holds the reviewer role yet. Grant it on the Speakers tab first.',
   assign: 'Pick both a submission and a reviewer.',
   'not-reviewer': 'That person does not hold the reviewer role.',
-  decided: 'That submission has already been decided.',
+  withdrawn: 'The speaker withdrew that proposal, so it is not the committee’s to hand out.',
   'self-review': 'A reviewer cannot be assigned their own proposal.',
   'no-round': 'No review round is open. Open one before assigning or reminding.',
   'round-name': 'Give the round a name.',
@@ -88,7 +88,7 @@ export default async function OrganizerCfpPage({
     <div className="space-y-5">
       <PageHeader
         title="Call for papers"
-        description={`${coverage.length} open submission(s) · ${roster.length} assignment(s) · ${totalOutstanding} grade(s) outstanding.`}
+        description={`${coverage.filter((row) => row.status === 'submitted').length} open of ${coverage.length} submission(s) · ${roster.length} assignment(s) · ${totalOutstanding} grade(s) outstanding.`}
         action={
           <div className="flex items-center gap-3">
             <Link
@@ -455,7 +455,8 @@ export default async function OrganizerCfpPage({
                 </option>
                 {coverage.map((row) => (
                   <option key={row.submissionId} value={row.submissionId}>
-                    {row.title} ({row.assigned} assigned)
+                    {row.title} ({row.assigned} assigned
+                    {row.status === 'submitted' ? '' : `, ${STATUS_LABELS[row.status]}`})
                   </option>
                 ))}
               </Select>
@@ -485,11 +486,13 @@ export default async function OrganizerCfpPage({
           <div>
             <h2 className="text-sm font-semibold text-ink">Coverage</h2>
             <p className="mt-0.5 text-xs text-muted">
-              Open submissions, thinnest coverage first. A tick means that reviewer has graded it.
+              Every submission on the call, open ones first and thinnest coverage first inside that.
+              A tick means that reviewer has graded it. Decided proposals stay on the list because
+              who read them is part of how the decision was reached.
             </p>
           </div>
 
-          {coverage.length === 0 ? <Empty>No open submissions.</Empty> : null}
+          {coverage.length === 0 ? <Empty>Nothing has been submitted yet.</Empty> : null}
 
           {coverage.map((row) => {
             const held = bySubmission.get(row.submissionId) ?? [];
@@ -500,7 +503,17 @@ export default async function OrganizerCfpPage({
                 data-testid={`coverage-${row.submissionId}`}
               >
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <span className="text-sm text-ink">{row.title}</span>
+                  <span className="text-sm text-ink">
+                    {row.title}
+                    {row.status === 'submitted' ? null : (
+                      <span
+                        className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-muted"
+                        data-testid={`coverage-status-${row.submissionId}`}
+                      >
+                        {STATUS_LABELS[row.status]}
+                      </span>
+                    )}
+                  </span>
                   <span className="text-xs text-muted">
                     {row.trackName ? `${row.trackName} · ` : ''}
                     {row.assigned} assigned · {row.reviewCount} review(s)

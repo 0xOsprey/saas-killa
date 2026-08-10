@@ -55,37 +55,47 @@ export type ReviewerCompletionRow = {
  *
  *   assigned    every row the reviewer owns, ever, decided or not
  *   outstanding ungraded, still open, not recused, so still real work
- *   decided     ungraded and the submission was decided out from under it
+ *   decided     outstanding, and a chair has already ruled on it
  *   recused     ungraded because this reviewer declared a conflict on it
  *   overdue     outstanding and past its dueAt
  *
  * `assigned` deliberately keeps rows whose submission was later accepted or
  * rejected: the reviewer was asked and never answered, and hiding that would
- * flatter the completion rate.
+ * flatter the completion rate. It drops withdrawn ones, which is the opposite
+ * case — nobody is owed a read on work its author took back.
  *
- * `completionPct` is over work that could actually be done, not over `assigned`.
- * Dividing by `assigned` was honest arithmetic and a dishonest number: a
- * proposal decided before its reviewer got to it is not a review anybody can
- * file, so counting it against them pinned the committee permanently below 100%
- * with nothing on screen saying why. The two counts that explain the gap are
- * columns of their own now, so nothing is hidden by taking them out of the
- * denominator.
+ * `decided` is no longer an excuse column. It used to name the rows that had
+ * been ruled on before their reviewer got to them, which `submitReview` then
+ * refused to accept a grade for; those are gradable now, so the count is a
+ * subset of `outstanding` rather than a deduction from it. What it tells a chair
+ * is which of the chasing is worth doing first.
+ *
+ * `completionPct` is over work that could actually be done, not over `assigned`,
+ * which is now the same set minus recusals.
  */
 export async function reviewerCompletion(roundId: string): Promise<ReviewerCompletionRow[]> {
-  const ungraded = sql`${reviewAssignments.submissionId} is not null and ${reviews.id} is null`;
+  // A withdrawn proposal is not work anybody owes, so it is out of `assigned`
+  // and therefore out of every column derived from it. The reviewer's own queue
+  // stopped listing withdrawn rows at the same time; the two screens report the
+  // same set or the chair is chasing work that no longer exists.
+  const live = sql`${reviewAssignments.submissionId} is not null and ${submissions.status} <> 'withdrawn'`;
+  const ungraded = sql`${live} and ${reviews.id} is null`;
   const recused = sql`${reviewConflicts.reviewerId} is not null`;
-  const actionable = sql`${ungraded} and ${submissions.status} = 'submitted' and not ${recused}`;
+  // No status test any more. `submitReview` accepts a grade on a decided
+  // proposal, so a decided assignment is work the reviewer can still do and
+  // leaving it out of `outstanding` would have reported it as finished.
+  const actionable = sql`${ungraded} and not ${recused}`;
 
   return db
     .select({
       reviewerId: users.id,
       name: users.name,
       email: users.email,
-      assigned: sql<number>`count(${reviewAssignments.submissionId})::int`,
+      assigned: sql<number>`count(*) filter (where ${live})::int`,
       graded: sql<number>`count(${reviews.id})::int`,
       outstanding: sql<number>`count(*) filter (where ${actionable})::int`,
       decided: sql<number>`count(*) filter (
-        where ${ungraded} and ${submissions.status} <> 'submitted'
+        where ${ungraded} and ${submissions.status} in ('accepted', 'rejected')
       )::int`,
       recused: sql<number>`count(*) filter (
         where ${ungraded} and ${submissions.status} = 'submitted' and ${recused}
@@ -138,6 +148,7 @@ export type ReviewerQueueRow = {
   format: SubmissionFormat;
   audienceLevel: AudienceLevel;
   trackName: string | null;
+  status: SubmissionStatus;
   reviewCount: number;
   myScore: number | null;
   myRubric: Record<string, number> | null;
@@ -171,10 +182,20 @@ const MY_GRADE = (reviewerId: string) => ({
 });
 
 /**
- * This reviewer's queue: their `review_assignments` rows, narrowed to
- * submissions still open for grading. An assignment on a decided submission is
- * not actionable — `submitReview` refuses it — so leaving it in the queue would
- * show a card whose form cannot do anything.
+ * This reviewer's queue: every `review_assignments` row they hold in the round,
+ * minus the ones the speaker has withdrawn.
+ *
+ * It used to stop at `status = 'submitted'`, and a second query listed the
+ * decided ones underneath as titles with no body. That split existed because
+ * `submitReview` refused a decided proposal, so a card down there would have
+ * carried a form that could not fire. `submitReview` now refuses only a
+ * withdrawn one, which collapses the two lists back into the one thing a
+ * reviewer was ever asked for: here is what the committee gave you, here is
+ * where each one stands, grade what you can still say something about.
+ *
+ * `status` rides along so the card can say so. A reviewer typing a 4 into a
+ * proposal that was accepted last week should be able to see that before they
+ * type it, not discover it from the chair afterwards.
  */
 export async function assignedQueue(
   reviewerId: string,
@@ -188,6 +209,7 @@ export async function assignedQueue(
       format: submissions.format,
       audienceLevel: submissions.audienceLevel,
       trackName: tracks.name,
+      status: submissions.status,
       dueAt: reviewAssignments.dueAt,
       ...MY_GRADE(reviewerId),
     })
@@ -202,11 +224,14 @@ export async function assignedQueue(
       and(
         eq(reviewAssignments.reviewerId, reviewerId),
         eq(reviewAssignments.roundId, roundId),
-        eq(submissions.status, 'submitted'),
+        ne(submissions.status, 'withdrawn'),
       ),
     )
     .groupBy(submissions.id, tracks.name, reviewAssignments.dueAt)
     .orderBy(
+      // Still-open work first. A decided proposal is readable and gradable, but
+      // it is not what a reviewer opening this page at 11pm needs to see first.
+      sql`(${submissions.status} <> 'submitted') asc`,
       sql`${reviewAssignments.dueAt} asc nulls last`,
       sql`count(${reviews.id}) asc`,
       asc(submissions.createdAt),
@@ -240,6 +265,7 @@ export async function openSubmissionQueue(
       format: submissions.format,
       audienceLevel: submissions.audienceLevel,
       trackName: tracks.name,
+      status: submissions.status,
       dueAt: sql<Date | null>`null::timestamptz`,
       ...MY_GRADE(reviewerId),
     })
@@ -252,59 +278,6 @@ export async function openSubmissionQueue(
     .where(and(eq(submissions.status, 'submitted'), ne(submissions.speakerId, reviewerId)))
     .groupBy(submissions.id, tracks.name)
     .orderBy(sql`count(${reviews.id}) asc`, asc(submissions.createdAt));
-}
-
-export type DecidedAssignmentRow = {
-  id: string;
-  title: string;
-  status: SubmissionStatus;
-  dueAt: Date | null;
-  graded: boolean;
-};
-
-/**
- * Assignments this reviewer holds whose submission has since been decided.
- *
- * `assignedQueue` cannot show these, because everything it returns carries a
- * live grading form and `submitReview` refuses a decided proposal. But dropping
- * them silently is what made a reviewer's queue read "0 of 0" the morning after
- * a chair worked through the board: the work they were asked for vanished with
- * no statement that it had ever existed, and their completion rate kept the hole
- * it left. This is the same rows, listed as what they are.
- *
- * Still no speaker column, for the same reason `assignedQueue` has none.
- */
-export async function decidedAssignments(
-  reviewerId: string,
-  roundId: string,
-): Promise<DecidedAssignmentRow[]> {
-  return db
-    .select({
-      id: submissions.id,
-      title: submissions.title,
-      status: submissions.status,
-      dueAt: reviewAssignments.dueAt,
-      graded: sql<boolean>`bool_or(${reviews.id} is not null)`,
-    })
-    .from(reviewAssignments)
-    .innerJoin(submissions, eq(submissions.id, reviewAssignments.submissionId))
-    .leftJoin(
-      reviews,
-      and(
-        eq(reviews.submissionId, submissions.id),
-        eq(reviews.roundId, roundId),
-        eq(reviews.reviewerId, reviewerId),
-      ),
-    )
-    .where(
-      and(
-        eq(reviewAssignments.reviewerId, reviewerId),
-        eq(reviewAssignments.roundId, roundId),
-        ne(submissions.status, 'submitted'),
-      ),
-    )
-    .groupBy(submissions.id, reviewAssignments.dueAt)
-    .orderBy(asc(submissions.title));
 }
 
 export async function assignmentCount(reviewerId: string, roundId: string): Promise<number> {
@@ -371,17 +344,32 @@ export type CoverageRow = {
   submissionId: string;
   title: string;
   trackName: string | null;
+  status: SubmissionStatus;
   assigned: number;
   reviewCount: number;
 };
 
-/** Assignment coverage per open submission, thinnest first — the gaps read top-down. */
+/**
+ * Assignment coverage per submission, thinnest first — the gaps read top-down.
+ *
+ * Every submission the speaker actually filed, not only the ones still open.
+ * Scoping this to `status = 'submitted'` meant a chair who worked ahead erased
+ * their own record: the moment a proposal was accepted it left this board, and
+ * with it went every trace of who had been asked to read it and who had. On the
+ * live instance nineteen decided proposals carrying assignments were invisible
+ * here, including both of the ones a reviewer was still being chased about.
+ *
+ * Open ones stay on top, because the thing this screen is for is finding the
+ * gaps in work that can still be done. A decided row is history, and it sorts
+ * like history.
+ */
 export async function submissionCoverage(roundId: string): Promise<CoverageRow[]> {
   return db
     .select({
       submissionId: submissions.id,
       title: submissions.title,
       trackName: tracks.name,
+      status: submissions.status,
       assigned: sql<number>`count(distinct ${reviewAssignments.reviewerId})::int`,
       reviewCount: sql<number>`count(distinct ${reviews.id})::int`,
     })
@@ -398,9 +386,13 @@ export async function submissionCoverage(roundId: string): Promise<CoverageRow[]
       reviews,
       and(eq(reviews.submissionId, submissions.id), eq(reviews.roundId, roundId)),
     )
-    .where(eq(submissions.status, 'submitted'))
+    .where(ne(submissions.status, 'withdrawn'))
     .groupBy(submissions.id, tracks.name)
-    .orderBy(sql`count(distinct ${reviewAssignments.reviewerId}) asc`, asc(submissions.title));
+    .orderBy(
+      sql`(${submissions.status} <> 'submitted') asc`,
+      sql`count(distinct ${reviewAssignments.reviewerId}) asc`,
+      asc(submissions.title),
+    );
 }
 
 export type AssignmentRow = {
@@ -413,9 +405,14 @@ export type AssignmentRow = {
 };
 
 /**
- * Every assignment on an open submission, with the reviewer's identity. This is
+ * Every assignment the committee has made, with the reviewer's identity. This is
  * the organizer's screen, where knowing who is holding what is the entire
  * point; the join is to the reviewer, never to the speaker.
+ *
+ * Paired with `submissionCoverage` and widened for the same reason: an
+ * assignment on a decided proposal is still a thing that happened, and a roster
+ * that drops it answers "who reviewed this?" with silence. Only `withdrawn` is
+ * out, because the speaker took that work back.
  */
 export async function assignmentRoster(roundId: string): Promise<AssignmentRow[]> {
   return db
@@ -438,7 +435,7 @@ export async function assignmentRoster(roundId: string): Promise<AssignmentRow[]
         eq(reviews.roundId, roundId),
       ),
     )
-    .where(and(eq(reviewAssignments.roundId, roundId), eq(submissions.status, 'submitted')))
+    .where(and(eq(reviewAssignments.roundId, roundId), ne(submissions.status, 'withdrawn')))
     .orderBy(asc(users.name), asc(users.email));
 }
 

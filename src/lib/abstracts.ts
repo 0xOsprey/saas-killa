@@ -10,6 +10,7 @@ import {
 } from '@/db/schema';
 import type { AudienceLevel, SubmissionFormat, SubmissionStatus } from '@/db/schema';
 import { upsertUserByEmail } from '@/lib/auth';
+import { EFFECTIVE_SCORE } from '@/lib/rubric';
 
 /**
  * The fields either side may edit after filing. Title, abstract and keywords are
@@ -340,7 +341,26 @@ async function authorRows(submissionIds: string[]): Promise<(AuthorRow & { submi
       name: users.name,
       email: users.email,
       position: submissionAuthors.position,
-      affiliation: submissionAuthors.affiliation,
+      // An empty override falls back to what the person's own profile says.
+      //
+      // `submission_authors.affiliation` is a per-submission override, for the
+      // co-author who was at a different company when this particular talk was
+      // written. It is blank on almost every row, and a blank one used to render
+      // as no affiliation at all — so a submission's own author line said less
+      // about its speaker than the public speakers directory did about the same
+      // person. Measured: the lead author of "Taming 40-Minute CI" showed as a
+      // bare name, while `users.company` on that same account has held
+      // "Latticework Systems" the whole time.
+      //
+      // `nullif(btrim(...), '')` because the column is nullable and the rows
+      // written by the co-author form store an empty string rather than null,
+      // so testing for null alone would have caught neither case.
+      affiliation: sql<
+        string | null
+      >`coalesce(
+        nullif(btrim(${submissionAuthors.affiliation}), ''),
+        nullif(btrim(concat_ws(', ', ${users.title}, ${users.company})), '')
+      )`,
       isPresenter: submissionAuthors.isPresenter,
       canEdit: submissionAuthors.canEdit,
     })
@@ -373,7 +393,16 @@ export async function authorsForMany(submissionIds: string[]): Promise<Map<strin
  */
 export function withSpeakerFallback(
   rows: AuthorRow[],
-  speaker: { userId: string; name: string | null; email: string },
+  speaker: {
+    userId: string;
+    name: string | null;
+    email: string;
+    // Optional so the callers that only had an id, a name and an address keep
+    // compiling. When they are here the manufactured row carries the same
+    // affiliation a real `submission_authors` row would have fallen back to.
+    title?: string | null;
+    company?: string | null;
+  },
 ): AuthorRow[] {
   if (rows.length > 0) return rows;
   return [
@@ -382,7 +411,7 @@ export function withSpeakerFallback(
       name: speaker.name,
       email: speaker.email,
       position: 0,
-      affiliation: null,
+      affiliation: [speaker.title, speaker.company].filter(Boolean).join(', ') || null,
       isPresenter: true,
       // The filer always may. The column is about everyone else.
       canEdit: true,
@@ -414,7 +443,13 @@ export async function authorsForDisplay(submissionId: string): Promise<AuthorRow
   const [rows, speaker] = await Promise.all([
     authorsFor(submissionId),
     db
-      .select({ userId: users.id, name: users.name, email: users.email })
+      .select({
+        userId: users.id,
+        name: users.name,
+        email: users.email,
+        title: users.title,
+        company: users.company,
+      })
       .from(submissions)
       .innerJoin(users, eq(users.id, submissions.speakerId))
       .where(eq(submissions.id, submissionId))
@@ -698,22 +733,6 @@ export type AbstractFilters = {
   sort?: AbstractSort | null;
   direction?: SortDirection | null;
 };
-
-/**
- * One review's contribution to an aggregate.
- *
- * Three columns collapse into one number here, in the order a reader would
- * expect to be believed: a human's override beats the grade it replaced, the
- * unrounded weighted mean beats the integer it was rounded into, and the integer
- * is what a grade filed before either of those existed has. Doing it in the
- * query rather than the page is what keeps sorting and displaying the same
- * number, which is the whole of what a sortable results table promises.
- */
-const EFFECTIVE_SCORE = sql<number>`coalesce(
-  ${reviews.overrideScore}::real,
-  ${reviews.weightedScore},
-  ${reviews.score}::real
-)`;
 
 /**
  * Revision counts come from a correlated subquery rather than a join: joining

@@ -29,7 +29,7 @@ const schema = z.object({
  * Grade, and the page came back identical with the grade gone. `castCommitteeVote`
  * in the award feature already does this properly, and this is the same shape.
  */
-function refuse(reason: 'decided' | 'own' | 'no_round' | 'recused'): never {
+function refuse(reason: 'withdrawn' | 'own' | 'no_round' | 'recused'): never {
   redirect(`/review?grade=${reason}`);
 }
 
@@ -51,12 +51,24 @@ export async function submitReview(formData: FormData): Promise<void> {
     comment: (formData.get('comment') as string | null)?.trim() || undefined,
   });
 
-  // Grading a submission that has already been decided would not change the
-  // outcome and would make the average shift under the organizer's feet.
+  // A decision is the chair's answer, not a lock on the committee's record.
+  //
+  // This used to refuse anything no longer 'submitted', on the grounds that a
+  // late grade would make the average shift under the organizer's feet. It
+  // does, and that turns out to be the point: an appeal, a shortlist re-read and
+  // a second opinion after a provisional accept are all ordinary committee work,
+  // and all three were impossible to file. Nothing below writes
+  // `submissions.status`, so a grade landing here moves the average and leaves
+  // the decision exactly where the chair put it. The chair is not surprised by
+  // it either: a decided proposal now carries its status on the reviewer's card,
+  // and it stays on the coverage board with its review count.
+  //
+  // Withdrawn is still refused. The speaker took that work back, and a grade on
+  // it is a grade on something nobody is offering any more.
   const target = await db.query.submissions.findFirst({
     where: eq(submissions.id, input.submissionId),
   });
-  if (!target || target.status !== 'submitted') refuse('decided');
+  if (!target || target.status === 'withdrawn') refuse('withdrawn');
 
   // A reviewer may not grade their own proposal.
   if (target.speakerId === reviewer.id) refuse('own');

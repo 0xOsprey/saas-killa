@@ -186,12 +186,18 @@ export async function addAssignment(formData: FormData): Promise<void> {
     );
   if (holdsRole.length === 0) back({ error: 'not-reviewer' });
 
-  // An assignment on a decided submission can never be completed: `submitReview`
-  // refuses to grade anything that is no longer 'submitted'.
+  // A decided proposal can still be handed to a reviewer; a withdrawn one
+  // cannot. Assigning is "please read this" and grading is "file a score", and
+  // only the second one closes when a chair decides. Refusing both together is
+  // what made an appeal or a shortlist re-read impossible to set up: a chair had
+  // no way to ask for a second opinion on the decision they had just made, and
+  // `submitReview` enforces the read-only half regardless.
+  //
+  // Withdrawn stays refused. That work is not the committee's to hand out.
   const target = await db.query.submissions.findFirst({
     where: eq(submissions.id, parsed.data.submissionId),
   });
-  if (!target || target.status !== 'submitted') back({ error: 'decided' });
+  if (!target || target.status === 'withdrawn') back({ error: 'withdrawn' });
   if (target.speakerId === parsed.data.reviewerId) back({ error: 'self-review' });
 
   const round = await activeRound();

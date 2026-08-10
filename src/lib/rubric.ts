@@ -1,3 +1,6 @@
+import { sql } from 'drizzle-orm';
+import { reviews } from '@/db/schema';
+
 /**
  * The grading rubric, shared by human reviewers and AI evaluator personas.
  *
@@ -167,3 +170,29 @@ export function criterionKey(label: string): string {
       .slice(0, 40) || 'criterion'
   );
 }
+
+/**
+ * One review's contribution to an aggregate.
+ *
+ * Three columns collapse into one number here, in the order a reader would
+ * expect to be believed: a human's override beats the grade it replaced, the
+ * unrounded weighted mean beats the integer it was rounded into, and the integer
+ * is what a grade filed before either of those existed has. Doing it in the
+ * query rather than the page is what keeps sorting and displaying the same
+ * number, which is the whole of what a sortable results table promises.
+ *
+ * It sits in this module rather than beside the one board that first needed it
+ * because two boards show a submission's aggregate, and until now they
+ * disagreed. `/organizer/abstracts` collapsed the three columns;
+ * `/organizer/submissions` averaged the raw integer. Measured on the live
+ * instance after a chair overrode one AI grade from 4 down to 2: the same
+ * proposal read 4.0 on one screen and 2.0 on the other, with nothing on either
+ * saying which number the decision would be made on. A weight or an override
+ * that moves one and not the other is not a rounding difference. It is two
+ * different answers to the same question.
+ */
+export const EFFECTIVE_SCORE = sql<number>`coalesce(
+  ${reviews.overrideScore}::real,
+  ${reviews.weightedScore},
+  ${reviews.score}::real
+)`;

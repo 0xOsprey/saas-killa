@@ -11,7 +11,6 @@ import { FORMAT_LABELS, LEVEL_LABELS, STATUS_LABELS, dayLabel } from '@/lib/form
 import {
   assignedQueue,
   assignmentCount,
-  decidedAssignments,
   myCompletedReviews,
   openSubmissionQueue,
   type ReviewerQueueRow,
@@ -64,7 +63,7 @@ function scaleValues(criterion: RoundCriterion): number[] {
  * reviewer's criteria and comment were gone with no explanation.
  */
 const GRADE_REFUSALS: Record<string, string> = {
-  decided: 'That proposal has already been decided, so the grade was not recorded. A decided proposal is out of the committee’s hands.',
+  withdrawn: 'The speaker withdrew that proposal, so the grade was not recorded. There is nothing left to decide about it.',
   own: 'You cannot grade your own proposal, so nothing was recorded.',
   no_round: 'No review round is open, so there was nowhere to file that grade. An organizer opens one from the review rounds screen.',
   recused: 'You have declared a conflict of interest on that proposal, so no grade was recorded. Withdraw the declaration first if you meant to review it.',
@@ -108,14 +107,13 @@ export default async function ReviewPage({
   // back to every open submission is what this page did before assignments
   // existed, and it is better than an empty screen that looks broken.
   const usingFallback = assignments === 0;
-  const [everything, completed, criteria, conflicted, decided, roundCriteria] = await Promise.all([
+  const [everything, completed, criteria, conflicted, roundCriteria] = await Promise.all([
     usingFallback
       ? openSubmissionQueue(user.id, round.id)
       : assignedQueue(user.id, round.id),
     myCompletedReviews(user.id),
     activeCriteria(round.id),
     conflictedSubmissionIds(user.id, round.id),
-    decidedAssignments(user.id, round.id),
     criteriaByRound(),
   ]);
 
@@ -230,6 +228,15 @@ export default async function ReviewPage({
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <h2 className="font-medium text-ink">{row.title}</h2>
                   <div className="flex items-center gap-2">
+                    {/* Said before the reviewer types, not after they submit. A
+                        grade on a decided proposal is accepted and it does not
+                        move the decision, which is a thing worth knowing while
+                        you are deciding how much effort to put in. */}
+                    {row.status === 'submitted' ? null : (
+                      <Badge tone={STATUS_TONE[row.status]} data-testid={`queue-status-${row.id}`}>
+                        already {STATUS_LABELS[row.status]}
+                      </Badge>
+                    )}
                     {row.dueAt ? (
                       <Badge
                         tone={isOverdue ? 'bad' : 'warn'}
@@ -367,36 +374,6 @@ export default async function ReviewPage({
             </Card>
           ) : null}
 
-          {decided.length > 0 ? (
-            <Card className="space-y-2" data-testid="decided-list">
-              <div>
-                <h2 className="text-sm font-semibold text-ink">
-                  Assigned to you, decided before you got to them
-                </h2>
-                <p className="mt-0.5 text-xs text-muted">
-                  The committee asked you for these and an organizer decided them in the meantime,
-                  so there is nothing left to grade. They are listed because a queue that dropped
-                  them silently read as work that was never assigned, and the gap between what you
-                  were asked for and what you filed had no explanation on it.
-                </p>
-              </div>
-              {decided.map((row) => (
-                <div
-                  key={row.id}
-                  className="flex flex-wrap items-center justify-between gap-2 border-t border-line pt-2"
-                  data-testid={`decided-${row.id}`}
-                >
-                  <span className="text-sm text-ink">{row.title}</span>
-                  <div className="flex items-center gap-2">
-                    <Badge tone={STATUS_TONE[row.status]}>{STATUS_LABELS[row.status]}</Badge>
-                    <Badge tone={row.graded ? 'good' : 'neutral'}>
-                      {row.graded ? 'you graded it' : 'never graded'}
-                    </Badge>
-                  </div>
-                </div>
-              ))}
-            </Card>
-          ) : null}
         </>
       ) : (
         <>

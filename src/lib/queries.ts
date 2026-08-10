@@ -9,6 +9,7 @@ import type {
   SubmissionStatus,
 } from '@/db/schema';
 import { writableBy } from './abstracts';
+import { EFFECTIVE_SCORE } from './rubric';
 import { UNSCHEDULED } from './speaker-calendar';
 
 export async function getEvent(): Promise<Event> {
@@ -180,10 +181,13 @@ function organizerOrder(sort: OrganizerSort, direction: OrganizerDirection): SQL
 
   switch (sort) {
     case 'grade':
+      // The same collapse the row displays, so the order and the number on
+      // screen are the same fact. Sorting on `avg(reviews.score)` while showing
+      // the effective mean is how a board ends up listing a 2.0 above a 4.0.
       return [
         direction === 'asc'
-          ? sql`avg(${reviews.score}) asc nulls last`
-          : sql`avg(${reviews.score}) desc nulls last`,
+          ? sql`avg(${EFFECTIVE_SCORE}) asc nulls last`
+          : sql`avg(${EFFECTIVE_SCORE}) desc nulls last`,
         asc(submissions.createdAt),
         asc(submissions.id),
       ];
@@ -220,7 +224,7 @@ export async function organizerSubmissions(options: OrganizerQuery = {}): Promis
       speakerName: users.name,
       speakerEmail: users.email,
       reviewCount: sql<number>`count(distinct ${reviews.id})::int`,
-      averageScore: sql<number | null>`avg(${reviews.score})::float`,
+      averageScore: sql<number | null>`avg(${EFFECTIVE_SCORE})::float`,
       decisionEmailedAt: submissions.decisionEmailedAt,
       scheduled: sql<boolean>`bool_or(${slots.id} is not null)`,
     })
