@@ -105,6 +105,20 @@ export function ScheduleGrid({
     gridTemplateColumns: `7rem repeat(${rooms.length}, minmax(9rem, 1fr))`,
   };
 
+  /**
+   * Which column each room owns, so every box is placed from its own `roomId`
+   * rather than from how many siblings CSS auto-placement happened to lay down
+   * before it.
+   *
+   * The offset is two: one column is reserved for the time label, and CSS grid
+   * lines are 1-indexed. This is not cosmetic. A band is short a cell whenever a
+   * room was created after that time band was (`createRoom` never writes `slots`,
+   * and `addTimeBand` only writes rows for the rooms that exist at the time), and
+   * under auto-placement one missing cell shifts every later box one column left,
+   * so a talk renders under a room it is not in.
+   */
+  const columnOfRoom = new Map(rooms.map((room, index) => [room.id, String(index + 2)]));
+
   let lastDay = '';
 
   return (
@@ -239,9 +253,12 @@ export function ScheduleGrid({
                       held === cell.submissionId && 'ring-2 ring-accent/40',
                       over === cell.slotId && 'border-accent bg-accent-soft ring-2 ring-accent/40',
                     )}
-                    style={
-                      cell.trackColour ? { borderLeft: `3px solid ${cell.trackColour}` } : undefined
-                    }
+                    style={{
+                      gridColumn: columnOfRoom.get(cell.roomId),
+                      ...(cell.trackColour
+                        ? { borderLeft: `3px solid ${cell.trackColour}` }
+                        : null),
+                    }}
                   >
                     {cell.submissionId ? (
                       <>

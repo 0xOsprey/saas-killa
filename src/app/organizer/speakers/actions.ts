@@ -21,6 +21,7 @@ import { sendAndLog } from '@/lib/email';
 import { wallClockToInstant } from '@/lib/format';
 import { getEvent } from '@/lib/queries';
 import { hasSubmissions, isRosterFilter, speakerRoster } from '@/lib/speakers';
+import { linkField } from '@/lib/uploads';
 import { speakerInviteMail, taskReminderMail } from './mail';
 
 const REMINDER_COOLDOWN_MS = 24 * 60 * 60 * 1000;
@@ -82,7 +83,11 @@ const profileSchema = z.object({
   userId: z.string().uuid(),
   name: z.string().max(120).nullable(),
   bio: z.string().max(4000, 'Bios over 4000 characters are too long').nullable(),
-  headshotUrl: z.string().url('A headshot needs a full URL, including https://').nullable(),
+  // Same field, same rule, as the speaker's own copy of this form: an uploaded
+  // headshot writes an app-relative `/files/…` path, and `.url()` rejected the
+  // value the upload itself had just written, so an organizer who uploaded a
+  // photo could never save the profile again.
+  headshotUrl: linkField,
 });
 
 /**
@@ -100,7 +105,7 @@ export async function updateSpeakerProfileAction(
     userId: formData.get('userId'),
     name: optional(formData.get('name')),
     bio: optional(formData.get('bio')),
-    headshotUrl: optional(formData.get('headshotUrl')),
+    headshotUrl: String(formData.get('headshotUrl') ?? ''),
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? 'Check the form and try again.' };

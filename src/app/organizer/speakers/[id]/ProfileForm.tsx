@@ -39,12 +39,21 @@ export function ProfileForm({
 
       <div className="flex items-end gap-3">
         <div className="flex-1">
-          <Field label="Headshot URL" hint="A full URL. Left blank, initials are shown instead.">
+          <Field
+            label="Headshot URL"
+            hint="A full URL, or an uploaded file's own /files/… path. Left blank, initials are shown instead."
+          >
+            {/*
+              Not `type="url"`. An uploaded headshot is stored as an app-relative
+              `/files/<id>/…` path, which fails HTML5 url validation and blocks
+              the whole form silently, with no message anywhere. `linkField` on
+              the server accepts both shapes and rejects everything else.
+            */}
             <Input
-              type="url"
+              type="text"
               name="headshotUrl"
               defaultValue={headshotUrl ?? ''}
-              placeholder="https://…"
+              placeholder="https://… or /files/…"
             />
           </Field>
         </div>

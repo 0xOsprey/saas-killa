@@ -44,8 +44,19 @@ export function timeOfDay(date: Date, timezone: string): string {
   return inEventZone(date, timezone, { hour: '2-digit', minute: '2-digit', hour12: false });
 }
 
+/**
+ * A day, spelled out. The year is not decoration: the CFP page renders its
+ * window with this, and a call open until 30 April 2027 read as "Friday 30
+ * April" on a page loaded in August 2026, which is a closed call to anyone
+ * skimming it.
+ */
 export function dayLabel(date: Date, timezone: string): string {
-  return inEventZone(date, timezone, { weekday: 'long', day: 'numeric', month: 'long' });
+  return inEventZone(date, timezone, {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
 }
 
 /**
