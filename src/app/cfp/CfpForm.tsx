@@ -165,188 +165,194 @@ export function CfpForm({
 
       {state.error ? <Notice tone="bad">{state.error}</Notice> : null}
 
-      <Card className="space-y-4">
-        <h2 className="text-sm font-semibold text-ink">About you</h2>
-        <Field
-          label="Email"
-          hint={knownEmail ? 'Signed in — proposals are filed against this address.' : undefined}
-        >
-          <Input
-            name="email"
-            type="email"
-            required
-            defaultValue={knownEmail ?? initial.email ?? ''}
-            readOnly={Boolean(knownEmail)}
-            data-testid="cfp-email"
-          />
-        </Field>
-        <Field label="Name">
-          <Input
-            name="name"
-            required
-            defaultValue={initial.name ?? knownName ?? ''}
-            data-testid="cfp-name"
-          />
-        </Field>
-        <Field label="Short bio" hint="Shown on the public agenda beside your talk.">
-          <Textarea
-            name="bio"
-            defaultValue={initial.bio ?? knownBio ?? ''}
-            className="min-h-24"
-          />
-        </Field>
-      </Card>
+      <div className="grid gap-6 lg:grid-cols-[1.25fr_1fr]">
+        <div className="space-y-6">
+          <Card className="space-y-4">
+            <h2 className="text-sm font-semibold text-ink">The proposal</h2>
+            <Field label="Title">
+              <Input
+                name="title"
+                required
+                maxLength={200}
+                defaultValue={initial.title ?? ''}
+                data-testid="cfp-title"
+              />
+            </Field>
+            <Field
+              label="Abstract"
+              hint="Reviewers see this without your name attached. Say what the audience will see and take away."
+            >
+              <Textarea
+                name="abstract"
+                required
+                minLength={120}
+                defaultValue={initial.abstract ?? ''}
+                data-testid="cfp-abstract"
+              />
+            </Field>
+          </Card>
 
-      <Card className="space-y-4">
-        <h2 className="text-sm font-semibold text-ink">The proposal</h2>
-        <Field label="Title">
-          <Input
-            name="title"
-            required
-            maxLength={200}
-            defaultValue={initial.title ?? ''}
-            data-testid="cfp-title"
-          />
-        </Field>
-        <Field
-          label="Abstract"
-          hint="Reviewers see this without your name attached. Say what the audience will see and take away."
-        >
-          <Textarea
-            name="abstract"
-            required
-            minLength={120}
-            defaultValue={initial.abstract ?? ''}
-            data-testid="cfp-abstract"
-          />
-        </Field>
-
-        <div className="grid gap-4 sm:grid-cols-3">
-          <Field label="Format">
-            <Select
-              name="format"
-              value={format}
-              onChange={(e) => setFormat(e.target.value as SubmissionFormat)}
-              data-testid="cfp-format"
-            >
-              {(Object.keys(FORMAT_LABELS) as SubmissionFormat[]).map((key) => (
-                <option key={key} value={key}>
-                  {FORMAT_LABELS[key]}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Audience level">
-            <Select
-              name="audienceLevel"
-              defaultValue={initial.audienceLevel ?? 'intermediate'}
-              data-testid="cfp-level"
-            >
-              {(Object.keys(LEVEL_LABELS) as AudienceLevel[]).map((key) => (
-                <option key={key} value={key}>
-                  {LEVEL_LABELS[key]}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Track">
-            <Select
-              name="trackId"
-              value={trackId}
-              onChange={(e) => setTrackId(e.target.value)}
-              data-testid="cfp-track"
-            >
-              <option value="">No preference</option>
-              {tracks.map((track) => (
-                <option key={track.id} value={track.id}>
-                  {track.name}
-                </option>
-              ))}
-            </Select>
-          </Field>
+          {questions.length > 0 ? (
+            <Card className="space-y-4">
+              <h2 className="text-sm font-semibold text-ink">A few more things</h2>
+              <CustomQuestions
+                questions={questions}
+                format={format}
+                trackId={trackId === '' ? null : trackId}
+                initialAnswers={initialAnswers}
+              />
+            </Card>
+          ) : null}
         </div>
 
-        <Field
-          label="Keywords"
-          hint="Comma separated, up to 12. They help organizers route your proposal to the right reviewers."
-        >
-          <Input
-            name="keywords"
-            maxLength={400}
-            placeholder="observability, postgres, migrations"
-            defaultValue={initial.keywords ?? ''}
-            data-testid="cfp-keywords"
-          />
-        </Field>
+        <div className="space-y-6">
+          <Card className="space-y-4">
+            <h2 className="text-sm font-semibold text-ink">About you</h2>
+            <Field
+              label="Email"
+              hint={knownEmail ? 'Signed in — proposals are filed against this address.' : undefined}
+            >
+              <Input
+                name="email"
+                type="email"
+                required
+                defaultValue={knownEmail ?? initial.email ?? ''}
+                readOnly={Boolean(knownEmail)}
+                data-testid="cfp-email"
+              />
+            </Field>
+            <Field label="Name">
+              <Input
+                name="name"
+                required
+                defaultValue={initial.name ?? knownName ?? ''}
+                data-testid="cfp-name"
+              />
+            </Field>
+            <Field label="Short bio" hint="Shown on the public agenda beside your talk.">
+              <Textarea
+                name="bio"
+                defaultValue={initial.bio ?? knownBio ?? ''}
+                className="min-h-24"
+              />
+            </Field>
+          </Card>
 
-        {format === 'poster' ? (
-          <Field
-            label="Poster artwork URL"
-            hint="A link to the PDF or image. It appears in the public poster gallery once accepted."
-          >
-            <Input
-              name="posterUrl"
-              type="url"
-              required
-              defaultValue={initial.posterUrl ?? ''}
-              data-testid="cfp-poster-url"
-            />
-          </Field>
-        ) : null}
-      </Card>
+          <Card className="space-y-4">
+            <h2 className="text-sm font-semibold text-ink">Details</h2>
+            <Field label="Format">
+              <Select
+                name="format"
+                value={format}
+                onChange={(e) => setFormat(e.target.value as SubmissionFormat)}
+                data-testid="cfp-format"
+              >
+                {(Object.keys(FORMAT_LABELS) as SubmissionFormat[]).map((key) => (
+                  <option key={key} value={key}>
+                    {FORMAT_LABELS[key]}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Audience level">
+              <Select
+                name="audienceLevel"
+                defaultValue={initial.audienceLevel ?? 'intermediate'}
+                data-testid="cfp-level"
+              >
+                {(Object.keys(LEVEL_LABELS) as AudienceLevel[]).map((key) => (
+                  <option key={key} value={key}>
+                    {LEVEL_LABELS[key]}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Track">
+              <Select
+                name="trackId"
+                value={trackId}
+                onChange={(e) => setTrackId(e.target.value)}
+                data-testid="cfp-track"
+              >
+                <option value="">No preference</option>
+                {tracks.map((track) => (
+                  <option key={track.id} value={track.id}>
+                    {track.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field
+              label="Keywords"
+              hint="Comma separated, up to 12. They help organizers route your proposal to the right reviewers."
+            >
+              <Input
+                name="keywords"
+                maxLength={400}
+                placeholder="observability, postgres, migrations"
+                defaultValue={initial.keywords ?? ''}
+                data-testid="cfp-keywords"
+              />
+            </Field>
 
-      {questions.length > 0 ? (
-        <Card className="space-y-4">
-          <h2 className="text-sm font-semibold text-ink">A few more things</h2>
-          <CustomQuestions
-            questions={questions}
-            format={format}
-            trackId={trackId === '' ? null : trackId}
-            initialAnswers={initialAnswers}
-          />
-        </Card>
-      ) : null}
+            {format === 'poster' ? (
+              <Field
+                label="Poster artwork URL"
+                hint="A link to the PDF or image. It appears in the public poster gallery once accepted."
+              >
+                <Input
+                  name="posterUrl"
+                  type="url"
+                  required
+                  defaultValue={initial.posterUrl ?? ''}
+                  data-testid="cfp-poster-url"
+                />
+              </Field>
+            ) : null}
+          </Card>
 
-      <div className="space-y-2">
-        <div className="flex flex-wrap items-center gap-3">
-          <Button type="submit" disabled={pending} data-testid="cfp-submit">
-            {pending ? 'Submitting…' : 'Submit proposal'}
-          </Button>
-          {/*
-            `type="button"` is what makes a title-only draft possible at all. A
-            submit-typed control is stopped by the browser's own required-field
-            check before any handler runs, and this form marks email, name,
-            title and abstract required, which is exactly the state a draft is
-            for.
-          */}
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={saveDraft}
-            data-testid="cfp-save-draft"
-          >
-            Save as draft
-          </Button>
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-3">
+              <Button type="submit" disabled={pending} data-testid="cfp-submit">
+                {pending ? 'Submitting…' : 'Submit proposal'}
+              </Button>
+              {/*
+                `type="button"` is what makes a title-only draft possible at all. A
+                submit-typed control is stopped by the browser's own required-field
+                check before any handler runs, and this form marks email, name,
+                title and abstract required, which is exactly the state a draft is
+                for.
+              */}
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={saveDraft}
+                data-testid="cfp-save-draft"
+              >
+                Save as draft
+              </Button>
+            </div>
+
+            {draft ? (
+              <p className="text-xs text-muted" data-testid="cfp-draft-status">
+                Draft saved {draftStamp(draft.savedAt)}. It is kept in this browser only, and it is
+                cleared once the proposal is submitted.
+              </p>
+            ) : (
+              <p className="text-xs text-muted">
+                Not ready to submit? Save a draft and this form comes back filled in next time. A
+                title on its own is enough.
+              </p>
+            )}
+
+            {storageRefused ? (
+              <Notice tone="bad">
+                This browser refused to store the draft. Private browsing and blocked site data both
+                do that. Submitting still works.
+              </Notice>
+            ) : null}
+          </div>
         </div>
-
-        {draft ? (
-          <p className="text-xs text-muted" data-testid="cfp-draft-status">
-            Draft saved {draftStamp(draft.savedAt)}. It is kept in this browser only, and it is
-            cleared once the proposal is submitted.
-          </p>
-        ) : (
-          <p className="text-xs text-muted">
-            Not ready to submit? Save a draft and this form comes back filled in next time. A
-            title on its own is enough.
-          </p>
-        )}
-
-        {storageRefused ? (
-          <Notice tone="bad">
-            This browser refused to store the draft. Private browsing and blocked site data both
-            do that. Submitting still works.
-          </Notice>
-        ) : null}
       </div>
     </form>
   );

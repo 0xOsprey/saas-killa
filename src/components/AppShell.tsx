@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { Menu } from 'lucide-react';
+import * as Lucide from 'lucide-react';
 import { cn } from '@/components/ui';
 import { PUBLIC_LINKS, roleSections } from '@/lib/nav-links';
 import type { CurrentUser } from '@/lib/auth';
@@ -53,20 +54,24 @@ export function AppShell({
           </Link>
 
           <nav className="hidden items-center gap-1 text-sm md:flex">
-            {PUBLIC_LINKS.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className={cn(
-                  'rounded-md px-2.5 py-1.5 transition-colors',
-                  isActive(link.href, activePath)
-                    ? 'bg-accent-soft font-medium text-accent'
-                    : 'text-muted hover:bg-subtle hover:text-ink',
-                )}
-              >
-                {link.label}
-              </Link>
-            ))}
+            {PUBLIC_LINKS.map((link) => {
+              const PublicIcon = link.icon ? (Lucide as any)[link.icon] : undefined;
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className={cn(
+                    'flex items-center gap-1.5 rounded-md px-2.5 py-1.5 transition-colors',
+                    isActive(link.href, activePath)
+                      ? 'bg-accent-soft font-medium text-accent'
+                      : 'text-muted hover:bg-subtle hover:text-ink',
+                  )}
+                >
+                  {PublicIcon ? <PublicIcon className="h-4 w-4" aria-hidden="true" /> : null}
+                  {link.label}
+                </Link>
+              );
+            })}
           </nav>
 
           <div className="ml-auto flex items-center text-sm">

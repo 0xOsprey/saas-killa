@@ -28,7 +28,7 @@ export default async function CfpPage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl">
+    <div className="mx-auto max-w-5xl">
       <PageHeader
         title="Submit a proposal"
         description={`Open until ${dayLabel(event.cfpClosesAt, event.timezone)}. Reviewers grade abstracts without seeing who wrote them.`}

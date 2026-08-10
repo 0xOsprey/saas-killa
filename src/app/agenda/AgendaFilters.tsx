@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Button, Card, Input, Select, cn } from '@/components/ui';
+import { Button, Input, Select, cn } from '@/components/ui';
 import type { AgendaFacets, AgendaFilters as Filters } from '@/lib/agenda-filters';
 import { agendaFilterQuery, hasActiveFilters } from '@/lib/agenda-filters';
 import { FORMAT_LABELS, LEVEL_LABELS } from '@/lib/format';
@@ -34,7 +34,7 @@ export function AgendaFilterBar({
   const { days, tracks, rooms, formats, levels } = facets;
 
   return (
-    <Card className="space-y-3">
+    <div className="space-y-3">
       <form method="get" action="/agenda" className="flex flex-wrap items-end gap-2">
         {/* Switching filters must not drop you out of "My agenda". */}
         {filters.mine ? <input type="hidden" name="view" value="mine" /> : null}
@@ -130,31 +130,33 @@ export function AgendaFilterBar({
         ) : null}
       </form>
 
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-line pt-3 text-sm">
-        <div className="flex overflow-hidden rounded-md border border-line">
-          {[
-            { mine: false, label: 'Full programme' },
-            { mine: true, label: 'My agenda' },
-          ].map((view) => (
-            <Link
-              key={view.label}
-              href={href(filters, { mine: view.mine })}
-              data-testid={view.mine ? 'view-mine' : 'view-all'}
-              className={cn(
-                'px-3 py-1.5 text-sm',
-                filters.mine === view.mine
-                  ? 'bg-accent text-white'
-                  : 'bg-white text-muted hover:bg-slate-50 hover:text-ink',
-              )}
-            >
-              {view.label}
-            </Link>
-          ))}
+      <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+        <div className="flex items-center gap-3">
+          <div className="flex overflow-hidden rounded-md border border-line">
+            {[
+              { mine: false, label: 'Full programme' },
+              { mine: true, label: 'My agenda' },
+            ].map((view) => (
+              <Link
+                key={view.label}
+                href={href(filters, { mine: view.mine })}
+                data-testid={view.mine ? 'view-mine' : 'view-all'}
+                className={cn(
+                  'px-3 py-1.5 text-sm',
+                  filters.mine === view.mine
+                    ? 'bg-accent text-white'
+                    : 'bg-white text-muted hover:bg-slate-50 hover:text-ink',
+                )}
+              >
+                {view.label}
+              </Link>
+            ))}
+          </div>
+
+          <span className="text-xs text-muted">{matchCount} session(s)</span>
         </div>
 
-        <span className="text-xs text-muted">{matchCount} session(s)</span>
-
-        <span className="ml-auto flex flex-wrap items-center gap-3 text-xs">
+        <span className="flex flex-wrap items-center gap-3 text-xs">
           <span className="text-muted">Subscribe:</span>
           <a href="/agenda/calendar.ics" className="text-accent underline">
             Whole programme
@@ -175,6 +177,6 @@ export function AgendaFilterBar({
           ) : null}
         </span>
       </div>
-    </Card>
+    </div>
   );
 }
