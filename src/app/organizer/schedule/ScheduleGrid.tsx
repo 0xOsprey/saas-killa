@@ -226,7 +226,19 @@ export function ScheduleGrid({
                     {band.dayLabel}
                   </div>
                 ) : null}
-                <div className="py-2 pr-2 text-right text-xs tabular-nums text-muted">
+                {/*
+                  Pinned to column 1 for the same reason each cell below is
+                  pinned to its own room's column. A band only holds cells for
+                  the rooms that existed when it was created, so most bands are
+                  narrower than the grid; left on auto-placement this label
+                  dropped into whichever gap the previous short band left and
+                  printed over another room's card a row up. The time axis is
+                  the first thing an organizer reads, so it cannot drift.
+                */}
+                <div
+                  className="py-2 pr-2 text-right text-xs tabular-nums text-muted"
+                  style={{ gridColumn: '1' }}
+                >
                   {band.timeLabel}
                 </div>
                 {band.cells.map((cell) => (
