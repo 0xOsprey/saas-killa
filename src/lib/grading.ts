@@ -3,8 +3,10 @@ import { db } from '@/db';
 import {
   emailLog,
   reviewAssignments,
+  reviewConflicts,
   reviewRounds,
   reviews,
+  roundReviewers,
   submissions,
   tracks,
   userRoles,
@@ -39,6 +41,8 @@ export type ReviewerCompletionRow = {
   assigned: number;
   graded: number;
   outstanding: number;
+  decided: number;
+  recused: number;
   overdue: number;
   completionPct: number | null;
 };
@@ -46,18 +50,32 @@ export type ReviewerCompletionRow = {
 /**
  * Per-reviewer completion, aggregated in Postgres. Doing it here rather than by
  * pulling every assignment into the page keeps the cost flat as the committee
- * grows, and the `filter (where ...)` clauses are the only place the three
+ * grows, and the `filter (where ...)` clauses are the only place the five
  * different meanings of "not done" are spelled out:
  *
  *   assigned    every row the reviewer owns, ever, decided or not
- *   outstanding ungraded AND the submission is still open, so still real work
+ *   outstanding ungraded, still open, not recused, so still real work
+ *   decided     ungraded and the submission was decided out from under it
+ *   recused     ungraded because this reviewer declared a conflict on it
  *   overdue     outstanding and past its dueAt
  *
  * `assigned` deliberately keeps rows whose submission was later accepted or
  * rejected: the reviewer was asked and never answered, and hiding that would
  * flatter the completion rate.
+ *
+ * `completionPct` is over work that could actually be done, not over `assigned`.
+ * Dividing by `assigned` was honest arithmetic and a dishonest number: a
+ * proposal decided before its reviewer got to it is not a review anybody can
+ * file, so counting it against them pinned the committee permanently below 100%
+ * with nothing on screen saying why. The two counts that explain the gap are
+ * columns of their own now, so nothing is hidden by taking them out of the
+ * denominator.
  */
 export async function reviewerCompletion(roundId: string): Promise<ReviewerCompletionRow[]> {
+  const ungraded = sql`${reviewAssignments.submissionId} is not null and ${reviews.id} is null`;
+  const recused = sql`${reviewConflicts.reviewerId} is not null`;
+  const actionable = sql`${ungraded} and ${submissions.status} = 'submitted' and not ${recused}`;
+
   return db
     .select({
       reviewerId: users.id,
@@ -65,21 +83,24 @@ export async function reviewerCompletion(roundId: string): Promise<ReviewerCompl
       email: users.email,
       assigned: sql<number>`count(${reviewAssignments.submissionId})::int`,
       graded: sql<number>`count(${reviews.id})::int`,
-      outstanding: sql<number>`count(*) filter (
-        where ${reviewAssignments.submissionId} is not null
-          and ${reviews.id} is null
-          and ${submissions.status} = 'submitted'
+      outstanding: sql<number>`count(*) filter (where ${actionable})::int`,
+      decided: sql<number>`count(*) filter (
+        where ${ungraded} and ${submissions.status} <> 'submitted'
+      )::int`,
+      recused: sql<number>`count(*) filter (
+        where ${ungraded} and ${submissions.status} = 'submitted' and ${recused}
       )::int`,
       overdue: sql<number>`count(*) filter (
-        where ${reviewAssignments.submissionId} is not null
-          and ${reviews.id} is null
-          and ${submissions.status} = 'submitted'
+        where ${actionable}
           and ${reviewAssignments.dueAt} is not null
           and ${reviewAssignments.dueAt} < now()
       )::int`,
       completionPct: sql<number | null>`case
-        when count(${reviewAssignments.submissionId}) = 0 then null
-        else round(100.0 * count(${reviews.id}) / count(${reviewAssignments.submissionId}))::int
+        when count(${reviews.id}) + count(*) filter (where ${actionable}) = 0 then null
+        else round(
+          100.0 * count(${reviews.id})
+          / (count(${reviews.id}) + count(*) filter (where ${actionable}))
+        )::int
       end`,
     })
     .from(users)
@@ -97,6 +118,14 @@ export async function reviewerCompletion(roundId: string): Promise<ReviewerCompl
         eq(reviews.roundId, roundId),
       ),
     )
+    .leftJoin(
+      reviewConflicts,
+      and(
+        eq(reviewConflicts.submissionId, reviewAssignments.submissionId),
+        eq(reviewConflicts.reviewerId, users.id),
+        eq(reviewConflicts.roundId, roundId),
+      ),
+    )
     .where(eq(users.isBot, false))
     .groupBy(users.id, users.name, users.email)
     .orderBy(asc(users.name), asc(users.email));
@@ -112,6 +141,7 @@ export type ReviewerQueueRow = {
   reviewCount: number;
   myScore: number | null;
   myRubric: Record<string, number> | null;
+  myAnswers: Record<string, string> | null;
   myComment: string | null;
   dueAt: Date | null;
 };
@@ -132,6 +162,9 @@ const MY_GRADE = (reviewerId: string) => ({
   myRubric: sql<
     Record<string, number> | null
   >`(array_agg(${reviews.rubric}) filter (where ${reviews.reviewerId} = ${reviewerId}))[1]`,
+  myAnswers: sql<
+    Record<string, string> | null
+  >`(array_agg(${reviews.answers}) filter (where ${reviews.reviewerId} = ${reviewerId}))[1]`,
   myComment: sql<
     string | null
   >`(array_agg(${reviews.comment}) filter (where ${reviews.reviewerId} = ${reviewerId}))[1]`,
@@ -221,6 +254,59 @@ export async function openSubmissionQueue(
     .orderBy(sql`count(${reviews.id}) asc`, asc(submissions.createdAt));
 }
 
+export type DecidedAssignmentRow = {
+  id: string;
+  title: string;
+  status: SubmissionStatus;
+  dueAt: Date | null;
+  graded: boolean;
+};
+
+/**
+ * Assignments this reviewer holds whose submission has since been decided.
+ *
+ * `assignedQueue` cannot show these, because everything it returns carries a
+ * live grading form and `submitReview` refuses a decided proposal. But dropping
+ * them silently is what made a reviewer's queue read "0 of 0" the morning after
+ * a chair worked through the board: the work they were asked for vanished with
+ * no statement that it had ever existed, and their completion rate kept the hole
+ * it left. This is the same rows, listed as what they are.
+ *
+ * Still no speaker column, for the same reason `assignedQueue` has none.
+ */
+export async function decidedAssignments(
+  reviewerId: string,
+  roundId: string,
+): Promise<DecidedAssignmentRow[]> {
+  return db
+    .select({
+      id: submissions.id,
+      title: submissions.title,
+      status: submissions.status,
+      dueAt: reviewAssignments.dueAt,
+      graded: sql<boolean>`bool_or(${reviews.id} is not null)`,
+    })
+    .from(reviewAssignments)
+    .innerJoin(submissions, eq(submissions.id, reviewAssignments.submissionId))
+    .leftJoin(
+      reviews,
+      and(
+        eq(reviews.submissionId, submissions.id),
+        eq(reviews.roundId, roundId),
+        eq(reviews.reviewerId, reviewerId),
+      ),
+    )
+    .where(
+      and(
+        eq(reviewAssignments.reviewerId, reviewerId),
+        eq(reviewAssignments.roundId, roundId),
+        ne(submissions.status, 'submitted'),
+      ),
+    )
+    .groupBy(submissions.id, reviewAssignments.dueAt)
+    .orderBy(asc(submissions.title));
+}
+
 export async function assignmentCount(reviewerId: string, roundId: string): Promise<number> {
   const [row] = await db
     .select({ total: sql<number>`count(*)::int` })
@@ -240,6 +326,7 @@ export type CompletedReviewRow = {
   trackName: string | null;
   score: number;
   rubric: Record<string, number> | null;
+  answers: Record<string, string> | null;
   comment: string | null;
   gradedAt: Date;
   roundId: string;
@@ -266,6 +353,7 @@ export async function myCompletedReviews(reviewerId: string): Promise<CompletedR
       trackName: tracks.name,
       score: reviews.score,
       rubric: reviews.rubric,
+      answers: reviews.answers,
       comment: reviews.comment,
       gradedAt: reviews.createdAt,
       roundId: reviewRounds.id,
@@ -496,14 +584,25 @@ export function planAssignments(opts: {
 }
 
 /**
- * Everything `planAssignments` needs, in three flat reads. Bot users are left
+ * Everything `planAssignments` needs, in four flat reads. Bot users are left
  * out: an evaluator persona grades on its own schedule through the AI runner,
  * and a reminder mail addressed to one goes nowhere a human will read it.
+ *
+ * The roster is narrowed to this round's pool when it has one. An empty pool
+ * means every reviewer, which is how the distributor behaved before pools
+ * existed and is what stops an organizer who never opened the pool screen from
+ * finding their committee has nobody in it.
  */
 export async function distributionInputs(roundId: string): Promise<{
   submissions: PlannerSubmission[];
   reviewers: PlannerReviewer[];
 }> {
+  const pool = await db
+    .select({ reviewerId: roundReviewers.reviewerId })
+    .from(roundReviewers)
+    .where(eq(roundReviewers.roundId, roundId));
+  const poolIds = pool.length > 0 ? new Set(pool.map((row) => row.reviewerId)) : null;
+
   const [open, existing, roster] = await Promise.all([
     db
       .select({
@@ -555,10 +654,12 @@ export async function distributionInputs(roundId: string): Promise<{
       speakerId: row.speakerId,
       assigned: assignedBySubmission.get(row.id) ?? [],
     })),
-    reviewers: roster.map((row) => ({
-      id: row.id,
-      load: load.get(row.id) ?? 0,
-      trackLoad: trackLoad.get(row.id) ?? {},
-    })),
+    reviewers: roster
+      .filter((row) => poolIds === null || poolIds.has(row.id))
+      .map((row) => ({
+        id: row.id,
+        load: load.get(row.id) ?? 0,
+        trackLoad: trackLoad.get(row.id) ?? {},
+      })),
   };
 }

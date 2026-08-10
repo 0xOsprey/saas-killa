@@ -69,8 +69,18 @@ export function AuthorEditor({
                 </span>
               </span>
               <span className="ml-auto flex items-center gap-2">
+                {/* Spelled out here rather than imported from `@/lib/abstracts`,
+                    where the same derivation lives for the server-rendered
+                    lists. This is a client component, and importing a value out
+                    of that module would drag the database client into the
+                    browser bundle behind a two-line helper. */}
+                <Badge
+                  tone={isFiler ? 'accent' : 'neutral'}
+                  data-testid={`author-role-${author.userId}`}
+                >
+                  {isFiler ? 'Submitter' : author.isPresenter ? 'Co-presenter' : 'Co-author'}
+                </Badge>
                 {isFiler ? <Badge tone="accent">filed this</Badge> : null}
-                {author.isPresenter ? null : <Badge>not presenting</Badge>}
                 {!isFiler && author.canEdit ? <Badge tone="good">can edit</Badge> : null}
 
                 {accessAction && !isFiler ? (

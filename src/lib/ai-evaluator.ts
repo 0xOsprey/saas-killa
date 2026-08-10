@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { and, asc, eq, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { evaluatorPersonas, reviews, submissions, tracks, userRoles, users } from '@/db/schema';
 import type { AudienceLevel, EvaluatorPersona, SubmissionFormat } from '@/db/schema';
@@ -371,14 +371,29 @@ function failureReason(error: unknown): string {
  * regrades them after a rubric or weight change. Every candidate is selected
  * rather than a `LIMIT`ed page, because the count the cap left behind is part of
  * the report and a limited query cannot tell you what it dropped.
+ *
+ * `submissionIds` narrows the pool to named proposals and, in doing so, drops the
+ * `status = 'submitted'` filter. A batch run is about clearing the undecided pile,
+ * so restricting it to open proposals is right. Asking for one proposal by name is
+ * a different question, and answering it with "that one is accepted, so no" makes
+ * a decided proposal permanently ungradeable: a chair who wants a second opinion
+ * on something they already accepted cannot get one, and neither can anyone
+ * checking whether the evaluator agrees with a decision after the fact.
  */
 export async function runPersona(
   persona: EvaluatorPersona,
-  options: { eventName: string; roundId: string; limit?: number; replace?: boolean },
+  options: {
+    eventName: string;
+    roundId: string;
+    limit?: number;
+    replace?: boolean;
+    submissionIds?: string[];
+  },
 ): Promise<PersonaRunResult> {
   const limit = Math.max(1, Math.floor(options.limit ?? DEFAULT_BATCH));
   const replace = options.replace ?? false;
   const { roundId } = options;
+  const targeted = options.submissionIds?.length ? options.submissionIds : null;
 
   const candidates = await db
     .select({
@@ -403,10 +418,13 @@ export async function runPersona(
         eq(reviews.roundId, roundId),
       ),
     )
-    .where(eq(submissions.status, 'submitted'))
+    .where(targeted ? inArray(submissions.id, targeted) : eq(submissions.status, 'submitted'))
     .orderBy(asc(submissions.createdAt));
 
-  const eligible = replace ? candidates : candidates.filter((row) => !row.alreadyGraded);
+  // Naming a proposal is itself the instruction to grade it, so a targeted run
+  // regrades whether or not the replace button was the one pressed. Without this
+  // the second opinion a chair asked for is reported as "1 skipped".
+  const eligible = replace || targeted ? candidates : candidates.filter((row) => !row.alreadyGraded);
   const batch = eligible.slice(0, limit);
 
   const result: PersonaRunResult = {

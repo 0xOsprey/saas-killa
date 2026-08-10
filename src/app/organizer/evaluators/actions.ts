@@ -1,10 +1,10 @@
 'use server';
 
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { db } from '@/db';
-import { evaluatorPersonas, users } from '@/db/schema';
+import { evaluatorPersonas, reviews, users } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
 import {
   DEFAULT_BATCH,
@@ -119,6 +119,70 @@ export async function retirePersona(formData: FormData): Promise<void> {
   revalidateEvaluators();
 }
 
+const overrideSchema = z.object({
+  reviewId: z.string().uuid(),
+  score: z.coerce.number().int().min(1).max(5),
+  reason: z.string().trim().max(500).optional(),
+});
+
+/**
+ * Replace an AI grade's number with a human's, keeping the machine's own.
+ *
+ * The original `score` is deliberately not written. An override is a claim about
+ * a grade, and a claim that overwrites what it disagrees with cannot be checked
+ * afterwards: "the evaluator said 5 and the chair said 3" is the sentence an
+ * audit needs, and one column cannot hold it. Every aggregate reads
+ * `coalesce(override_score, score)`, so the override is what counts without the
+ * evaluator's answer being destroyed to make it count.
+ *
+ * Scoped to `source = 'ai'` in the WHERE clause rather than checked before it, so
+ * a forged id updates zero rows instead of quietly rewriting a person's review.
+ */
+export async function overrideAiScore(formData: FormData): Promise<void> {
+  const organizer = await requireRole('organizer');
+  const input = overrideSchema.parse({
+    reviewId: formData.get('reviewId'),
+    score: formData.get('score'),
+    reason: (formData.get('reason') as string | null)?.trim() || undefined,
+  });
+
+  await db
+    .update(reviews)
+    .set({
+      overrideScore: input.score,
+      overrideReason: input.reason ?? null,
+      overriddenById: organizer.id,
+      overriddenAt: new Date(),
+    })
+    .where(and(eq(reviews.id, input.reviewId), eq(reviews.source, 'ai')));
+
+  revalidateEvaluators();
+  revalidatePath('/organizer/submissions');
+  revalidatePath('/organizer/abstracts');
+  revalidatePath('/review');
+}
+
+/** Put the evaluator's own number back, which is what makes an override safe to make. */
+export async function clearAiOverride(formData: FormData): Promise<void> {
+  await requireRole('organizer');
+  const reviewId = z.string().uuid().parse(formData.get('reviewId'));
+
+  await db
+    .update(reviews)
+    .set({
+      overrideScore: null,
+      overrideReason: null,
+      overriddenById: null,
+      overriddenAt: null,
+    })
+    .where(and(eq(reviews.id, reviewId), eq(reviews.source, 'ai')));
+
+  revalidateEvaluators();
+  revalidatePath('/organizer/submissions');
+  revalidatePath('/organizer/abstracts');
+  revalidatePath('/review');
+}
+
 export async function restorePersona(formData: FormData): Promise<void> {
   await requireRole('organizer');
   const personaId = z.string().uuid().parse(formData.get('personaId'));
@@ -133,6 +197,8 @@ const runSchema = z.object({
   personaId: z.string().uuid(),
   limit: z.coerce.number().int().min(1).max(MAX_BATCH).catch(DEFAULT_BATCH),
   mode: z.enum(['pending', 'replace']).catch('pending'),
+  // Empty is the batch run, so a blank picker must not fail the parse.
+  submissionId: z.string().uuid().nullable().catch(null),
 });
 
 function emptyReport(error: string | null): RunReport {
@@ -158,6 +224,7 @@ export async function runPersonaEvaluation(_previous: RunReport | null, formData
     personaId: formData.get('personaId'),
     limit: formData.get('limit'),
     mode: formData.get('mode'),
+    submissionId: formData.get('submissionId') || null,
   });
 
   if (!evaluatorConfigured()) {
@@ -181,6 +248,7 @@ export async function runPersonaEvaluation(_previous: RunReport | null, formData
     roundId: round.id,
     limit: input.limit,
     replace: input.mode === 'replace',
+    submissionIds: input.submissionId ? [input.submissionId] : undefined,
   });
 
   revalidateEvaluators();

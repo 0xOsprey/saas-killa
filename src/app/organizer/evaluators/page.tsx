@@ -8,6 +8,8 @@ import {
   Input,
   Notice,
   PageHeader,
+  ScoreDots,
+  Select,
   Textarea,
 } from '@/components/ui';
 import {
@@ -17,16 +19,31 @@ import {
   MAX_BATCH,
   evaluatorConfigured,
 } from '@/lib/ai-evaluator';
-import { personaRoster } from '@/lib/evaluator-queries';
-import type { PersonaRosterRow } from '@/lib/evaluator-queries';
+import { aiGrades, gradableSubmissions, personaRoster } from '@/lib/evaluator-queries';
+import type { AiGradeRow, PersonaRosterRow } from '@/lib/evaluator-queries';
+import { inEventZone } from '@/lib/format';
+import { getEvent } from '@/lib/queries';
 import { RUBRIC, RUBRIC_KEYS, RUBRIC_LABELS } from '@/lib/rubric';
-import { createPersona, restorePersona, retirePersona, updatePersona } from './actions';
+import {
+  clearAiOverride,
+  createPersona,
+  overrideAiScore,
+  restorePersona,
+  retirePersona,
+  updatePersona,
+} from './actions';
 import { RunPanel } from './RunPanel';
 
 export default async function EvaluatorsPage() {
   const configured = evaluatorConfigured();
-  const personas = await personaRoster();
+  const [event, personas, grades, gradable] = await Promise.all([
+    getEvent(),
+    personaRoster(),
+    aiGrades(25),
+    gradableSubmissions(),
+  ]);
   const active = personas.filter((persona) => persona.active);
+  const overridden = grades.filter((grade) => grade.overrideScore !== null).length;
 
   return (
     <div className="space-y-5">
@@ -56,11 +73,37 @@ export default async function EvaluatorsPage() {
           name: persona.name,
           gradeCount: persona.gradeCount,
         }))}
+        submissions={gradable}
         configured={configured}
         batchOptions={BATCH_OPTIONS}
         defaultLimit={DEFAULT_BATCH}
         maxBatch={MAX_BATCH}
       />
+
+      <Card className="space-y-3" data-testid="ai-grades">
+        <div>
+          <h2 className="text-sm font-semibold text-ink">
+            What the evaluator wrote ({grades.length} shown
+            {overridden > 0 ? `, ${overridden} overridden` : ''})
+          </h2>
+          <p className="mt-0.5 text-xs text-muted">
+            Every AI grade, newest first, with the rationale the model gave for it. An override
+            replaces the number every aggregate reads without erasing the one the model produced.
+          </p>
+        </div>
+        {grades.length === 0 ? (
+          <Empty>
+            No AI grade has been written yet. Run a persona above and its grades appear here with
+            their reasoning.
+          </Empty>
+        ) : (
+          <ul className="space-y-2">
+            {grades.map((grade) => (
+              <AiGradeCard key={grade.reviewId} grade={grade} timezone={event.timezone} />
+            ))}
+          </ul>
+        )}
+      </Card>
 
       {personas.length === 0 ? (
         <Empty>No personas yet. The first one you create becomes the reviewer that grades.</Empty>
@@ -86,6 +129,131 @@ export default async function EvaluatorsPage() {
         </form>
       </Card>
     </div>
+  );
+}
+
+/**
+ * One AI grade, its reasoning, and the control that lets a chair disagree with it.
+ *
+ * The override form and the clear control are one form with two submit buttons
+ * rather than two forms, because a nested form does not exist in HTML: the inner
+ * one is dropped by the parser and its button silently posts the outer action.
+ */
+function AiGradeCard({ grade, timezone }: { grade: AiGradeRow; timezone: string }) {
+  const overridden = grade.overrideScore !== null;
+  const rubric = Object.entries(grade.rubric ?? {});
+
+  return (
+    <li
+      className="space-y-2 rounded-md border border-line px-3 py-2.5"
+      data-testid={`ai-grade-${grade.reviewId}`}
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <Link
+            href={`/organizer/abstracts/${grade.submissionId}`}
+            className="text-sm font-medium text-ink underline-offset-2 hover:underline"
+          >
+            {grade.title}
+          </Link>
+          <p className="mt-0.5 text-xs text-muted">
+            <Badge tone="accent">AI</Badge> {grade.personaName ?? 'retired persona'} ·{' '}
+            {grade.roundName} · {grade.model ?? 'model not recorded'} ·{' '}
+            {inEventZone(grade.createdAt, timezone, { dateStyle: 'medium', timeStyle: 'short' })}
+          </p>
+        </div>
+        <div className="flex flex-col items-end gap-1">
+          {/* The machine's own number stays legible next to the human's. An
+              override that hid what it replaced would make the audit table
+              above unreadable a week later. */}
+          <span data-testid={`ai-score-${grade.reviewId}`}>
+            <ScoreDots score={grade.overrideScore ?? grade.score} />
+          </span>
+          {overridden ? (
+            <span className="text-xs text-muted" data-testid={`ai-original-${grade.reviewId}`}>
+              AI said {grade.score} · chair says {grade.overrideScore}
+            </span>
+          ) : (
+            <span className="text-xs text-muted">AI score {grade.score}</span>
+          )}
+        </div>
+      </div>
+
+      {rubric.length > 0 ? (
+        <div className="flex flex-wrap gap-1.5">
+          {rubric.map(([key, value]) => (
+            <Badge key={key}>
+              {RUBRIC_LABELS[key as keyof typeof RUBRIC_LABELS] ?? key} {value}
+            </Badge>
+          ))}
+        </div>
+      ) : null}
+
+      {grade.comment ? (
+        <p
+          className="whitespace-pre-wrap text-sm text-muted"
+          data-testid={`ai-rationale-${grade.reviewId}`}
+        >
+          {grade.comment}
+        </p>
+      ) : (
+        <p className="text-sm text-muted">The model returned a score with no rationale.</p>
+      )}
+
+      {overridden ? (
+        <Notice tone="warn">
+          Overridden by {grade.overriddenBy ?? 'an organizer'}
+          {grade.overriddenAt
+            ? ` on ${inEventZone(grade.overriddenAt, timezone, { dateStyle: 'medium' })}`
+            : ''}
+          {grade.overrideReason ? `: ${grade.overrideReason}` : '.'}
+        </Notice>
+      ) : null}
+
+      <form action={overrideAiScore} className="flex flex-wrap items-end gap-2 border-t border-line pt-2.5">
+        <input type="hidden" name="reviewId" value={grade.reviewId} />
+        <Field label="Chair's score">
+          <Select
+            name="score"
+            defaultValue={String(grade.overrideScore ?? grade.score)}
+            data-testid={`override-score-${grade.reviewId}`}
+          >
+            {[1, 2, 3, 4, 5].map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <div className="min-w-56 flex-1">
+          <Field label="Why">
+            <Input
+              name="reason"
+              maxLength={500}
+              defaultValue={grade.overrideReason ?? ''}
+              placeholder="Read it myself, the methodology holds up"
+            />
+          </Field>
+        </div>
+        <Button
+          type="submit"
+          variant="secondary"
+          data-testid={`override-save-${grade.reviewId}`}
+        >
+          {overridden ? 'Update override' : 'Override'}
+        </Button>
+        {overridden ? (
+          <Button
+            type="submit"
+            variant="ghost"
+            formAction={clearAiOverride}
+            data-testid={`override-clear-${grade.reviewId}`}
+          >
+            Put the AI score back
+          </Button>
+        ) : null}
+      </form>
+    </li>
   );
 }
 

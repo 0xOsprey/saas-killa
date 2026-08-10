@@ -6,6 +6,7 @@ import type { RunReport } from '@/lib/ai-evaluator';
 import { runPersonaEvaluation } from './actions';
 
 type PersonaOption = { id: string; name: string; gradeCount: number };
+type SubmissionOption = { id: string; title: string; decided: boolean };
 
 /**
  * The run controls and the report of the last run. It is a client component for
@@ -15,12 +16,14 @@ type PersonaOption = { id: string; name: string; gradeCount: number };
  */
 export function RunPanel({
   personas,
+  submissions,
   configured,
   batchOptions,
   defaultLimit,
   maxBatch,
 }: {
   personas: PersonaOption[];
+  submissions: SubmissionOption[];
   configured: boolean;
   batchOptions: readonly number[];
   defaultLimit: number;
@@ -62,6 +65,20 @@ export function RunPanel({
             {batchOptions.map((option) => (
               <option key={option} value={option}>
                 {option} submissions
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field
+          label="Or one proposal"
+          hint="Naming one grades it whichever button you press, decided or not."
+        >
+          <Select name="submissionId" className="w-64" disabled={!runnable} data-testid="run-one">
+            <option value="">Every open proposal</option>
+            {submissions.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.title}
+                {option.decided ? ' (decided)' : ''}
               </option>
             ))}
           </Select>

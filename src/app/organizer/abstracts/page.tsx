@@ -9,11 +9,18 @@ import {
   Input,
   LinkButton,
   PageHeader,
+  ScoreDots,
   Select,
 } from '@/components/ui';
 import { submissionStatusEnum } from '@/db/schema';
 import type { SubmissionStatus } from '@/db/schema';
-import { abstractIndex } from '@/lib/abstracts';
+import {
+  ABSTRACT_SORTS,
+  ABSTRACT_SORT_LABELS,
+  abstractIndex,
+  type AbstractSort,
+  type SortDirection,
+} from '@/lib/abstracts';
 import { FORMAT_LABELS, LEVEL_LABELS, STATUS_LABELS, inEventZone } from '@/lib/format';
 import { allTracks, getEvent } from '@/lib/queries';
 
@@ -29,10 +36,20 @@ function asStatus(value: string | undefined): SubmissionStatus | null {
   return found ?? null;
 }
 
+function asSort(value: string | undefined): AbstractSort {
+  return ABSTRACT_SORTS.find((sort) => sort === value) ?? 'title';
+}
+
 export default async function AbstractsIndexPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; track?: string; status?: string }>;
+  searchParams: Promise<{
+    q?: string;
+    track?: string;
+    status?: string;
+    sort?: string;
+    direction?: string;
+  }>;
 }) {
   const filters = await searchParams;
   const status = asStatus(filters.status);
@@ -40,20 +57,39 @@ export default async function AbstractsIndexPage({
   // error and 500 the page, so an unparseable filter is simply no filter.
   const trackId = z.string().uuid().safeParse(filters.track).data ?? null;
   const q = filters.q ?? '';
+  const sort = asSort(filters.sort);
+  const direction: SortDirection =
+    filters.direction === 'asc' || filters.direction === 'desc'
+      ? filters.direction
+      : sort === 'title'
+        ? 'asc'
+        : 'desc';
 
   const [event, tracks, rows] = await Promise.all([
     getEvent(),
     allTracks(),
-    abstractIndex({ q, trackId, status }),
+    abstractIndex({ q, trackId, status, sort, direction }),
   ]);
 
   const edited = rows.filter((row) => row.revisionCount > 0).length;
+  const graded = rows.filter((row) => row.meanScore !== null).length;
+
+  // The reverse of whatever is showing, carrying every filter with it. Built as
+  // a link rather than a second form control because a chair flipping the
+  // ordering is one click, and a submit button that has to be found inside a
+  // filter panel is not one.
+  const flipped = new URLSearchParams();
+  if (q) flipped.set('q', q);
+  if (trackId) flipped.set('track', trackId);
+  if (status) flipped.set('status', status);
+  flipped.set('sort', sort);
+  flipped.set('direction', direction === 'desc' ? 'asc' : 'desc');
 
   return (
     <div className="space-y-5">
       <PageHeader
         title="Abstracts"
-        description={`${rows.length} submission(s) shown · ${edited} edited since filing`}
+        description={`${rows.length} submission(s) shown · ${graded} with a score · ${edited} edited since filing`}
         action={
           <div className="flex flex-wrap gap-2">
             <LinkButton href="/organizer/abstracts/book" variant="secondary">
@@ -100,6 +136,37 @@ export default async function AbstractsIndexPage({
             Apply
           </Button>
         </form>
+
+        <div className="mt-3 flex flex-wrap items-end gap-3 border-t border-line pt-3">
+          <form method="get" className="flex flex-wrap items-end gap-3">
+            {/* The filters ride along as hidden inputs. Re-sorting must not
+                quietly widen the set of rows a chair is looking at. */}
+            <input type="hidden" name="q" value={q} />
+            <input type="hidden" name="track" value={trackId ?? ''} />
+            <input type="hidden" name="status" value={status ?? ''} />
+            <input type="hidden" name="direction" value={direction} />
+            <Field label="Sort by">
+              <Select name="sort" defaultValue={sort} data-testid="sort-by">
+                {ABSTRACT_SORTS.map((option) => (
+                  <option key={option} value={option}>
+                    {ABSTRACT_SORT_LABELS[option]}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Button type="submit" variant="secondary" data-testid="apply-sort">
+              Sort
+            </Button>
+          </form>
+
+          <Link
+            href={`/organizer/abstracts?${flipped.toString()}`}
+            className="inline-flex items-center justify-center gap-2 rounded-md border border-line bg-white px-3 py-2 text-sm font-medium text-ink transition-colors hover:bg-slate-50"
+            data-testid="flip-direction"
+          >
+            {direction === 'desc' ? 'Highest first ↓' : 'Lowest first ↑'}
+          </Link>
+        </div>
       </Card>
 
       {rows.length === 0 ? (
@@ -128,6 +195,13 @@ export default async function AbstractsIndexPage({
                 </p>
               </div>
               <div className="flex flex-col items-end gap-1.5">
+                <span data-testid={`score-${row.id}`} title={`sorted on ${sort}, ${direction}`}>
+                  <ScoreDots score={row.meanScore} />
+                </span>
+                <span className="text-xs text-muted" data-testid={`review-count-${row.id}`}>
+                  {row.reviewCount} review(s)
+                  {row.aiCount > 0 ? ` · ${row.humanCount} human, ${row.aiCount} AI` : ''}
+                </span>
                 <Badge tone={STATUS_TONE[row.status]}>{STATUS_LABELS[row.status]}</Badge>
                 {row.revisionCount > 0 && row.lastEditedAt ? (
                   <Link

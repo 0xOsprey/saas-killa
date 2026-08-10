@@ -23,11 +23,14 @@ import { FORMAT_LABELS, dayLabel, timeOfDay } from '@/lib/format';
 import { getEvent } from '@/lib/queries';
 import {
   UPLOAD_KINDS,
+  UPLOAD_KIND_LABELS,
   acceptAttribute,
-  documentsFor,
+  commentsForSeries,
+  fileSeriesList,
   formatBytes,
-  uploadHref,
+  type FileSeries,
 } from '@/lib/uploads';
+import { FileCommentThread, FileVersionList } from '@/app/files/FilePanels';
 import {
   removeDocument,
   saveContentDraft,
@@ -68,7 +71,23 @@ const FLASH: Record<string, { tone: 'good' | 'warn' | 'accent'; text: string }> 
     text: 'Document attached. Supporting documents go to the organizers only, never to the public agenda.',
   },
   removed: { tone: 'accent', text: 'Document removed.' },
+  commented: {
+    tone: 'good',
+    text: 'Comment posted. The organizers read the same thread you do.',
+  },
 };
+
+/**
+ * Slides first, then the poster, then the handouts in the order they arrived.
+ * The deliverable an organizer is chasing is the deck, so it is the one that
+ * should not need scrolling to.
+ */
+const KIND_ORDER: Record<string, number> = { slides: 0, poster: 1, document: 2 };
+
+function byKindThenAge(a: FileSeries, b: FileSeries): number {
+  const kinds = (KIND_ORDER[a.kind] ?? 9) - (KIND_ORDER[b.kind] ?? 9);
+  return kinds !== 0 ? kinds : a.firstUploadedAt.getTime() - b.firstUploadedAt.getTime();
+}
 
 /**
  * Where a speaker hands over slides, a recording and resources, and asks an
@@ -86,7 +105,24 @@ export default async function SpeakerContentPage({
 
   const [event, rows, params] = await Promise.all([getEvent(), myContent(user.id), searchParams]);
   const flash = Object.keys(FLASH).find((key) => params[key]);
-  const documents = await documentsFor(rows.map((row) => row.id));
+
+  // Every file on these talks, folded into version chains, with the thread on
+  // each. The deck and the handouts are read the same way here on purpose: a
+  // speaker asked to send a newer file should not have to learn two rules about
+  // what happens to the old one.
+  const files = await fileSeriesList({
+    submissionIds: rows.map((row) => row.id),
+    kinds: ['slides', 'poster', 'document'],
+  });
+  const threads = await commentsForSeries(files.map((series) => series.seriesId));
+  const filesBySubmission = new Map<string, FileSeries[]>();
+  for (const series of files) {
+    if (!series.submissionId) continue;
+    const list = filesBySubmission.get(series.submissionId) ?? [];
+    list.push(series);
+    filesBySubmission.set(series.submissionId, list);
+  }
+  for (const list of filesBySubmission.values()) list.sort(byKindThenAge);
 
   return (
     <div className="space-y-6">
@@ -273,49 +309,69 @@ export default async function SpeakerContentPage({
               data-testid={`documents-${row.id}`}
             >
               <div>
-                <h3 className="text-sm font-medium text-ink">Supporting documents</h3>
+                <h3 className="text-sm font-medium text-ink">Files and versions</h3>
                 <p className="mt-0.5 text-xs text-muted">
-                  Handouts, a data appendix, a signed release. Organizers only — these never
-                  appear on the public agenda.
+                  Every file on this talk. Sending a newer one keeps the old one: it becomes an
+                  earlier version and stays at its own link. Handouts, appendices and releases go
+                  to the organizers only and never reach the public agenda.
                 </p>
               </div>
 
-              {(documents.get(row.id) ?? []).length === 0 ? (
+              {(filesBySubmission.get(row.id) ?? []).length === 0 ? (
                 <p className="text-xs text-muted">Nothing attached yet.</p>
               ) : (
-                <ul className="space-y-1">
-                  {(documents.get(row.id) ?? []).map((document) => (
-                    <li
-                      key={document.id}
-                      className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm"
-                      data-testid={`document-${document.id}`}
+                <div className="space-y-3">
+                  {(filesBySubmission.get(row.id) ?? []).map((series) => (
+                    <div
+                      key={series.seriesId}
+                      className="space-y-3 rounded-md border border-line bg-white p-3"
+                      data-testid={`file-${series.seriesId}`}
                     >
-                      <a
-                        href={uploadHref(document)}
-                        className="min-w-0 flex-1 truncate underline hover:text-ink"
-                      >
-                        {document.filename}
-                      </a>
-                      <span className="text-xs text-muted">{formatBytes(document.bytes)}</span>
-                      {/* Only your own. A co-author may attach and withdraw their
-                          own material without being able to delete the filer's. */}
-                      {document.ownerId === user.id ? (
-                        <form action={removeDocument}>
-                          <input type="hidden" name="submissionId" value={row.id} />
-                          <input type="hidden" name="uploadId" value={document.id} />
-                          <Button
-                            type="submit"
-                            variant="ghost"
-                            className="text-xs"
-                            data-testid={`document-remove-${document.id}`}
-                          >
-                            Remove
-                          </Button>
-                        </form>
+                      <div className="flex flex-wrap items-baseline justify-between gap-2">
+                        <span className="min-w-0 truncate text-sm font-medium text-ink">
+                          {series.latest.filename}
+                        </span>
+                        <Badge>{UPLOAD_KIND_LABELS[series.kind]}</Badge>
+                      </div>
+
+                      <FileVersionList series={series} timezone={event.timezone} />
+
+                      {/* Only a handout can be taken down here, and only your
+                          own. Removing a deck version would leave the Slides URL
+                          the agenda links to pointing at bytes that are gone;
+                          replacing it with a newer upload is the move. A
+                          co-author may withdraw their own material without being
+                          able to delete the filer's release form. */}
+                      {series.kind === 'document' ? (
+                        <div className="flex flex-wrap gap-2">
+                          {series.versions
+                            .filter((version) => version.ownerId === user.id)
+                            .map((version) => (
+                              <form key={version.id} action={removeDocument}>
+                                <input type="hidden" name="submissionId" value={row.id} />
+                                <input type="hidden" name="uploadId" value={version.id} />
+                                <Button
+                                  type="submit"
+                                  variant="ghost"
+                                  className="text-xs"
+                                  data-testid={`document-remove-${version.id}`}
+                                >
+                                  Remove v{version.version}
+                                </Button>
+                              </form>
+                            ))}
+                        </div>
                       ) : null}
-                    </li>
+
+                      <FileCommentThread
+                        series={series}
+                        comments={threads.get(series.seriesId) ?? []}
+                        timezone={event.timezone}
+                        returnTo="/speaker/content?commented=1"
+                      />
+                    </div>
                   ))}
-                </ul>
+                </div>
               )}
 
               <form action={uploadDocument} className="space-y-2">
@@ -328,6 +384,10 @@ export default async function SpeakerContentPage({
                   data-testid={`document-file-${row.id}`}
                   className={FILE_INPUT}
                 />
+                <p className="text-xs text-muted">
+                  A PDF or an image, up to {formatBytes(UPLOAD_KINDS.document.maxBytes)}. Attaching
+                  a file that is already listed adds a version to it rather than a second row.
+                </p>
                 <Button
                   type="submit"
                   variant="secondary"

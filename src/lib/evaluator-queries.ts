@@ -1,6 +1,6 @@
-import { asc, desc, eq, sql } from 'drizzle-orm';
+import { aliasedTable, asc, desc, eq, sql } from 'drizzle-orm';
 import { db } from '@/db';
-import { evaluatorPersonas, reviews, submissions, users } from '@/db/schema';
+import { evaluatorPersonas, reviewRounds, reviews, submissions, users } from '@/db/schema';
 import type { SubmissionStatus } from '@/db/schema';
 
 /**
@@ -46,6 +46,87 @@ export async function personaRoster(): Promise<PersonaRosterRow[]> {
     .leftJoin(reviews, eq(reviews.personaId, evaluatorPersonas.id))
     .groupBy(evaluatorPersonas.id, users.email)
     .orderBy(asc(evaluatorPersonas.createdAt));
+}
+
+export type GradableSubmissionRow = {
+  id: string;
+  title: string;
+  decided: boolean;
+};
+
+/**
+ * What a targeted evaluator run may be pointed at, by title.
+ *
+ * Withdrawn proposals are left out and decided ones are not: a withdrawn talk is
+ * gone, but an accepted one is exactly what a chair wants a second opinion on
+ * when someone asks how the decision was reached.
+ */
+export async function gradableSubmissions(): Promise<GradableSubmissionRow[]> {
+  return db
+    .select({
+      id: submissions.id,
+      title: submissions.title,
+      decided: sql<boolean>`${submissions.status} <> 'submitted'`,
+    })
+    .from(submissions)
+    .where(sql`${submissions.status} <> 'withdrawn'`)
+    .orderBy(asc(submissions.title));
+}
+
+export type AiGradeRow = {
+  reviewId: string;
+  submissionId: string;
+  title: string;
+  personaName: string | null;
+  roundName: string;
+  score: number;
+  overrideScore: number | null;
+  overrideReason: string | null;
+  overriddenBy: string | null;
+  overriddenAt: Date | null;
+  comment: string | null;
+  rubric: Record<string, number> | null;
+  model: string | null;
+  createdAt: Date;
+};
+
+/**
+ * What the evaluator actually produced, most recent first.
+ *
+ * A run used to leave nothing on screen that survived a reload: the report lived
+ * in the action's return value, so the organizer who pressed the button saw the
+ * counts once and the grades themselves only ever appeared folded into a
+ * reviewer's queue. This is the run, readable afterwards, with the rationale the
+ * model wrote and any human correction sitting beside the number it replaced
+ * rather than on top of it.
+ */
+export async function aiGrades(limit = 25): Promise<AiGradeRow[]> {
+  const overrider = aliasedTable(users, 'overrider');
+  return db
+    .select({
+      reviewId: reviews.id,
+      submissionId: submissions.id,
+      title: submissions.title,
+      personaName: evaluatorPersonas.name,
+      roundName: reviewRounds.name,
+      score: reviews.score,
+      overrideScore: reviews.overrideScore,
+      overrideReason: reviews.overrideReason,
+      overriddenBy: sql<string | null>`coalesce(${overrider.name}, ${overrider.email})`,
+      overriddenAt: reviews.overriddenAt,
+      comment: reviews.comment,
+      rubric: reviews.rubric,
+      model: reviews.model,
+      createdAt: reviews.createdAt,
+    })
+    .from(reviews)
+    .innerJoin(submissions, eq(submissions.id, reviews.submissionId))
+    .innerJoin(reviewRounds, eq(reviewRounds.id, reviews.roundId))
+    .leftJoin(evaluatorPersonas, eq(evaluatorPersonas.id, reviews.personaId))
+    .leftJoin(overrider, eq(overrider.id, reviews.overriddenById))
+    .where(eq(reviews.source, 'ai'))
+    .orderBy(desc(reviews.createdAt))
+    .limit(limit);
 }
 
 export type OutlierRow = {

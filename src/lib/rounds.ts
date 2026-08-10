@@ -1,7 +1,17 @@
 import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { db } from '@/db';
-import { reviewAssignments, reviewRounds, reviews, submissions } from '@/db/schema';
-import type { ReviewRound } from '@/db/schema';
+import {
+  reviewAssignments,
+  reviewConflicts,
+  reviewRounds,
+  reviews,
+  roundCriteria,
+  roundReviewers,
+  submissions,
+  users,
+} from '@/db/schema';
+import type { CriterionKind, ReviewRound, RoundCriterion } from '@/db/schema';
+import { DEFAULT_CRITERIA } from './rubric';
 
 /**
  * Committee review in passes.
@@ -192,4 +202,299 @@ export async function carryForward(opts: {
     .onConflictDoNothing();
 
   return previous.length;
+}
+
+/**
+ * The scorecard.
+ *
+ * A round with no criteria rows is a round created before scorecards were
+ * configurable, or one created by a code path that does not know about them. It
+ * gets the four the app has always graded on rather than an empty form, which
+ * is why every reader goes through here instead of selecting the table
+ * directly: a queue that renders no fields looks exactly like a bug and
+ * silently records nothing.
+ *
+ * `onConflictDoNothing` on the (round, key) index makes the seeding safe under
+ * two reviewers opening the page at the same moment.
+ */
+export async function ensureRoundCriteria(roundId: string): Promise<RoundCriterion[]> {
+  const existing = await db
+    .select()
+    .from(roundCriteria)
+    .where(eq(roundCriteria.roundId, roundId))
+    .orderBy(asc(roundCriteria.position), asc(roundCriteria.createdAt));
+  if (existing.length > 0) return existing;
+
+  await db
+    .insert(roundCriteria)
+    .values(DEFAULT_CRITERIA.map((criterion) => ({ ...criterion, roundId })))
+    .onConflictDoNothing();
+
+  return db
+    .select()
+    .from(roundCriteria)
+    .where(eq(roundCriteria.roundId, roundId))
+    .orderBy(asc(roundCriteria.position), asc(roundCriteria.createdAt));
+}
+
+/** What a reviewer actually fills in: the scorecard minus anything archived. */
+export async function activeCriteria(roundId: string): Promise<RoundCriterion[]> {
+  const all = await ensureRoundCriteria(roundId);
+  return all.filter((criterion) => criterion.archivedAt === null);
+}
+
+/** Every criterion for every round in one read, for a page listing all of them. */
+export async function criteriaByRound(): Promise<Map<string, RoundCriterion[]>> {
+  const rows = await db
+    .select()
+    .from(roundCriteria)
+    .orderBy(asc(roundCriteria.position), asc(roundCriteria.createdAt));
+  const byRound = new Map<string, RoundCriterion[]>();
+  for (const row of rows) {
+    const held = byRound.get(row.roundId);
+    if (held) held.push(row);
+    else byRound.set(row.roundId, [row]);
+  }
+  return byRound;
+}
+
+export async function addCriterion(input: {
+  roundId: string;
+  key: string;
+  label: string;
+  kind: CriterionKind;
+  helpText: string | null;
+  scaleMin: number;
+  scaleMax: number;
+  options: string[];
+  weight: number;
+}): Promise<void> {
+  // Seed first. Adding a fifth criterion to a round that has never been opened
+  // would otherwise leave it with exactly one, and every grade already filed
+  // against the original four would render against a scorecard missing them.
+  const existing = await ensureRoundCriteria(input.roundId);
+  const position = existing.reduce((max, row) => Math.max(max, row.position), -1) + 1;
+
+  await db
+    .insert(roundCriteria)
+    .values({ ...input, position })
+    // A key that is already taken is the organizer re-adding a criterion they
+    // archived, so this un-archives it and takes the new wording rather than
+    // erroring on a collision they cannot see.
+    .onConflictDoUpdate({
+      target: [roundCriteria.roundId, roundCriteria.key],
+      set: {
+        label: input.label,
+        kind: input.kind,
+        helpText: input.helpText,
+        scaleMin: input.scaleMin,
+        scaleMax: input.scaleMax,
+        options: input.options,
+        weight: input.weight,
+        archivedAt: null,
+      },
+    });
+}
+
+export async function updateCriterion(input: {
+  criterionId: string;
+  label: string;
+  kind: CriterionKind;
+  helpText: string | null;
+  scaleMin: number;
+  scaleMax: number;
+  options: string[];
+  weight: number;
+}): Promise<void> {
+  const { criterionId, ...set } = input;
+  // `key` is deliberately absent from the set. It is the join to every score
+  // already stored under this criterion, and a rename is a display change.
+  await db.update(roundCriteria).set(set).where(eq(roundCriteria.id, criterionId));
+}
+
+/**
+ * Take a criterion off the scorecard without destroying what was scored on it.
+ * A deleted criterion would take its column of `reviews.rubric` out of every
+ * reader's reach, and those numbers are what a committee decided on.
+ */
+export async function archiveCriterion(criterionId: string): Promise<void> {
+  await db
+    .update(roundCriteria)
+    .set({ archivedAt: new Date() })
+    .where(eq(roundCriteria.id, criterionId));
+}
+
+export async function restoreCriterion(criterionId: string): Promise<void> {
+  await db.update(roundCriteria).set({ archivedAt: null }).where(eq(roundCriteria.id, criterionId));
+}
+
+export type PoolMember = {
+  reviewerId: string;
+  name: string | null;
+  email: string;
+};
+
+/** Who sits on this round's committee. Empty means everyone with the role. */
+export async function roundPool(roundId: string): Promise<PoolMember[]> {
+  return db
+    .select({ reviewerId: users.id, name: users.name, email: users.email })
+    .from(roundReviewers)
+    .innerJoin(users, eq(users.id, roundReviewers.reviewerId))
+    .where(eq(roundReviewers.roundId, roundId))
+    .orderBy(asc(users.name), asc(users.email));
+}
+
+/** The pools of every round at once, for a page comparing them side by side. */
+export async function poolsByRound(): Promise<Map<string, PoolMember[]>> {
+  const rows = await db
+    .select({
+      roundId: roundReviewers.roundId,
+      reviewerId: users.id,
+      name: users.name,
+      email: users.email,
+    })
+    .from(roundReviewers)
+    .innerJoin(users, eq(users.id, roundReviewers.reviewerId))
+    .orderBy(asc(users.name), asc(users.email));
+
+  const byRound = new Map<string, PoolMember[]>();
+  for (const { roundId, ...member } of rows) {
+    const held = byRound.get(roundId);
+    if (held) held.push(member);
+    else byRound.set(roundId, [member]);
+  }
+  return byRound;
+}
+
+export async function addToPool(roundId: string, reviewerId: string): Promise<void> {
+  await db.insert(roundReviewers).values({ roundId, reviewerId }).onConflictDoNothing();
+}
+
+/**
+ * Take somebody off a round's committee.
+ *
+ * Their assignments and their grades stay. Membership says who may be handed new
+ * work in this pass; it is not a claim about what they already did, and clearing
+ * that would move the round's completion rate under an organizer who only meant
+ * to stop the distributor picking them.
+ */
+export async function removeFromPool(roundId: string, reviewerId: string): Promise<void> {
+  await db
+    .delete(roundReviewers)
+    .where(
+      and(eq(roundReviewers.roundId, roundId), eq(roundReviewers.reviewerId, reviewerId)),
+    );
+}
+
+/** The reviewer ids a round is scoped to, or null when it is open to everyone. */
+export async function poolMemberIds(roundId: string): Promise<Set<string> | null> {
+  const rows = await db
+    .select({ reviewerId: roundReviewers.reviewerId })
+    .from(roundReviewers)
+    .where(eq(roundReviewers.roundId, roundId));
+  if (rows.length === 0) return null;
+  return new Set(rows.map((row) => row.reviewerId));
+}
+
+export async function setRoundBlind(roundId: string, blind: boolean): Promise<void> {
+  await db.update(reviewRounds).set({ blind }).where(eq(reviewRounds.id, roundId));
+}
+
+export async function renameRound(input: {
+  roundId: string;
+  name: string;
+  opensAt: Date | null;
+  dueAt: Date | null;
+}): Promise<void> {
+  const { roundId, ...set } = input;
+  await db.update(reviewRounds).set(set).where(eq(reviewRounds.id, roundId));
+}
+
+export type ConflictRow = {
+  submissionId: string;
+  submissionTitle: string;
+  reviewerId: string;
+  reviewerName: string | null;
+  reviewerEmail: string;
+  reason: string | null;
+  declaredAt: Date;
+};
+
+/** Every recusal in a round, for the organizer who has to cover the gap. */
+export async function conflictsForRound(roundId: string): Promise<ConflictRow[]> {
+  return db
+    .select({
+      submissionId: reviewConflicts.submissionId,
+      submissionTitle: submissions.title,
+      reviewerId: reviewConflicts.reviewerId,
+      reviewerName: users.name,
+      reviewerEmail: users.email,
+      reason: reviewConflicts.reason,
+      declaredAt: reviewConflicts.declaredAt,
+    })
+    .from(reviewConflicts)
+    .innerJoin(submissions, eq(submissions.id, reviewConflicts.submissionId))
+    .innerJoin(users, eq(users.id, reviewConflicts.reviewerId))
+    .where(eq(reviewConflicts.roundId, roundId))
+    .orderBy(asc(submissions.title), asc(users.email));
+}
+
+/**
+ * What this reviewer has recused themselves from in this round.
+ *
+ * A set rather than a list because the caller's question is always "is this one
+ * of them", once per card in a queue.
+ */
+export async function conflictedSubmissionIds(
+  reviewerId: string,
+  roundId: string,
+): Promise<Set<string>> {
+  const rows = await db
+    .select({ submissionId: reviewConflicts.submissionId })
+    .from(reviewConflicts)
+    .where(
+      and(eq(reviewConflicts.reviewerId, reviewerId), eq(reviewConflicts.roundId, roundId)),
+    );
+  return new Set(rows.map((row) => row.submissionId));
+}
+
+/**
+ * Record a recusal. Idempotent on the (round, submission, reviewer) key, so a
+ * reviewer who presses it twice restates their reason rather than seeing an
+ * error about a declaration they already made.
+ */
+export async function declareConflict(input: {
+  roundId: string;
+  submissionId: string;
+  reviewerId: string;
+  reason: string | null;
+}): Promise<void> {
+  await db
+    .insert(reviewConflicts)
+    .values(input)
+    .onConflictDoUpdate({
+      target: [
+        reviewConflicts.roundId,
+        reviewConflicts.submissionId,
+        reviewConflicts.reviewerId,
+      ],
+      set: { reason: input.reason, declaredAt: new Date() },
+    });
+}
+
+/** Undo a recusal, which is what makes the control safe to press to find out what it does. */
+export async function withdrawConflict(input: {
+  roundId: string;
+  submissionId: string;
+  reviewerId: string;
+}): Promise<void> {
+  await db
+    .delete(reviewConflicts)
+    .where(
+      and(
+        eq(reviewConflicts.roundId, input.roundId),
+        eq(reviewConflicts.submissionId, input.submissionId),
+        eq(reviewConflicts.reviewerId, input.reviewerId),
+      ),
+    );
 }

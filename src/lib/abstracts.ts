@@ -394,6 +394,21 @@ export function authorDisplayName(author: Pick<AuthorRow, 'name' | 'email'>): st
   return author.name ?? author.email;
 }
 
+/**
+ * What this person is on this submission, in one word.
+ *
+ * Derived rather than stored, because the two columns it reads are already the
+ * answer and a third column would be a third thing to keep in step with them.
+ * Position 0 is the account that filed it; `isPresenter` is the "will be in the
+ * room" box the co-author form has always collected and never shown, which is
+ * exactly the difference between somebody presenting alongside the submitter and
+ * somebody credited for the work.
+ */
+export function authorRoleLabel(author: Pick<AuthorRow, 'position' | 'isPresenter'>): string {
+  if (author.position === 0) return 'Submitter';
+  return author.isPresenter ? 'Co-presenter' : 'Co-author';
+}
+
 /** The credited author list for one submission, fallback applied. */
 export async function authorsForDisplay(submissionId: string): Promise<AuthorRow[]> {
   const [rows, speaker] = await Promise.all([
@@ -658,13 +673,47 @@ export type AbstractIndexRow = {
   createdAt: Date;
   revisionCount: number;
   lastEditedAt: Date | null;
+  reviewCount: number;
+  meanScore: number | null;
+  humanCount: number;
+  aiCount: number;
+};
+
+/** What the results table can be ordered on. */
+export const ABSTRACT_SORTS = ['score', 'title', 'newest', 'reviews'] as const;
+export type AbstractSort = (typeof ABSTRACT_SORTS)[number];
+export type SortDirection = 'asc' | 'desc';
+
+export const ABSTRACT_SORT_LABELS: Record<AbstractSort, string> = {
+  score: 'Average score',
+  title: 'Title',
+  newest: 'Date filed',
+  reviews: 'Number of reviews',
 };
 
 export type AbstractFilters = {
   q?: string | null;
   trackId?: string | null;
   status?: SubmissionStatus | null;
+  sort?: AbstractSort | null;
+  direction?: SortDirection | null;
 };
+
+/**
+ * One review's contribution to an aggregate.
+ *
+ * Three columns collapse into one number here, in the order a reader would
+ * expect to be believed: a human's override beats the grade it replaced, the
+ * unrounded weighted mean beats the integer it was rounded into, and the integer
+ * is what a grade filed before either of those existed has. Doing it in the
+ * query rather than the page is what keeps sorting and displaying the same
+ * number, which is the whole of what a sortable results table promises.
+ */
+const EFFECTIVE_SCORE = sql<number>`coalesce(
+  ${reviews.overrideScore}::real,
+  ${reviews.weightedScore},
+  ${reviews.score}::real
+)`;
 
 /**
  * Revision counts come from a correlated subquery rather than a join: joining
@@ -695,6 +744,23 @@ export async function abstractIndex(filters: AbstractFilters = {}): Promise<Abst
   if (filters.trackId) conditions.push(eq(submissions.trackId, filters.trackId));
   if (filters.status) conditions.push(eq(submissions.status, filters.status));
 
+  const sort = filters.sort ?? 'title';
+  const descending = (filters.direction ?? (sort === 'title' ? 'asc' : 'desc')) === 'desc';
+  const meanScore = sql`avg(${EFFECTIVE_SCORE})`;
+
+  // Nulls last in both directions, deliberately. An ungraded proposal is not the
+  // worst one and it is not the best one; it is the one with no answer yet, and
+  // a chair reversing the sort to find the weakest work should not have to
+  // scroll past every abstract nobody has read. Title breaks every tie, so the
+  // ordering is total and a second load of the same page cannot reshuffle it.
+  const direction = descending ? sql`desc nulls last` : sql`asc nulls last`;
+  const ordering = {
+    score: sql`${meanScore} ${direction}`,
+    reviews: sql`count(${reviews.id}) ${direction}`,
+    newest: sql`${submissions.createdAt} ${direction}`,
+    title: sql`lower(${submissions.title}) ${direction}`,
+  }[sort];
+
   return db
     .select({
       id: submissions.id,
@@ -717,12 +783,21 @@ export async function abstractIndex(filters: AbstractFilters = {}): Promise<Abst
       lastEditedAt: sql<Date | null>`(${revisionsOfOuterSubmission(
         sql`max(${submissionRevisions.createdAt})`,
       )})`,
+      reviewCount: sql<number>`count(${reviews.id})::int`,
+      meanScore: sql<number | null>`${meanScore}::float`,
+      humanCount: sql<number>`(count(*) filter (where ${reviews.source} = 'human'))::int`,
+      aiCount: sql<number>`(count(*) filter (where ${reviews.source} = 'ai'))::int`,
     })
     .from(submissions)
     .innerJoin(users, eq(users.id, submissions.speakerId))
     .leftJoin(tracks, eq(tracks.id, submissions.trackId))
+    // Across every round, not just the open one. This is the chair's ranking of
+    // the whole call, and a shortlist round that re-read forty proposals would
+    // otherwise blank the score of every proposal it did not re-read.
+    .leftJoin(reviews, eq(reviews.submissionId, submissions.id))
     .where(conditions.length > 0 ? and(...conditions) : undefined)
-    .orderBy(asc(submissions.title));
+    .groupBy(submissions.id, tracks.name, users.name, users.email)
+    .orderBy(ordering, asc(submissions.title));
 }
 
 export type ExportRow = {
@@ -756,12 +831,14 @@ export async function exportRows(): Promise<ExportRow[]> {
       status: submissions.status,
       keywords: submissions.keywords,
       reviewCount: sql<number>`count(${reviews.id})::int`,
+      // The same collapse the results table sorts on, so the file a committee
+      // reads offline agrees with the screen they read it from.
       meanHumanScore: sql<
         number | null
-      >`avg(${reviews.score}) filter (where ${reviews.source} = 'human')::float`,
+      >`(avg(${EFFECTIVE_SCORE}) filter (where ${reviews.source} = 'human'))::float`,
       meanAiScore: sql<
         number | null
-      >`avg(${reviews.score}) filter (where ${reviews.source} = 'ai')::float`,
+      >`(avg(${EFFECTIVE_SCORE}) filter (where ${reviews.source} = 'ai'))::float`,
     })
     .from(submissions)
     .innerJoin(users, eq(users.id, submissions.speakerId))
