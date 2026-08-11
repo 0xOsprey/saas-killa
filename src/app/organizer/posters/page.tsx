@@ -168,7 +168,15 @@ export default async function OrganizerPostersPage({
             </div>
 
             <div className="flex flex-wrap items-center gap-1.5">
-              {row.posterUrl ? null : <Badge tone="warn">no artwork</Badge>}
+              {row.posterUrl ? null : (
+                <Link
+                  href={`/organizer/speakers/${row.speakerId}`}
+                  className="inline-flex"
+                  data-testid={`poster-no-artwork-${row.id}`}
+                >
+                  <Badge tone="warn">no artwork</Badge>
+                </Link>
+              )}
               {row.contentStatus === 'pending' ? (
                 <>
                   <Badge tone="warn">awaiting moderation</Badge>

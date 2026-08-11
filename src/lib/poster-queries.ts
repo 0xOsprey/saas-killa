@@ -215,6 +215,7 @@ export type OrganizerPosterRow = {
   contentStatus: ContentStatus;
   posterUrl: string | null;
   boardNumber: string | null;
+  speakerId: string;
   speakerName: string | null;
   trackName: string | null;
   trackColour: string | null;
@@ -237,6 +238,7 @@ export async function organizerPosters(): Promise<OrganizerPosterRow[]> {
       contentStatus: submissions.contentStatus,
       posterUrl: submissions.posterUrl,
       boardNumber: submissions.boardNumber,
+      speakerId: submissions.speakerId,
       speakerName: users.name,
       trackName: tracks.name,
       trackColour: tracks.colour,
