@@ -9,14 +9,11 @@ Run through this before every push to `origin/main`.
 - [ ] No hostnames, IPs, ports, or operational details in comments beyond `127.0.0.1` (local dev) and `localhost`.
 - [ ] No public deployment domain, personal project codenames, or machine-specific paths in the diff.
 
-Quick scan:
+Quick scan (the concrete grep patterns live in `CLAUDE.local.md`, which is gitignored):
 
-```bash
-git diff --name-only | grep -E '\.env|\.mail|\.auth|uploads|CLAUDE\.local' && echo "FAIL" || echo "OK"
-git diff -G '(/home/|nuc|systemd|cloudflare tunnel|127\.0\.0\.1:91[45][0-9]|localhost:91)' -- src/ README.md CLAUDE.md
-```
-
-Also grep for the current live deployment domain (kept in `CLAUDE.local.md`) in those same files.
+- [ ] No `.env*`, `.mail/`, `.auth/`, `CLAUDE.local.md`, or `uploads/` files staged.
+- [ ] No hostnames, machine names, operational tools, or non-localhost ports in `src/`, `README.md`, or `CLAUDE.md`.
+- [ ] No live deployment domain in `src/`, `README.md`, or `CLAUDE.md`.
 
 ## 2. Typecheck and build
 

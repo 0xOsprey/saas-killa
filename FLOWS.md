@@ -4442,7 +4442,7 @@ The nav an anonymous visitor sees (`src/components/Nav.tsx`): the event name, th
   4. `calendarResponse` (`src/lib/ics.ts:222`) sets `content-type: text/calendar; charset=utf-8`,
      `content-disposition: attachment; filename="..."` and `cache-control: no-store`.
   5. `buildCalendar` emits `METHOD:PUBLISH`, and each VEVENT's `UID` is
-     `${submissionId}@sessionboard-clone` so a re-import updates rather than duplicates. Break
+     `${submissionId}@saas-killa` so a re-import updates rather than duplicates. Break
      blocks collapse on (start, end, label) and keep a `LOCATION` only when genuinely in one room.
      `DESCRIPTION` carries `speakerName`, then track/format, then the abstract.
 - **Error and refusal paths:**
