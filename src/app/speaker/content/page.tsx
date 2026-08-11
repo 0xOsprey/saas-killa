@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import {
   Badge,
@@ -153,7 +154,11 @@ export default async function SpeakerContentPage({
 
       {rows.length === 0 ? (
         <Empty>
-          Nothing to add content to yet. This screen fills up once a proposal is accepted.
+          Nothing to add content to yet.{' '}
+          <Link href="/speaker" className="text-accent hover:underline">
+            View your submissions
+          </Link>
+          ; this screen fills up once a proposal is accepted.
         </Empty>
       ) : null}
 
