@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronDown, LogOut, Palette, Settings, User } from 'lucide-react';
+import { ChevronDown, LogOut, Moon, Settings, Sun, User } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
@@ -115,18 +115,29 @@ export function UserMenu({
               Profile
             </Link>
 
-            <Link
-              href={`/theme?set=${theme === 'ai-engineer' ? 'light' : 'ai-engineer'}&redirect=${encodeURIComponent(pathname)}`}
-              onClick={() => setOpen(false)}
-              className={cn(
-                'flex items-center gap-2.5 px-4 py-2 text-sm text-muted transition-colors',
-                'hover:bg-ink/5 hover:text-ink',
-              )}
-              role="menuitem"
+            <form
+              method="get"
+              action="/theme"
+              className="contents"
             >
-              <Palette className="h-4 w-4" aria-hidden="true" />
-              {theme === 'ai-engineer' ? 'Switch to light' : 'Switch to AI Engineer'}
-            </Link>
+              <input type="hidden" name="set" value={theme === 'ai-engineer' ? 'light' : 'ai-engineer'} />
+              <input type="hidden" name="redirect" value={pathname} />
+              <button
+                type="submit"
+                className={cn(
+                  'flex w-full items-center gap-2.5 px-4 py-2 text-left text-sm text-muted transition-colors',
+                  'hover:bg-ink/5 hover:text-ink',
+                )}
+                role="menuitem"
+              >
+                {theme === 'ai-engineer' ? (
+                  <Sun className="h-4 w-4" aria-hidden="true" />
+                ) : (
+                  <Moon className="h-4 w-4" aria-hidden="true" />
+                )}
+                {theme === 'ai-engineer' ? 'Switch to light mode' : 'Switch to dark mode'}
+              </button>
+            </form>
 
             {showAdmin && (
               <Link
