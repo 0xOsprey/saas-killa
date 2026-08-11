@@ -899,29 +899,23 @@ Signed-in-but-wrong-role never 403s at the page level — it renders a `Notice` 
    correct; the documentation points at functions the app actually runs.
 
 2. **No `/speaker/**` route checks the `speaker` role.** All seven pages check only
-   `if (!user) redirect('/login')`. Two comments assert otherwise:
-   `src/app/organizer/speakers/actions.ts:67-69` (*"Their own portal at `/speaker` is
-   speaker-gated"*) and `src/lib/speakers.ts:260-262` (*"every action there is speaker-gated"*).
-   The revoke guard those comments justify is protecting against something that cannot happen. Real
-   protection comes from the ownership predicates in the WHERE clauses, which do not read
-   `user_roles` at all.
+   `if (!user) redirect('/login')`. The two comments that used to assert otherwise
+   (`src/app/organizer/speakers/actions.ts` and `src/lib/speakers.ts`) have been corrected to say
+   the actual gate is row ownership. The `speaker` role is a roster label.
 
 3. **The `speaker` role gates nothing.** Zero `requireRole('speaker')` call sites in the codebase.
    Every capability attributed to a speaker is row ownership (`submissions.speakerId`) or
    `writableBy`. The role is a label the roster page filters on.
 
-4. **First-submission self-service has a hole.** `submitProposal` grants `speaker` only through
-   `upsertUserByEmail`, which it calls only when `signedIn` is null
-   (`src/app/cfp/actions.ts:150`), and which grants only on *create*. A signed-in user whose
-   `speaker` role was revoked (possible while they have zero submissions) who then files through
-   `/cfp` never regains the role. Low impact, because nothing gates on it.
+4. **First-submission self-service has a hole — closed.** `submitProposal` used to grant `speaker`
+   only through `upsertUserByEmail`, which it called only when `signedIn` was null, and that helper
+   granted only on *create*. A signed-in user without the role who filed through `/cfp` never
+   regained it. `submitProposal` now calls `grantRole(speaker.id, 'speaker')` for every filing.
 
-5. **Organizer-without-`reviewer` is a half-reviewer.** `submitReview` and `/review` accept the
-   organizer role, but `reviewerCompletion` and `distributionInputs` both
-   `innerJoin(userRoles, ... eq(userRoles.role, 'reviewer'))` (`src/lib/grading.ts:86`, `:519`). Such
-   an organizer can grade every submission but never appears in the completion dashboard, never
-   receives an assignment and never receives a reminder. The seed masks this by granting the
-   bootstrap organizer both roles.
+5. **Organizer-without-`reviewer` is a half-reviewer — closed.** `submitReview` and `/review` still
+   accept the organizer role, but `grantRoleAction` now grants `reviewer` alongside `organizer`, so
+   the split can no longer be created from the UI. `reviewerCompletion` and `distributionInputs` still
+   join on `role = 'reviewer'`; the fix is to stop creating organizers without it.
 
 6. **`isPresenter` is not an access control.** It renders a `not presenting` badge and nothing else.
    Its neighbour `canEdit` in the same table is a genuine capability.

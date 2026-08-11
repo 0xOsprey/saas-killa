@@ -76,10 +76,11 @@ export async function revokeRoleAction(formData: FormData): Promise<void> {
   // screens with no way back in short of a database edit.
   if (input.userId === actor.id && input.role === 'organizer') return;
 
-  // Refuse to strip `speaker` from someone who has submissions. Their own
-  // portal at /speaker is speaker-gated, so revoking it does not tidy an
-  // account up, it locks the author out of confirming, withdrawing and
-  // uploading slides for talks that stay in the programme regardless.
+  // Refuse to strip `speaker` from someone who has submissions. The role is
+  // a roster label, not a gate (the portal is actually owned by
+  // `submissions.speakerId` and `writableBy`), but removing it from a user
+  // with submissions would be an organizer mistake rather than an account
+  // cleanup.
   if (input.role === 'speaker' && (await hasSubmissions(input.userId))) return;
 
   await db

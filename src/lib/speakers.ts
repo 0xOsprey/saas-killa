@@ -328,7 +328,8 @@ export async function speakerDetail(userId: string): Promise<SpeakerDetail | nul
 /**
  * True when stripping the speaker role would orphan someone from their own
  * portal. `/speaker` is where a submission is confirmed, withdrawn and given its
- * slides, and every action there is speaker-gated.
+ * slides, and every action there is owned by `submissions.speakerId` or
+ * `writableBy`, not gated by the `speaker` role.
  */
 export async function hasSubmissions(userId: string): Promise<boolean> {
   const [row] = await db

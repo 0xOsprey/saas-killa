@@ -229,9 +229,9 @@ export default async function SpeakersPage({
 
                 <div className="flex flex-wrap items-center gap-1.5">
                   {person.roles.map((role) =>
-                    // The speaker role is the key to their own portal. Once they
-                    // have filed anything the action refuses to revoke it, so the
-                    // chip stops offering.
+                    // The speaker role is a roster label, not a gate. The portal
+                    // is owned by submissions; once they have filed anything the
+                    // action refuses to revoke it, so the chip stops offering.
                     role === 'speaker' && person.total > 0 ? (
                       <Badge key={role} title="Has submissions — cannot be revoked">
                         {role}
