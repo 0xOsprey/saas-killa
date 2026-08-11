@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronDown, LogOut, Settings, User } from 'lucide-react';
+import { ChevronDown, LogOut, Palette, Settings, User } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
@@ -10,9 +10,11 @@ import type { CurrentUser } from '@/lib/auth';
 export function UserMenu({
   user,
   homeHref,
+  theme,
 }: {
   user: CurrentUser;
   homeHref: string;
+  theme: 'light' | 'ai-engineer';
 }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname() ?? '';
@@ -111,6 +113,19 @@ export function UserMenu({
             >
               <User className="h-4 w-4" aria-hidden="true" />
               Profile
+            </Link>
+
+            <Link
+              href={`/theme?set=${theme === 'ai-engineer' ? 'light' : 'ai-engineer'}&redirect=${encodeURIComponent(pathname)}`}
+              onClick={() => setOpen(false)}
+              className={cn(
+                'flex items-center gap-2.5 px-4 py-2 text-sm text-muted transition-colors',
+                'hover:bg-ink/5 hover:text-ink',
+              )}
+              role="menuitem"
+            >
+              <Palette className="h-4 w-4" aria-hidden="true" />
+              {theme === 'ai-engineer' ? 'Switch to light' : 'Switch to AI Engineer'}
             </Link>
 
             {showAdmin && (

@@ -86,13 +86,6 @@ export function AppShell({
           </nav>
 
           <div className="ml-auto flex items-center gap-2 text-sm">
-            <Link
-              href={`/theme?set=${theme === 'ai-engineer' ? 'light' : 'ai-engineer'}&redirect=${encodeURIComponent(pathname)}`}
-              className="rounded-full border border-line/50 bg-surface px-3 py-1.5 text-xs font-mono uppercase tracking-wider text-ink transition-colors hover:bg-ink/5"
-              aria-label={theme === 'ai-engineer' ? 'Switch to light theme' : 'Switch to AI Engineer theme'}
-            >
-              {theme === 'ai-engineer' ? 'Light' : 'AI Engineer'}
-            </Link>
             {user ? (
               <UserMenu
                 user={user}
@@ -103,6 +96,7 @@ export function AppShell({
                       ? '/review'
                       : '/speaker'
                 }
+                theme={theme}
               />
             ) : (
               <Link
