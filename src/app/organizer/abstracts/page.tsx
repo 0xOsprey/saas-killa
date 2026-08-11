@@ -235,7 +235,13 @@ export default async function AbstractsIndexPage({
                     </Badge>
                   </Link>
                 ) : (
-                  <span className="text-xs text-muted">unedited</span>
+                  <Link
+                    href={`/organizer/abstracts/${row.id}`}
+                    className="text-xs text-muted hover:text-ink hover:underline"
+                    data-testid={`unedited-${row.id}`}
+                  >
+                    unedited
+                  </Link>
                 )}
               </div>
             </div>
