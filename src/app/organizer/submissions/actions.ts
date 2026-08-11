@@ -155,6 +155,7 @@ export async function notifyDecided(formData: FormData): Promise<void> {
       kind: row.status === 'accepted' ? 'decision_accepted' : 'decision_rejected',
       subject: mail.subject,
       delivered: sent.delivered,
+      mailJson: JSON.stringify(mail),
     });
   }
 

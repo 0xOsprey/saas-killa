@@ -137,6 +137,7 @@ export async function logEmail(meta: {
   kind: string;
   subject: string;
   delivered: boolean;
+  mailJson?: string;
   submissionId?: string;
 }): Promise<void> {
   await db.insert(emailLog).values({
@@ -145,6 +146,7 @@ export async function logEmail(meta: {
     kind: meta.kind,
     subject: meta.subject,
     delivered: meta.delivered,
+    mailJson: meta.mailJson ?? null,
   });
 }
 
@@ -159,7 +161,12 @@ export async function sendAndLog(
   meta: { userId: string; kind: string; submissionId?: string },
 ): Promise<{ delivered: boolean; path?: string }> {
   const result = await sendMail(mail);
-  await logEmail({ ...meta, subject: mail.subject, delivered: result.delivered });
+  await logEmail({
+    ...meta,
+    subject: mail.subject,
+    delivered: result.delivered,
+    mailJson: JSON.stringify(mail),
+  });
   return result;
 }
 
@@ -168,6 +175,7 @@ export type EmailLogEntry = {
   kind: string;
   subject: string;
   delivered: boolean;
+  mailJson: string | null;
   sentAt: Date;
   recipientName: string | null;
   recipientEmail: string;
@@ -194,6 +202,7 @@ export async function recentEmails(limit = 200): Promise<EmailLogEntry[]> {
       kind: emailLog.kind,
       subject: emailLog.subject,
       delivered: emailLog.delivered,
+      mailJson: emailLog.mailJson,
       sentAt: emailLog.sentAt,
       recipientName: users.name,
       recipientEmail: users.email,

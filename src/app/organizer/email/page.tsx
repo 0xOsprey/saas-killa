@@ -12,6 +12,7 @@ import { inEventZone } from '@/lib/format';
 import { getEvent } from '@/lib/queries';
 import { ROSTER_FILTERS } from '@/lib/speakers';
 import { ComposeForm } from './ComposeForm';
+import { RetryForm } from './RetryForm';
 import { announcementAudience } from './recipients';
 
 /**
@@ -248,9 +249,11 @@ export default async function EmailLogScreen({
                     {row.kind}
                   </code>
                   <Badge tone="neutral">{KIND_LABELS[row.kind] ?? row.kind}</Badge>
-                  <Badge tone={row.delivered ? 'good' : 'warn'}>
-                    {row.delivered ? 'delivered' : 'not sent'}
-                  </Badge>
+                  {row.delivered ? (
+                    <Badge tone="good">delivered</Badge>
+                  ) : (
+                    <RetryForm id={row.id} canRetry={row.mailJson !== null} />
+                  )}
                 </div>
               </li>
             ))}

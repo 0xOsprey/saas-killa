@@ -1,10 +1,13 @@
 'use server';
 
+import { and, eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { requireRole } from '@/lib/auth';
 import { parseContactFilters } from '@/lib/contacts';
-import { sendAndLog } from '@/lib/email';
+import { db } from '@/db';
+import { emailLog } from '@/db/schema';
+import { sendAndLog, sendMail, type Mail } from '@/lib/email';
 import { getEvent } from '@/lib/queries';
 import { isRosterFilter } from '@/lib/speakers';
 import { announcementMail } from './mail';
@@ -193,4 +196,59 @@ export async function sendAnnouncementAction(
 
   revalidatePath('/organizer/email');
   return { sent, skipped: audience.length - sent };
+}
+
+export type RetryState = { error?: string; delivered?: boolean };
+
+const retrySchema = z.object({ id: z.string().uuid() });
+
+/**
+ * Resend a single failed email, using the rendered body stored on the log row.
+ *
+ * The row is updated in place so the log reflects the latest attempt: a
+ * successful retry flips the badge to "delivered", a failed one leaves it as
+ * "not sent" with an updated timestamp. Old rows that pre-date this feature have
+ * no stored body, so they cannot be retried exactly; the action explains that.
+ */
+export async function retryEmailAction(
+  _prev: RetryState,
+  formData: FormData,
+): Promise<RetryState> {
+  await requireRole('organizer');
+
+  const parsed = retrySchema.safeParse({
+    id: formData.get('id'),
+  });
+  if (!parsed.success) return { error: 'Could not work out which email to retry.' };
+
+  const [row] = await db
+    .select({
+      id: emailLog.id,
+      userId: emailLog.userId,
+      submissionId: emailLog.submissionId,
+      kind: emailLog.kind,
+      delivered: emailLog.delivered,
+      mailJson: emailLog.mailJson,
+    })
+    .from(emailLog)
+    .where(and(eq(emailLog.id, parsed.data.id), eq(emailLog.delivered, false)));
+
+  if (!row) return { error: 'That email has already been delivered or removed.' };
+  if (!row.mailJson) return { error: 'This email was sent before retry was available.' };
+
+  let mail: Mail;
+  try {
+    mail = JSON.parse(row.mailJson) as Mail;
+  } catch {
+    return { error: 'Stored email is unreadable.' };
+  }
+
+  const result = await sendMail(mail);
+  await db
+    .update(emailLog)
+    .set({ delivered: result.delivered, sentAt: new Date() })
+    .where(eq(emailLog.id, row.id));
+
+  revalidatePath('/organizer/email');
+  return { delivered: result.delivered };
 }

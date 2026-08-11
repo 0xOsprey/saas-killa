@@ -880,6 +880,8 @@ export const emailLog = pgTable(
     subject: text('subject').notNull(),
     /** False when RESEND_API_KEY is unset and the mail only reached .mail/. */
     delivered: boolean('delivered').notNull().default(false),
+    /** Serialized `Mail` so a failed send can be retried with exactly the same body. */
+    mailJson: text('mail_json'),
     sentAt: timestamp('sent_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index('email_log_user_idx').on(t.userId, t.sentAt)],
