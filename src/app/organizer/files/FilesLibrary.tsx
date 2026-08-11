@@ -256,7 +256,13 @@ function ExportDialog({
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <Button type="button" onClick={generate} disabled={pending} data-testid="export-generate">
+        <Button
+          type="button"
+          onClick={generate}
+          disabled={pending}
+          title={pending ? 'Building the archive…' : 'Build a zip of the selected files'}
+          data-testid="export-generate"
+        >
           {pending ? 'Generating…' : 'Generate download'}
         </Button>
         <Button type="button" variant="ghost" onClick={onClose}>

@@ -45,7 +45,13 @@ export function ReminderForm({
       {userId ? <input type="hidden" name="userId" value={userId} /> : null}
       {taskId ? <input type="hidden" name="taskId" value={taskId} /> : null}
 
-      <Button type="submit" variant={variant} className={buttonClassName} disabled={pending}>
+      <Button
+        type="submit"
+        variant={variant}
+        className={buttonClassName}
+        disabled={pending}
+        title={pending ? 'Sending reminders…' : label}
+      >
         {pending ? 'Sending…' : label}
       </Button>
 

@@ -57,7 +57,17 @@ export function BulkTaskForm({
       </Field>
 
       <div className="flex flex-wrap items-center gap-3">
-        <Button type="submit" disabled={pending || targetCount === 0}>
+        <Button
+          type="submit"
+          disabled={pending || targetCount === 0}
+          title={
+            pending
+              ? 'Adding tasks…'
+              : targetCount === 0
+                ? 'No speakers match the current filter'
+                : `Add this task to ${targetCount} speaker(s)`
+          }
+        >
           {pending ? 'Adding…' : `Add to ${targetCount} speaker(s)`}
         </Button>
         <span className="text-xs text-muted">

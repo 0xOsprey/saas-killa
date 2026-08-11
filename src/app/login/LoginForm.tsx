@@ -32,7 +32,12 @@ export function LoginForm() {
               data-testid="login-email"
             />
           </Field>
-          <Button type="submit" disabled={pending} data-testid="login-submit">
+          <Button
+            type="submit"
+            disabled={pending}
+            title={pending ? 'Sending the sign-in link…' : 'Send a sign-in link to this email'}
+            data-testid="login-submit"
+          >
             {pending ? 'Sending…' : 'Email me a link'}
           </Button>
         </form>

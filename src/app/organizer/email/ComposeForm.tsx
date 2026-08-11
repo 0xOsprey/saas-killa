@@ -233,11 +233,29 @@ export function ComposeForm({
           variant="secondary"
           formAction={previewAction}
           disabled={busy || recipients.length === 0}
+          title={
+            busy
+              ? 'Working…'
+              : recipients.length === 0
+                ? 'No recipients match the current audience'
+                : 'Render a preview without sending'
+          }
           data-testid="compose-preview"
         >
           {previewPending ? 'Rendering…' : 'Preview'}
         </Button>
-        <Button type="submit" disabled={busy || chosen.size === 0} data-testid="compose-send">
+        <Button
+          type="submit"
+          disabled={busy || chosen.size === 0}
+          title={
+            busy
+              ? 'Working…'
+              : chosen.size === 0
+                ? 'Select at least one recipient'
+                : `Send this message to ${chosen.size} speaker(s)`
+          }
+          data-testid="compose-send"
+        >
           {sendPending ? 'Sending…' : `Send to ${chosen.size} speaker(s)`}
         </Button>
         <span className="text-xs text-muted">Preview sends nothing.</span>

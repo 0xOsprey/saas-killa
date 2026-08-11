@@ -140,7 +140,12 @@ export default async function RoomsPage({
                 <form action={moveRoom}>
                   <input type="hidden" name="id" value={room.id} />
                   <input type="hidden" name="direction" value="up" />
-                  <Button type="submit" variant="ghost" disabled={index === 0} title="Move left">
+                  <Button
+                    type="submit"
+                    variant="ghost"
+                    disabled={index === 0}
+                    title={index === 0 ? 'Already first' : 'Move left'}
+                  >
                     ←
                   </Button>
                 </form>
@@ -151,7 +156,7 @@ export default async function RoomsPage({
                     type="submit"
                     variant="ghost"
                     disabled={index === rooms.length - 1}
-                    title="Move right"
+                    title={index === rooms.length - 1 ? 'Already last' : 'Move right'}
                   >
                     →
                   </Button>

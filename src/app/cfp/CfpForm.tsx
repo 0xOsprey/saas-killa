@@ -313,7 +313,12 @@ export function CfpForm({
 
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-3">
-              <Button type="submit" disabled={pending} data-testid="cfp-submit">
+              <Button
+                type="submit"
+                disabled={pending}
+                title={pending ? 'Submitting the proposal…' : 'Submit this proposal for review'}
+                data-testid="cfp-submit"
+              >
                 {pending ? 'Submitting…' : 'Submit proposal'}
               </Button>
               {/*

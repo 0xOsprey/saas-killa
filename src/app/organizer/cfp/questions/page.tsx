@@ -106,7 +106,12 @@ export default async function QuestionsPage({
                       <form action={moveQuestion}>
                         <input type="hidden" name="questionId" value={question.id} />
                         <input type="hidden" name="direction" value="up" />
-                        <Button type="submit" variant="ghost" disabled={index === 0}>
+                        <Button
+                          type="submit"
+                          variant="ghost"
+                          disabled={index === 0}
+                          title={index === 0 ? 'Already first' : 'Move up'}
+                        >
                           Up
                         </Button>
                       </form>
@@ -117,6 +122,7 @@ export default async function QuestionsPage({
                           type="submit"
                           variant="ghost"
                           disabled={index === live.length - 1}
+                          title={index === live.length - 1 ? 'Already last' : 'Move down'}
                         >
                           Down
                         </Button>

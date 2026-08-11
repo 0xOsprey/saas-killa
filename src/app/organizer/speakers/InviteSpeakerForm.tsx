@@ -134,7 +134,11 @@ export function InviteSpeakerForm({ tracks }: { tracks: Track[] }) {
       </label>
 
       <div className="flex flex-wrap items-center gap-3">
-        <Button type="submit" disabled={pending}>
+        <Button
+          type="submit"
+          disabled={pending}
+          title={pending ? 'Inviting the speaker…' : 'Invite this speaker and send a sign-in link'}
+        >
           {pending ? 'Inviting…' : 'Invite and send a sign-in link'}
         </Button>
         <span className="text-xs text-muted">

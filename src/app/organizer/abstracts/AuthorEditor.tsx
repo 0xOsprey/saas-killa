@@ -137,7 +137,12 @@ export function AuthorEditor({
             Can edit this proposal, not only be credited on it
           </label>
         ) : null}
-        <Button type="submit" variant="secondary" disabled={adding}>
+        <Button
+          type="submit"
+          variant="secondary"
+          disabled={adding}
+          title={adding ? 'Adding the co-author…' : 'Add this co-author to the proposal'}
+        >
           {adding ? 'Adding…' : 'Add co-author'}
         </Button>
       </form>

@@ -338,6 +338,7 @@ function Row({
             type="submit"
             variant={row.status === 'accepted' ? 'primary' : 'secondary'}
             disabled={deciding}
+            title={deciding ? 'Saving the decision…' : 'Mark this submission accepted'}
             data-testid={`accept-${row.id}`}
           >
             Accept
@@ -350,6 +351,7 @@ function Row({
             type="submit"
             variant={row.status === 'rejected' ? 'danger' : 'secondary'}
             disabled={deciding}
+            title={deciding ? 'Saving the decision…' : 'Mark this submission rejected'}
           >
             Reject
           </Button>
@@ -358,7 +360,13 @@ function Row({
           <form action={formAction}>
             <input type="hidden" name="submissionId" value={row.id} />
             <input type="hidden" name="status" value="submitted" />
-            <Button type="submit" variant="ghost" className="text-xs" disabled={deciding}>
+            <Button
+              type="submit"
+              variant="ghost"
+              className="text-xs"
+              disabled={deciding}
+              title={deciding ? 'Saving the decision…' : 'Put this submission back to submitted'}
+            >
               Undecide
             </Button>
           </form>
@@ -373,6 +381,7 @@ function Row({
               variant="ghost"
               onClick={() => run(notifyDecided, { ids: row.id })}
               disabled={pending}
+              title={pending ? 'Sending the email…' : 'Email this speaker their decision'}
               className="h-auto gap-0 rounded-none px-0 py-0 text-xs text-muted hover:bg-transparent hover:text-ink hover:underline"
               data-testid={`notify-${row.id}`}
             >
@@ -473,6 +482,11 @@ function Row({
                   variant="danger"
                   disabled={reason.trim().length < 4}
                   onClick={sendBack}
+                  title={
+                    reason.trim().length < 4
+                      ? 'Add a reason of at least 4 characters'
+                      : 'Return this content to the speaker with the reason'
+                  }
                   data-testid={`content-return-${row.id}`}
                 >
                   Send back

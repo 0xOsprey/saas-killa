@@ -31,7 +31,12 @@ export function AbstractEditor({
 
       <AbstractFields values={values} locked={locked} />
 
-      <Button type="submit" disabled={pending} data-testid="save-abstract">
+      <Button
+        type="submit"
+        disabled={pending}
+        title={pending ? 'Saving the changes…' : 'Save the changes to this proposal'}
+        data-testid="save-abstract"
+      >
         {pending ? 'Saving…' : 'Save changes'}
       </Button>
     </form>

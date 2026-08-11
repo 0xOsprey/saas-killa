@@ -151,7 +151,12 @@ export function ProfileForm({
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <Button type="submit" disabled={pending} data-testid="profile-save">
+        <Button
+          type="submit"
+          disabled={pending}
+          title={pending ? 'Saving the profile…' : 'Save the profile'}
+          data-testid="profile-save"
+        >
           {pending ? 'Saving…' : 'Save profile'}
         </Button>
         {/*
@@ -163,6 +168,7 @@ export function ProfileForm({
           type="submit"
           variant="secondary"
           disabled={pending}
+          title={pending ? 'Saving the profile…' : 'Upload the selected headshot with the profile'}
           data-testid="headshot-upload"
         >
           {pending ? 'Uploading…' : 'Upload headshot'}

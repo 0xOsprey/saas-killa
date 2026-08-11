@@ -117,7 +117,12 @@ export function ProfileForm({
         )}
       </Card>
 
-      <Button type="submit" disabled={pending} data-testid="profile-save">
+      <Button
+        type="submit"
+        disabled={pending}
+        title={pending ? 'Saving the profile…' : 'Save the profile'}
+        data-testid="profile-save"
+      >
         {pending ? 'Saving…' : 'Save profile'}
       </Button>
     </form>

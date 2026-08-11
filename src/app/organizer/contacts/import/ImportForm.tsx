@@ -53,7 +53,12 @@ export function ImportForm() {
               preview.
             </span>
           </label>
-          <Button type="submit" disabled={pending} data-testid="import-preview">
+          <Button
+            type="submit"
+            disabled={pending}
+            title={pending ? 'Reading the file…' : 'Preview the CSV before importing'}
+            data-testid="import-preview"
+          >
             {pending ? 'Reading…' : 'Preview the file'}
           </Button>
         </form>
@@ -128,6 +133,13 @@ export function ImportForm() {
               <Button
                 type="submit"
                 disabled={pending || outcome.counts.create + outcome.counts.match === 0}
+                title={
+                  pending
+                    ? 'Importing contacts…'
+                    : outcome.counts.create + outcome.counts.match === 0
+                      ? 'No valid contacts to import'
+                      : `Create ${outcome.counts.create} and update ${outcome.counts.match} contacts`
+                }
                 data-testid="import-confirm"
               >
                 {pending

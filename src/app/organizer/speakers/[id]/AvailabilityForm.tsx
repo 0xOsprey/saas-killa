@@ -31,7 +31,12 @@ export function AvailabilityForm({ userId, timezone }: { userId: string; timezon
         </Field>
       </div>
 
-      <Button type="submit" variant="secondary" disabled={pending}>
+      <Button
+        type="submit"
+        variant="secondary"
+        disabled={pending}
+        title={pending ? 'Adding the unavailable block…' : 'Add this unavailable window'}
+      >
         {pending ? 'Adding…' : 'Add unavailable block'}
       </Button>
 
