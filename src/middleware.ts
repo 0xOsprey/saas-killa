@@ -96,5 +96,11 @@ export async function middleware(request: NextRequest) {
  * thing the product is for.
  */
 export const config = {
-  matcher: ['/organizer/:path*', '/speaker/:path*', '/review/:path*'],
+  matcher: [
+    // Route handlers under /organizer carry their own guardRoute check and must
+    // be allowed to return 401/403, so exclude the known handler paths.
+    '/organizer/:path((?!abstracts/export$|speakers/export$|files/exports/|integrations/[^/]+/bundle$).*)',
+    '/speaker/:path*',
+    '/review/:path*',
+  ],
 };

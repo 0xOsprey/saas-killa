@@ -37,13 +37,8 @@ pnpm exec tsc --noEmit --strict --skipLibCheck --target es2022 --module esnext \
 
 | File | Holds |
 | --- | --- |
-| `SCOPE.md` | the hackathon brief requirement by requirement: what is built, what was declined and why, which test covers each, and the four requirements the brief itself strikes through |
-| `FLOWS.md` | every user flow by role, 175 of them over 796 numbered steps, each with its route, preconditions, the server action behind each control, the column it writes, and its refusal paths |
-| `MISSING.md` | what tracing those flows found absent, ranked, every absence checked against source; plus a "deliberate, not missing" list and a "checked and not missing" list so a corrected claim is not filed twice |
 | `README.md` | the outside view, and the design decisions worth knowing |
-
-Read `SCOPE.md` before re-deriving anything from the brief, and `MISSING.md`
-before filing a gap. Both were written 2026-08-08.
+| `CLAUDE.md` | this file: commands, invariants, and vocabulary |
 
 ## Vocabulary — use these names, never a synonym
 
@@ -95,6 +90,11 @@ six hardcoded strings in `src/`, a build and a restart.
 - **Every server action re-checks its own role.** The `organizer/layout.tsx`
   guard does not run for a direct action invocation, so it is defence in depth,
   not the control.
+- **`src/middleware.ts` guards pages, not route handlers.** It redirects an
+  unauthenticated request away from `/organizer`, `/speaker` and `/review` before
+  any page renders, because the layout redirect used to leak the whole page body
+  over the wire. `route.ts` handlers are deliberately bypassed: they call
+  `guardRoute` themselves and must be allowed to return 401/403.
 - **Speaker-scoped actions put ownership in the WHERE clause**, not in a check
   before the query. A forged id then updates zero rows.
 - **`SESSION_SECRET` has no default** in `src/lib/env.ts`. Do not add one.

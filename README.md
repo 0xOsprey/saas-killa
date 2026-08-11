@@ -17,11 +17,6 @@ Conference programme software. It runs the whole CFP-to-agenda pipeline:
 **Stack:** Next.js 15 (App Router, Server Actions) · React 19 · TypeScript ·
 Postgres · Drizzle ORM · Tailwind v4 · Resend · Playwright.
 
-`SCOPE.md` is the requirement-by-requirement account of what is built, what is
-deliberately not, and which test covers each. `FLOWS.md` is every user flow by
-role: 175 flows across 796 numbered steps, each with route, preconditions, server
-action, and refusal paths.
-
 ## Quickstart
 
 ### What you need
@@ -321,5 +316,5 @@ systemctl --user start saas-killa.service saas-killa-tunnel.service
 
 Attendee registration, ticketing and check-in; sponsors and exhibitors;
 submission payments and payment gateways; multi-language workflows; and AMS
-integrations (iMIS, Personify, Blackbaud, Salesforce). `SCOPE.md` says why for
-each.
+integrations (iMIS, Personify, Blackbaud, Salesforce). These were left out
+intentionally to keep the scope to the CFP-to-agenda pipeline.

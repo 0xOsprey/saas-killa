@@ -40,6 +40,14 @@ temp/
 # somebody's private network.
 CLAUDE.local.md
 
+# Build-out and handoff notes. These were useful while the app was being
+# written but are not part of the public source tree.
+FLOWS.md
+MISSING.md
+SCOPE.md
+PUSH-CHECKLIST.md
+.devin/
+
 # Playwright
 /test-results/
 /playwright-report/
