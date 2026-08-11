@@ -150,16 +150,55 @@ export default async function SpeakersPage({
                     <span>
                       {person.total} submitted · {person.accepted} accepted
                     </span>
-                    {missingBio ? <Badge tone="warn">bio missing</Badge> : null}
-                    {missingHeadshot ? <Badge tone="warn">headshot missing</Badge> : null}
-                    {unconfirmed ? <Badge tone="warn">not confirmed</Badge> : null}
+                    {missingBio ? (
+                      <Link
+                        href={`/organizer/speakers/${person.id}`}
+                        className="inline-flex"
+                        data-testid={`roster-bio-${person.id}`}
+                      >
+                        <Badge tone="warn">bio missing</Badge>
+                      </Link>
+                    ) : null}
+                    {missingHeadshot ? (
+                      <Link
+                        href={`/organizer/speakers/${person.id}`}
+                        className="inline-flex"
+                        data-testid={`roster-headshot-${person.id}`}
+                      >
+                        <Badge tone="warn">headshot missing</Badge>
+                      </Link>
+                    ) : null}
+                    {unconfirmed ? (
+                      <Link
+                        href={`/organizer/speakers/${person.id}`}
+                        className="inline-flex"
+                        data-testid={`roster-unconfirmed-${person.id}`}
+                      >
+                        <Badge tone="warn">not confirmed</Badge>
+                      </Link>
+                    ) : null}
                     {person.declined > 0 ? (
-                      <Badge tone="bad" data-testid={`roster-declined-${person.id}`}>
-                        {person.declined} declined
-                      </Badge>
+                      <Link
+                        href={`/organizer/speakers/${person.id}`}
+                        className="inline-flex"
+                        data-testid={`roster-declined-${person.id}`}
+                      >
+                        <Badge tone="bad">
+                          {person.declined} declined
+                        </Badge>
+                      </Link>
                     ) : null}
                     {person.overdue > 0 ? (
-                      <Badge tone="bad">{person.overdue} overdue</Badge>
+                      <ReminderForm
+                        scope="user"
+                        userId={person.id}
+                        filter={filter}
+                        q={q}
+                        label={`${person.overdue} overdue · remind`}
+                        variant="ghost"
+                        className="inline"
+                        buttonClassName="h-auto gap-0 rounded-none px-0 py-0 text-xs text-ink underline hover:bg-transparent hover:text-accent"
+                      />
                     ) : null}
                   </p>
 

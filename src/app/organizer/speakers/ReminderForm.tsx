@@ -1,7 +1,7 @@
 'use client';
 
 import { useActionState } from 'react';
-import { Button, Notice } from '@/components/ui';
+import { Button, Notice, cn } from '@/components/ui';
 import { sendTaskRemindersAction, type ReminderState } from './actions';
 
 const EMPTY: ReminderState = {};
@@ -23,6 +23,7 @@ export function ReminderForm({
   label,
   variant = 'secondary',
   className,
+  buttonClassName,
 }: {
   scope: 'all' | 'user' | 'task';
   filter?: string;
@@ -32,18 +33,19 @@ export function ReminderForm({
   label: string;
   variant?: 'primary' | 'secondary' | 'ghost';
   className?: string;
+  buttonClassName?: string;
 }) {
   const [state, formAction, pending] = useActionState(sendTaskRemindersAction, EMPTY);
 
   return (
-    <form action={formAction} className="space-y-2">
+    <form action={formAction} className={cn('space-y-2', className)}>
       <input type="hidden" name="scope" value={scope} />
       <input type="hidden" name="filter" value={filter ?? 'all'} />
       <input type="hidden" name="q" value={q ?? ''} />
       {userId ? <input type="hidden" name="userId" value={userId} /> : null}
       {taskId ? <input type="hidden" name="taskId" value={taskId} /> : null}
 
-      <Button type="submit" variant={variant} className={className} disabled={pending}>
+      <Button type="submit" variant={variant} className={buttonClassName} disabled={pending}>
         {pending ? 'Sending…' : label}
       </Button>
 
