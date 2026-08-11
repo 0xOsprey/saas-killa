@@ -62,8 +62,9 @@ export default async function EvaluatorsPage() {
 
       {configured ? null : (
         <Notice>
-          The AI evaluator is off. Set <code>ANTHROPIC_API_KEY</code> to run a persona. Personas can
-          still be written and edited here; nothing calls the model without the key.
+          The AI evaluator is off. Set <code>ANTHROPIC_API_KEY</code> in <code>.env.local</code> to
+          run a persona. Personas can still be written and edited here; nothing calls the model
+          without the key.
         </Notice>
       )}
 

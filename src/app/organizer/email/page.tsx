@@ -86,13 +86,15 @@ export default async function EmailLogScreen({
             {mode === 'no-key' ? (
               <>
                 <code className="rounded bg-amber-100 px-1">RESEND_API_KEY</code> is unset, so
-                nothing has left this machine and every row below reads as undelivered.
+                nothing has left this machine and every row below reads as undelivered. Set it in{' '}
+                <code>.env.local</code> to send live.
               </>
             ) : (
               <>
                 <code className="rounded bg-amber-100 px-1">MAIL_NOTIFICATIONS=off</code>, so
                 notifications are being written to disk instead of sent and every row below reads as
-                undelivered. Sign-in links are exempt and still go out.
+                undelivered. Sign-in links are exempt and still go out. Set it to{' '}
+                <code>on</code> in <code>.env.local</code> to send live.
               </>
             )}{' '}
             The messages are in <code className="rounded bg-amber-100 px-1">.mail/</code>, one file

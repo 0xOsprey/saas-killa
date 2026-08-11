@@ -325,8 +325,8 @@ export default async function OrganizerSubmissionsPage({
 
       {evaluatorConfigured() ? null : (
         <Notice>
-          The AI evaluator is off. Set <code>ANTHROPIC_API_KEY</code> to have it pre-grade
-          abstracts against the rubric. Human grading works without it.
+          The AI evaluator is off. Set <code>ANTHROPIC_API_KEY</code> in <code>.env.local</code> to
+          have it pre-grade abstracts against the rubric. Human grading works without it.
         </Notice>
       )}
 

@@ -602,8 +602,11 @@ export default async function OrganizerCfpPage({
         </>
       ) : (
         <Notice>
-          Nothing is being graded. Open a round above, and the distribution, completion and
-          coverage panels come back with it.
+          Nothing is being graded.{' '}
+          <Link href="#open-round" className="underline">
+            Open a review round
+          </Link>
+          , and the distribution, completion and coverage panels come back with it.
         </Notice>
       )}
     </div>
