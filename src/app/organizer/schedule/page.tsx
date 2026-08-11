@@ -28,6 +28,7 @@ import {
   addTimeBand,
   autoSchedule,
   clearBreakBand,
+  clearSlot,
   deleteTimeBand,
   setAgendaPublished,
 } from './actions';
@@ -35,6 +36,38 @@ import { slotLabels, timeBandImpact } from './queries';
 import { ScheduleFallback } from './ScheduleFallback';
 import { ScheduleGrid, type Band, type Cell } from './ScheduleGrid';
 import { ScheduleViews } from './ScheduleViews';
+
+type WarningRow = { slotId: string; title: string };
+
+function WarningList<T extends WarningRow>({
+  rows,
+  detail,
+  testId,
+}: {
+  rows: T[];
+  detail: (row: T) => string;
+  testId: string;
+}) {
+  return (
+    <ul className="space-y-1.5" data-testid={testId}>
+      {rows.map((row) => (
+        <li key={row.slotId} className="flex flex-wrap items-center gap-3">
+          <span className="text-sm">{detail(row)}</span>
+          <form action={clearSlot} className="contents">
+            <input type="hidden" name="slotId" value={row.slotId} />
+            <Button
+              type="submit"
+              variant="ghost"
+              className="h-auto gap-0 rounded-none px-0 py-0 text-xs text-ink underline hover:bg-transparent hover:text-accent"
+            >
+              Clear slot
+            </Button>
+          </form>
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 export default async function SchedulePage({
   searchParams,
@@ -332,14 +365,17 @@ export default async function SchedulePage({
       */}
       {withdrawn.length > 0 ? (
         <Notice tone="bad">
-          <span data-testid="withdrawn-warning">
-            {withdrawn.length} talk(s) still hold a slot after being withdrawn:{' '}
-            {withdrawn
-              .map((row) => `${row.speakerName ?? row.speakerEmail} (${row.title})`)
-              .join(', ')}
-            . They have already left the public agenda. Nothing clears a slot for you, so the box is
-            yours to reassign or empty.
-          </span>
+          <div className="space-y-2" data-testid="withdrawn-warning">
+            <p className="text-sm">
+              {withdrawn.length} talk(s) still hold a slot after being withdrawn. They have already
+              left the public agenda. Drag a talk to reassign it, or clear the slot.
+            </p>
+            <WarningList
+              rows={withdrawn}
+              detail={(row) => `${row.speakerName ?? row.speakerEmail} (${row.title})`}
+              testId="withdrawn-list"
+            />
+          </div>
         </Notice>
       ) : null}
 
@@ -351,36 +387,51 @@ export default async function SchedulePage({
       */}
       {declined.length > 0 ? (
         <Notice tone="bad">
-          <span data-testid="declined-warning">
-            {declined.length} talk(s) are scheduled for a speaker who has said they cannot present:{' '}
-            {declined
-              .map((row) => `${row.speakerName ?? row.speakerEmail} (${row.title})`)
-              .join(', ')}
-            . The proposals are still accepted and nothing has been withdrawn, so the slot is yours
-            to reassign or clear.
-          </span>
+          <div className="space-y-2" data-testid="declined-warning">
+            <p className="text-sm">
+              {declined.length} talk(s) are scheduled for a speaker who has said they cannot
+              present. Drag a talk to reassign it, or clear the slot.
+            </p>
+            <WarningList
+              rows={declined}
+              detail={(row) => `${row.speakerName ?? row.speakerEmail} (${row.title})`}
+              testId="declined-list"
+            />
+          </div>
         </Notice>
       ) : null}
 
       {unavailable.length > 0 ? (
         <Notice tone="warn">
-          <span data-testid="availability-warning">
-            {unavailable.length} talk(s) sit inside a window the speaker declared unavailable:{' '}
-            {unavailable.map((row) => `${row.speakerName ?? row.speakerEmail} (${row.title})`).join(', ')}
-            . Placement is still allowed — you may know something the declaration does not.
-          </span>
+          <div className="space-y-2" data-testid="availability-warning">
+            <p className="text-sm">
+              {unavailable.length} talk(s) sit inside a window the speaker declared unavailable.
+              Drag a talk to reassign it, or clear the slot.
+            </p>
+            <WarningList
+              rows={unavailable}
+              detail={(row) => `${row.speakerName ?? row.speakerEmail} (${row.title})`}
+              testId="unavailable-list"
+            />
+          </div>
         </Notice>
       ) : null}
 
       {tooSmall.length > 0 ? (
         <Notice tone="warn">
-          <span data-testid="capacity-warning">
-            {tooSmall.length} talk(s) are in a room smaller than the interest in them:{' '}
-            {tooSmall
-              .map((row) => `${row.title} (${row.bookmarks} starred, ${row.roomName} seats ${row.capacity})`)
-              .join(', ')}
-            .
-          </span>
+          <div className="space-y-2" data-testid="capacity-warning">
+            <p className="text-sm">
+              {tooSmall.length} talk(s) are in a room smaller than the interest in them. Drag a talk
+              to move it, or clear the slot.
+            </p>
+            <WarningList
+              rows={tooSmall}
+              detail={(row) =>
+                `${row.title} (${row.bookmarks} starred, ${row.roomName} seats ${row.capacity})`
+              }
+              testId="too-small-list"
+            />
+          </div>
         </Notice>
       ) : null}
 
