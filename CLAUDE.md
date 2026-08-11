@@ -90,8 +90,8 @@ six hardcoded strings in `src/`, a build and a restart.
   Both are in `src/lib/grading.ts` and both are what `/review` actually calls.
   That is what makes review blind. Adding a join to `users` in either one
   silently defeats it, and the end-to-end test is the thing that would catch
-  you. `reviewQueue()` in `src/lib/queries.ts` holds the same property and has
-  no call site; do not cite it as the enforcement point.
+  you. The old `reviewQueue()` in `src/lib/queries.ts` has been removed; those
+  two functions are the only enforcement point.
 - **Every server action re-checks its own role.** The `organizer/layout.tsx`
   guard does not run for a direct action invocation, so it is defence in depth,
   not the control.

@@ -37,7 +37,7 @@ export type Ballot = {
  * so a caller can re-tally under a different toggle without a second round
  * trip. No speaker email: this payload reaches the public page, and the habit
  * of never selecting a column the template must not print is what keeps
- * `reviewQueue()` honest too. `notifyWinners` joins for the address itself.
+ * the review queues honest too. `notifyWinners` joins for the address itself.
  */
 export type AwardDetail = {
   award: Award;

@@ -101,11 +101,11 @@ one still stands:
   action id and session cookie. See B4.
 
 `reviewQueue()` deserves its own line because it is not a defect and reads like
-one. It is dead code with no call site, and three documents named it as the
-blind-review enforcement point. Blind review holds: `/review` runs
-`assignedQueue()` and `openSubmissionQueue()` from `src/lib/grading.ts`, and
-neither joins `users` or selects a speaker column. The citations were corrected
-in the same commit as this file.
+one. It was dead code with no call site, three documents named it as the
+blind-review enforcement point, and it has since been removed. Blind review holds:
+`/review` runs `assignedQueue()` and `openSubmissionQueue()` from
+`src/lib/grading.ts`, and neither joins `users` or selects a speaker column. The
+citations were corrected in the same commit as this file.
 
 ---
 
@@ -644,8 +644,8 @@ The functions `/review` actually calls (`src/app/review/page.tsx:71-99`):
 | the AI-notes select | `src/app/review/page.tsx:86-94` | `submissionId, score, comment, rubric` only |
 | `answersByQuestion` | `src/lib/question-queries.ts` | `src/app/review/page.tsx:97-98`: *"Nothing in it joins `users`, so it does not open a hole in the blind read."* |
 
-`reviewQueue(reviewerId)` at `src/lib/queries.ts:40-63` is the function named in `CLAUDE.md:55`,
-`README.md:65` and `SCOPE.md:124` as the enforcement point. It does hold the property, and it has
+`reviewQueue(reviewerId)` (now removed) was the function named in `CLAUDE.md`,
+`README.md` and `SCOPE.md` as the enforcement point. It did hold the property, and it had
 **no callers** — see §7.
 
 The reviewer's own grade is read out of the same aggregate via
@@ -892,11 +892,11 @@ Signed-in-but-wrong-role never 403s at the page level — it renders a `Notice` 
 
 #### 8. Findings worth flagging
 
-1. **`reviewQueue()` is dead code, and it is the symbol three documents name as the blind-review
-   enforcement point.** Defined at `src/lib/queries.ts:40`, cited by `CLAUDE.md:55`, `README.md:65`
-   and `SCOPE.md:124`. A repo-wide grep finds no call site. `/review` calls `assignedQueue` and
+1. **`reviewQueue()` was dead code, and it was the symbol three documents named as the blind-review
+   enforcement point.** It has been removed from `src/lib/queries.ts`; `CLAUDE.md`, `README.md`
+   and `SCOPE.md` no longer cite it. `/review` calls `assignedQueue` and
    `openSubmissionQueue` from `src/lib/grading.ts` instead. Both hold the property, so behaviour is
-   correct; the documentation points at a function nothing runs.
+   correct; the documentation points at functions the app actually runs.
 
 2. **No `/speaker/**` route checks the `speaker` role.** All seven pages check only
    `if (!user) redirect('/login')`. Two comments assert otherwise:
@@ -3729,30 +3729,29 @@ in at all.
 
 The task asked specifically about `reviewQueue()`. Finding, stated plainly:
 
-**`reviewQueue()` in `src/lib/queries.ts:40` is dead code. It has no callers.** Grepped across
-`src/` and `e2e/`: the only occurrences are its own definition, its own type
-`ReviewQueueRow` (`src/lib/queries.ts:19`), and two *comments in other files* that cite it as
-the exemplar of the blind-review rule:
+**`reviewQueue()` in `src/lib/queries.ts` was dead code and has been removed.** It had no
+callers; the only occurrences were its own definition, its own type `ReviewQueueRow`, and two
+*comments in other files* that cited it as the exemplar of the blind-review rule (now updated):
 
 - `src/lib/awards.ts:40` — "the habit of never selecting a column the template must not print
-  is what keeps `reviewQueue()` honest too"
+  is what keeps the review queues honest too"
 - `src/lib/evaluator-queries.ts:147` — "in the same way blind review is a property of
-  `reviewQueue()`"
+  `assignedQueue()` and `openSubmissionQueue()`"
 
 The live queue is `assignedQueue()` and `openSubmissionQueue()` in `src/lib/grading.ts`, which
-`src/app/review/page.tsx:78-79` calls. So the documented example is a function nobody runs, and
-two other modules point at it as the canonical statement of a rule they follow.
+`src/app/review/page.tsx:78-79` calls. The old documented example was a function nobody ran; the
+other modules now point at the live queues as the canonical statement of the rule they follow.
 
-What `reviewQueue()` deliberately does not select, per its docstring
-(`src/lib/queries.ts:31-39`): it selects `submissions.id`, `submissions.title`,
-`submissions.abstract`, `submissions.format`, `submissions.audienceLevel`, `tracks.name`,
-plus three aggregates (`reviewCount`, `averageScore`, `myScore`). It joins `submissions` →
-`tracks` and `submissions` → `reviews`. **It never joins `users`, so it never has access to
-`submissions.speakerId` → `users.name`, `users.email`, `users.bio` or `users.headshotUrl`.**
-The docstring: "Blind review is enforced here rather than in the template: the identity never
-enters the payload, so it cannot leak through a stray render or a client component receiving
-props it did not need." It also excludes `submissions.status` (it is pinned to `'submitted'` in
-the WHERE) and `averageScore` is selected but the live page has no equivalent.
+What the old `reviewQueue()` deliberately did not select, per its (now removed) docstring:
+it selected `submissions.id`, `submissions.title`, `submissions.abstract`, `submissions.format`,
+`submissions.audienceLevel`, `tracks.name`, plus three aggregates (`reviewCount`, `averageScore`,
+`myScore`). It joined `submissions` → `tracks` and `submissions` → `reviews`. **It never joined
+`users`, so it never had access to `submissions.speakerId` → `users.name`, `users.email`,
+`users.bio` or `users.headshotUrl`.** The docstring read: "Blind review is enforced here rather
+than in the template: the identity never enters the payload, so it cannot leak through a stray
+render or a client component receiving props it did not need." It also excluded `submissions.status`
+(it was pinned to `'submitted'` in the WHERE) and `averageScore` was selected but the live page
+had no equivalent.
 
 The live replacements hold the same property, and `src/lib/grading.ts:15-28` restates it:
 "every reviewer-facing select below joins `review_assignments` to `submissions` and stops
@@ -3764,7 +3763,7 @@ there. None of them reaches `users` through `submissions.speakerId`."
 | `openSubmissionQueue` | `src/lib/grading.ts:188` | `submissions` → `tracks`, `reviews` | no |
 | `myCompletedReviews` | `src/lib/grading.ts:248` | `reviews` → `submissions`, `review_rounds`, `tracks` | no |
 | `answersByQuestion` | `src/lib/question-queries.ts:126` | `submission_answers` → `form_questions` | no |
-| `reviewQueue` (dead) | `src/lib/queries.ts:40` | `submissions` → `tracks`, `reviews` | no |
+| `reviewQueue` (removed) | — | — | — |
 
 Contrast `organizerSubmissions()` (`src/lib/queries.ts:86`), which `innerJoin`s `users` and
 selects `speakerName: users.name` and `speakerEmail: users.email` — "deciding is exactly where

@@ -95,11 +95,11 @@ are kept here because a corrected claim is more useful than a deleted one.
   nowhere. The real ones are `?confirmRoom=` and `?confirmTrack=` in
   `src/app/organizer/rooms/page.tsx`, with a `confirm=yes` field checked in the
   action. The mechanism was right and the identifiers were not.
-- **Blind review is not broken.** `reviewQueue()` is dead code and three
-  documents cited it as the enforcement point, which reads like a hole. `/review`
-  runs `assignedQueue()` and `openSubmissionQueue()` from `src/lib/grading.ts`,
-  and neither joins `users` or selects a speaker column. The citations were
-  corrected; the property always held.
+- **Blind review is not broken.** `reviewQueue()` was dead code and three
+  documents cited it as the enforcement point, which reads like a hole. It has
+  been removed, and `/review` runs `assignedQueue()` and `openSubmissionQueue()`
+  from `src/lib/grading.ts`, neither of which joins `users` or selects a speaker
+  column. The property always held.
 
 ---
 

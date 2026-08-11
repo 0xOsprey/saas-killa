@@ -225,7 +225,8 @@ export type GradeComparisonRow = {
  *
  * They are two arrays rather than one sorted list because "a human review always
  * wins on display order" is then a property of the data the template cannot get
- * wrong, in the same way blind review is a property of `reviewQueue()`.
+ * wrong, in the same way blind review is a property of `assignedQueue()` and
+ * `openSubmissionQueue()`.
  */
 export async function gradeComparison(): Promise<GradeComparisonRow[]> {
   const rows = await db

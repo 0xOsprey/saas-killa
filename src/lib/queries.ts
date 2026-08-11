@@ -1,5 +1,6 @@
 import { cache } from 'react';
 import { and, asc, count, desc, eq, ilike, inArray, lte, ne, or, sql, type SQL } from 'drizzle-orm';
+
 import { db } from '@/db';
 import { events, reviews, rooms, slots, submissions, tracks, users } from '@/db/schema';
 import type {
@@ -29,52 +30,6 @@ export const getEvent = cache(async (): Promise<Event> => {
 
 export function cfpIsOpen(event: Event, now = new Date()): boolean {
   return now >= event.cfpOpensAt && now <= event.cfpClosesAt;
-}
-
-export type ReviewQueueRow = {
-  id: string;
-  title: string;
-  abstract: string;
-  format: SubmissionFormat;
-  audienceLevel: AudienceLevel;
-  trackName: string | null;
-  reviewCount: number;
-  averageScore: number | null;
-  myScore: number | null;
-};
-
-/**
- * The review queue, deliberately free of speaker columns. Blind review is
- * enforced here rather than in the template: the identity never enters the
- * payload, so it cannot leak through a stray render or a client component
- * receiving props it did not need.
- *
- * Ordered least-reviewed first so reviewer effort spreads across the pool
- * instead of piling onto whatever sorts first.
- */
-export async function reviewQueue(reviewerId: string): Promise<ReviewQueueRow[]> {
-  const rows = await db
-    .select({
-      id: submissions.id,
-      title: submissions.title,
-      abstract: submissions.abstract,
-      format: submissions.format,
-      audienceLevel: submissions.audienceLevel,
-      trackName: tracks.name,
-      reviewCount: sql<number>`count(${reviews.id})::int`,
-      averageScore: sql<number | null>`avg(${reviews.score})::float`,
-      myScore: sql<
-        number | null
-      >`max(${reviews.score}) filter (where ${reviews.reviewerId} = ${reviewerId})::int`,
-    })
-    .from(submissions)
-    .leftJoin(tracks, eq(tracks.id, submissions.trackId))
-    .leftJoin(reviews, eq(reviews.submissionId, submissions.id))
-    .where(eq(submissions.status, 'submitted'))
-    .groupBy(submissions.id, tracks.name)
-    .orderBy(sql`count(${reviews.id}) asc`, asc(submissions.createdAt));
-
-  return rows;
 }
 
 export type OrganizerRow = {
