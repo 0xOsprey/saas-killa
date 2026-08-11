@@ -5,6 +5,7 @@ import { organizerPosters } from '@/lib/poster-queries';
 import { inEventZone } from '@/lib/format';
 import { getEvent } from '@/lib/queries';
 import { autoNumberBoards, setBoardNumber } from './actions';
+import { approveContent } from '@/app/organizer/submissions/actions';
 
 /**
  * Board numbers and what the hall is actually getting looked at.
@@ -168,7 +169,22 @@ export default async function OrganizerPostersPage({
 
             <div className="flex flex-wrap items-center gap-1.5">
               {row.posterUrl ? null : <Badge tone="warn">no artwork</Badge>}
-              {row.contentStatus === 'pending' ? <Badge tone="warn">awaiting moderation</Badge> : null}
+              {row.contentStatus === 'pending' ? (
+                <>
+                  <Badge tone="warn">awaiting moderation</Badge>
+                  <form action={approveContent} className="contents">
+                    <input type="hidden" name="submissionId" value={row.id} />
+                    <Button
+                      type="submit"
+                      variant="secondary"
+                      className="px-2 py-1 text-xs"
+                      data-testid={`approve-poster-${row.id}`}
+                    >
+                      Approve
+                    </Button>
+                  </form>
+                </>
+              ) : null}
               <Badge tone={row.bookmarkCount > 0 ? 'good' : 'neutral'}>
                 {row.bookmarkCount} bookmark(s)
               </Badge>
