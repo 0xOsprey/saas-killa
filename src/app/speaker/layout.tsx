@@ -2,8 +2,8 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import * as Lucide from 'lucide-react';
 import { cn } from '@/components/ui';
+import { ICONS } from '@/lib/icons';
 
 const TABS = [
   { href: '/speaker', label: 'Submissions', icon: 'FileText' },
@@ -11,7 +11,7 @@ const TABS = [
   { href: '/speaker/availability', label: 'Availability', icon: 'Clock' },
   { href: '/speaker/profile', label: 'Profile', icon: 'User' },
   { href: '/speaker/pages', label: 'Speaker info', icon: 'Info' },
-];
+] as const;
 
 export default function SpeakerLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() ?? '';
@@ -20,7 +20,7 @@ export default function SpeakerLayout({ children }: { children: React.ReactNode 
     <div className="space-y-6">
       <nav className="flex items-center gap-1 border-b border-line pb-1" aria-label="Speaker portal">
         {TABS.map((tab) => {
-          const Icon = (Lucide as any)[tab.icon];
+          const Icon = ICONS[tab.icon];
           const active = pathname === tab.href || pathname.startsWith(`${tab.href}/`);
           return (
             <Link

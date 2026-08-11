@@ -3,8 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useLayoutEffect, useMemo, useState } from 'react';
-import { Menu } from 'lucide-react';
-import * as Lucide from 'lucide-react';
+import { ICONS } from '@/lib/icons';
 import { cn } from '@/components/ui';
 import { PUBLIC_LINKS, roleSections } from '@/lib/nav-links';
 import type { CurrentUser } from '@/lib/auth';
@@ -53,7 +52,7 @@ export function AppShell({
             className="-ml-2 rounded-md p-2 text-muted hover:bg-subtle hover:text-ink lg:hidden"
             aria-label="Open menu"
           >
-            <Menu className="h-5 w-5" />
+            <ICONS.Menu className="h-5 w-5" />
           </button>
 
           <Link href={homeHref} className="text-sm font-semibold tracking-tight text-ink">
@@ -62,7 +61,7 @@ export function AppShell({
 
           <nav className="hidden items-center gap-1 text-sm md:flex">
             {PUBLIC_LINKS.map((link) => {
-              const PublicIcon = link.icon ? (Lucide as any)[link.icon] : undefined;
+              const PublicIcon = link.icon ? ICONS[link.icon] : undefined;
               return (
                 <Link
                   key={link.href}

@@ -1,3 +1,5 @@
+import type { IconName } from './icons';
+
 export type NavUser = {
   email: string;
   name: string | null;
@@ -5,7 +7,7 @@ export type NavUser = {
   headshotUrl?: string | null;
 };
 
-export type NavLink = { href: string; label: string; icon?: string };
+export type NavLink = { href: string; label: string; icon?: IconName };
 
 export type NavSection = {
   title: string;

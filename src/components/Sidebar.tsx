@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import * as Lucide from 'lucide-react';
+import { ICONS } from '@/lib/icons';
 import { useMemo } from 'react';
 import { cn } from '@/components/ui';
 import { PUBLIC_LINKS, type NavSection, type NavUser } from '@/lib/nav-links';
@@ -88,7 +88,7 @@ export function Sidebar({
               className="rounded-md p-1 text-muted hover:bg-subtle hover:text-ink"
               aria-label="Close menu"
             >
-              <Lucide.X className="h-5 w-5" />
+              <ICONS.X className="h-5 w-5" />
             </button>
           </div>
 
@@ -136,7 +136,7 @@ function Section({
       <ul className="space-y-0.5">
         {links.map((link) => {
           const active = link.href === activeHref;
-          const Icon = link.icon ? (Lucide as any)[link.icon] : undefined;
+          const Icon = link.icon ? ICONS[link.icon] : undefined;
           return (
             <li key={link.href}>
               <Link
