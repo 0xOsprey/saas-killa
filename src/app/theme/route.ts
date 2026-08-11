@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers';
 import type { NextRequest } from 'next/server';
+import { env } from '@/lib/env';
 
 /**
  * Theme controller. Sets a `theme` cookie to `ai-engineer` or `light` and
@@ -21,5 +22,5 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  return Response.redirect(new URL(redirectTo, request.url).toString(), 302);
+  return Response.redirect(new URL(redirectTo, env().APP_URL).toString(), 302);
 }
