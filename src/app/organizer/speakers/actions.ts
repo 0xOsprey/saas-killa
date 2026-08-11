@@ -53,7 +53,14 @@ export async function grantRoleAction(formData: FormData): Promise<void> {
     userId: formData.get('userId'),
     role: formData.get('role'),
   });
-  await db.insert(userRoles).values(input).onConflictDoNothing();
+  // Organizers grade as much as reviewers do, and the completion dashboard and
+  // auto-distributor both query `role = 'reviewer'`. An organizer without that
+  // role would be able to grade but never appear in those surfaces.
+  const extras = input.role === 'organizer' ? ([{ userId: input.userId, role: 'reviewer' as const }] as const) : [];
+  await db
+    .insert(userRoles)
+    .values([input, ...extras])
+    .onConflictDoNothing();
   revalidatePath('/organizer/speakers');
 }
 
