@@ -433,7 +433,13 @@ export default async function ContactsDirectoryPage({
                         {contact.unconfirmed > 0 ? (
                           <>
                             {' '}
-                            <Badge tone="warn">{contact.unconfirmed} unconfirmed</Badge>
+                            <Link
+                              href={`/organizer/speakers/${contact.id}`}
+                              className="inline-flex"
+                              data-testid={`contact-unconfirmed-${contact.id}`}
+                            >
+                              <Badge tone="warn">{contact.unconfirmed} unconfirmed</Badge>
+                            </Link>
                           </>
                         ) : null}
                       </>
