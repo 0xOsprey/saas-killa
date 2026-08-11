@@ -105,7 +105,7 @@ export default async function EmailLogScreen({
           screen. This is the only way to write to speakers in bulk, and a
           disclosure triangle is a control somebody has to already know is worth
           pressing. */}
-      <Card className="space-y-4">
+      <Card id="compose" className="space-y-4">
         <div>
           <h2 className="text-lg font-semibold text-ink">Compose</h2>
           <p className="mt-1 text-sm text-muted">
@@ -200,7 +200,13 @@ export default async function EmailLogScreen({
         </p>
 
         {sent.length === 0 ? (
-          <Empty>Nothing has been sent yet.</Empty>
+          <Empty>
+            Nothing has been sent yet.{' '}
+            <Link href="#compose" className="text-accent hover:underline">
+              Compose a message
+            </Link>
+            .
+          </Empty>
         ) : (
           <ul className="space-y-2" data-testid="email-list">
             {sent.map((row) => (
