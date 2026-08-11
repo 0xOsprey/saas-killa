@@ -95,7 +95,15 @@ export default async function OrganizerPostersPage({
         </Notice>
       ) : null}
 
-      {rows.length === 0 ? <Empty>No accepted posters yet.</Empty> : null}
+      {rows.length === 0 ? (
+        <Empty>
+          No accepted posters yet. Accept poster-format submissions on the{' '}
+          <Link href="/organizer/submissions" className="text-accent hover:underline">
+            submissions board
+          </Link>
+          .
+        </Empty>
+      ) : null}
 
       {mostBookmarked.length > 0 ? (
         <Card className="space-y-3">
