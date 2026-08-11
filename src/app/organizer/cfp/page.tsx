@@ -174,7 +174,13 @@ export default async function OrganizerCfpPage({
             </Button>
           </form>
           <form action={closeCfpNow}>
-            <Button type="submit" variant="secondary" disabled={!open} data-testid="close-cfp">
+            <Button
+              type="submit"
+              variant="secondary"
+              disabled={!open}
+              title={open ? 'Close the call immediately' : 'The call is already closed'}
+              data-testid="close-cfp"
+            >
               Close now
             </Button>
           </form>
@@ -374,6 +380,11 @@ export default async function OrganizerCfpPage({
                 type="submit"
                 variant="secondary"
                 disabled={outstanding.length === 0}
+                title={
+                  outstanding.length === 0
+                    ? 'No outstanding grades to remind about'
+                    : 'Send a reminder to every reviewer with outstanding grades'
+                }
                 data-testid="remind-reviewers"
               >
                 Remind {outstanding.length} reviewer(s)
