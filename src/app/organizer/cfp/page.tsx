@@ -76,6 +76,9 @@ export default async function OrganizerCfpPage({
     else bySubmission.set(row.submissionId, [row]);
   }
 
+  const assignId =
+    coverage.find((row) => row.submissionId === one(params.assign))?.submissionId ?? '';
+
   const open = cfpIsOpen(event);
   const error = one(params.error);
   const saved = one(params.saved);
@@ -442,7 +445,7 @@ export default async function OrganizerCfpPage({
           )}
         </Card>
 
-        <Card className="space-y-4">
+        <Card id="assign-by-hand" className="space-y-4">
           <div>
             <h2 className="text-sm font-semibold text-ink">Assign by hand</h2>
             <p className="mt-0.5 text-xs text-muted">
@@ -453,7 +456,7 @@ export default async function OrganizerCfpPage({
 
           <form action={addAssignment} className="grid gap-4 sm:grid-cols-4 sm:items-end">
             <Field label="Submission">
-              <Select name="submissionId" required defaultValue="" data-testid="manual-submission">
+              <Select name="submissionId" required defaultValue={assignId} data-testid="manual-submission">
                 <option value="" disabled>
                   Choose a submission
                 </option>
@@ -525,7 +528,13 @@ export default async function OrganizerCfpPage({
                 </div>
                 <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                   {held.length === 0 ? (
-                    <span className="text-xs text-muted">Nobody assigned.</span>
+                    <Link
+                      href={`?assign=${row.submissionId}#assign-by-hand`}
+                      className="text-xs text-ink underline hover:text-accent"
+                      data-testid={`assign-${row.submissionId}`}
+                    >
+                      Nobody assigned · assign
+                    </Link>
                   ) : null}
                   {held.map((assignment) => (
                     <form
