@@ -1,3 +1,5 @@
+import Link from 'next/link';
+import type { ReactNode } from 'react';
 import { Badge, Card, Empty } from '@/components/ui';
 import {
   asWeek,
@@ -22,20 +24,48 @@ import {
  * alone was the speaker's, and a room collision reading the same way would send
  * an organizer to move the speaker when the thing to move is the talk.
  */
+function WarningLink({ slotId, tone, children, testId }: { slotId: string; tone: 'bad' | 'warn'; children: ReactNode; testId?: string }) {
+  return (
+    <Link
+      href={`/organizer/schedule?view=grid#slot-${slotId}`}
+      className="inline-flex"
+      data-testid={testId}
+    >
+      <Badge tone={tone}>{children}</Badge>
+    </Link>
+  );
+}
+
 function Warnings({ entry }: { entry: ScheduleEntry }) {
   if (!entry.conflicted && !entry.roomConflicted && !entry.unavailable && !entry.overCapacity) {
     return null;
   }
   return (
     <span className="ml-2 inline-flex flex-wrap gap-1">
-      {entry.conflicted ? <Badge tone="bad">speaker double-booked</Badge> : null}
-      {entry.roomConflicted ? (
-        <Badge tone="bad" data-testid={`view-room-conflict-${entry.slotId}`}>
-          room double-booked
-        </Badge>
+      {entry.conflicted ? (
+        <WarningLink slotId={entry.slotId} tone="bad">
+          speaker double-booked
+        </WarningLink>
       ) : null}
-      {entry.unavailable ? <Badge tone="warn">unavailable</Badge> : null}
-      {entry.overCapacity ? <Badge tone="warn">room too small</Badge> : null}
+      {entry.roomConflicted ? (
+        <WarningLink
+          slotId={entry.slotId}
+          tone="bad"
+          testId={`view-room-conflict-${entry.slotId}`}
+        >
+          room double-booked
+        </WarningLink>
+      ) : null}
+      {entry.unavailable ? (
+        <WarningLink slotId={entry.slotId} tone="warn">
+          unavailable
+        </WarningLink>
+      ) : null}
+      {entry.overCapacity ? (
+        <WarningLink slotId={entry.slotId} tone="warn">
+          room too small
+        </WarningLink>
+      ) : null}
     </span>
   );
 }

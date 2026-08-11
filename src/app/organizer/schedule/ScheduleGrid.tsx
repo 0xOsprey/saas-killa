@@ -284,6 +284,7 @@ export function ScheduleGrid({
                           ? 'Empty slot. Press Enter to place the talk you picked up.'
                           : 'Empty slot.'
                     }
+                    id={`slot-${cell.slotId}`}
                     data-testid={`slot-${cell.slotId}`}
                     className={cn(
                       'min-h-16 cursor-pointer rounded-md border p-2 text-xs transition-colors',
