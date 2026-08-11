@@ -72,7 +72,7 @@ const BUTTON_BASE =
 const BUTTON_VARIANTS = {
   primary: 'bg-ink/10 text-ink border border-ink/20 hover:bg-ink/15 active:scale-[0.98]',
   secondary: 'border border-line bg-surface text-ink hover:bg-subtle active:scale-[0.98]',
-  danger: 'border border-red-500/20 bg-red-500/10 text-red-300 hover:bg-red-500/15 active:scale-[0.98]',
+  danger: 'border border-status-bad-border/20 bg-status-bad-bg/10 text-status-bad-text hover:bg-status-bad-bg/15 active:scale-[0.98]',
   ghost: 'text-muted hover:bg-ink/5 hover:text-ink',
 } as const;
 
@@ -138,9 +138,9 @@ export function Card({ className, ...props }: ComponentProps<'div'>) {
 const BADGE_TONES = {
   neutral: 'bg-ink/5 text-muted',
   accent: 'bg-ink/10 text-ink',
-  good: 'bg-emerald-500/10 text-emerald-300',
-  bad: 'bg-red-500/10 text-red-300',
-  warn: 'bg-amber-500/10 text-amber-300',
+  good: 'border border-status-good-border/20 bg-status-good-bg/10 text-status-good-text',
+  bad: 'border border-status-bad-border/20 bg-status-bad-bg/10 text-status-bad-text',
+  warn: 'border border-status-warn-border/20 bg-status-warn-bg/10 text-status-warn-text',
 } as const;
 
 export function Badge({
@@ -264,9 +264,9 @@ export function Notice({
   children: ReactNode;
 }) {
   const tones = {
-    warn: 'border-amber-500/20 bg-amber-500/10 text-amber-300',
-    bad: 'border-red-500/20 bg-red-500/10 text-red-300',
-    good: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300',
+    warn: 'border-status-warn-border/20 bg-status-warn-bg/10 text-status-warn-text',
+    bad: 'border-status-bad-border/20 bg-status-bad-bg/10 text-status-bad-text',
+    good: 'border-status-good-border/20 bg-status-good-bg/10 text-status-good-text',
     accent: 'border-ink/20 bg-ink/5 text-ink',
   } as const;
   return (

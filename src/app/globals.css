@@ -10,6 +10,18 @@
   --color-surface: #f8fafc;
   --color-subtle: #f1f5f9;
   --color-background: #ffffff;
+
+  /* Semantic status colors for notices, badges, and buttons. */
+  --color-status-good-text: #065f46;
+  --color-status-good-bg: #10b981;
+  --color-status-good-border: #10b981;
+  --color-status-warn-text: #92400e;
+  --color-status-warn-bg: #f59e0b;
+  --color-status-warn-border: #f59e0b;
+  --color-status-bad-text: #991b1b;
+  --color-status-bad-bg: #ef4444;
+  --color-status-bad-border: #ef4444;
+
   --font-sans:
     var(--font-body), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --font-mono:
@@ -41,6 +53,17 @@ html.theme-ai-engineer {
   --color-surface: #0c0c0c;
   --color-subtle: #161616;
   --color-background: #040404;
+
+  /* Dark-mode status colors. */
+  --color-status-good-text: #6ee7b7;
+  --color-status-good-bg: #34d399;
+  --color-status-good-border: #34d399;
+  --color-status-warn-text: #fcd34d;
+  --color-status-warn-bg: #fbbf24;
+  --color-status-warn-border: #fbbf24;
+  --color-status-bad-text: #fca5a5;
+  --color-status-bad-bg: #f87171;
+  --color-status-bad-border: #f87171;
 
   /* Dark-mode overrides for the literal Tailwind palette still used in many
      components. This keeps bg-white, bg-slate-50, text-red-700, etc. honest
