@@ -214,6 +214,7 @@ export default async function SchedulePage({
                 type="submit"
                 variant="secondary"
                 disabled={pool.length === 0}
+                title={pool.length === 0 ? 'No accepted talks to schedule' : 'Fill the grid automatically'}
                 data-testid="auto-schedule"
               >
                 Auto-schedule {pool.length} talk(s)
@@ -230,6 +231,7 @@ export default async function SchedulePage({
                 type="submit"
                 variant="secondary"
                 disabled={pending.length === 0}
+                title={pending.length === 0 ? 'No schedule changes to email' : 'Email every speaker whose placement changed'}
                 data-testid="notify-schedule"
               >
                 Email {pending.length} schedule change(s)
