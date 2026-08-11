@@ -81,7 +81,13 @@ export default async function OrganizerPagesScreen({
       ) : null}
 
       {pages.length === 0 ? (
-        <Empty>No pages yet. The form below writes the first one.</Empty>
+        <Empty>
+          No pages yet.{' '}
+          <Link href="#new-page" className="text-accent hover:underline">
+            Write the first one
+          </Link>
+          .
+        </Empty>
       ) : (
         <div className="space-y-2" data-testid="organizer-page-list">
           {pages.map((page) => (
@@ -126,7 +132,7 @@ export default async function OrganizerPagesScreen({
         </div>
       )}
 
-      <Card>
+      <Card id="new-page">
         <h2 className="mb-3 font-medium">{editing ? `Editing “${editing.title}”` : 'New page'}</h2>
         <form action={savePage} className="space-y-3" data-testid="page-form">
           {editing ? <input type="hidden" name="id" value={editing.id} /> : null}
