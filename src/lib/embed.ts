@@ -579,8 +579,9 @@ export function embedDocument(title: string, body: string): Response {
     headers: {
       'content-type': 'text/html; charset=utf-8',
       // The programme changes up to the morning of the event. A cached widget
-      // that outlives a room change is worse than fetching it again.
-      'cache-control': 'no-store',
+      // that outlives a room change is worse than fetching it again, so the
+      // browser must revalidate while shared caches may hold it briefly.
+      'cache-control': 'public, s-maxage=180, max-age=0, must-revalidate',
     },
   });
 }
@@ -607,7 +608,10 @@ export function feedResponse(payload: unknown): Response {
     headers: {
       'content-type': 'application/json; charset=utf-8',
       ...CORS,
-      'cache-control': 'no-store',
+      // Shared caches (CDNs) may hold this for 3 minutes, but the browser must
+      // revalidate so a host page that reloads after an agenda change sees fresh
+      // data instead of a stale cached feed.
+      'cache-control': 'public, s-maxage=180, max-age=0, must-revalidate',
     },
   });
 }
@@ -726,7 +730,7 @@ export function xmlResponse(body: string): Response {
     headers: {
       'content-type': 'application/xml; charset=utf-8',
       ...CORS,
-      'cache-control': 'no-store',
+      'cache-control': 'public, s-maxage=180, max-age=0, must-revalidate',
     },
   });
 }

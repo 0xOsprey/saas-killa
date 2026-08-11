@@ -1,0 +1,306 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Saas Killa Public API",
+    "description": "Read-only public API for the Saas Killa conference programme. Returns sessions, speakers and event metadata in the same shape as the Sessionboard public API.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "{scheme}://{host}/api/v1",
+      "variables": {
+        "scheme": { "default": "https", "enum": ["https", "http"] },
+        "host": { "default": "example.com" }
+      }
+    }
+  ],
+  "paths": {
+    "/event": {
+      "get": {
+        "summary": "Get event metadata",
+        "operationId": "getEvent",
+        "responses": {
+          "200": {
+            "description": "Event object",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Event" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions": {
+      "get": {
+        "summary": "List sessions",
+        "operationId": "listSessions",
+        "parameters": [
+          { "$ref": "#/components/parameters/pageParam" },
+          { "$ref": "#/components/parameters/pageSizeParam" },
+          { "$ref": "#/components/parameters/qParam" },
+          {
+            "name": "track",
+            "in": "query",
+            "schema": { "type": "string" },
+            "description": "Filter by track id"
+          },
+          {
+            "name": "room",
+            "in": "query",
+            "schema": { "type": "string" },
+            "description": "Filter by room id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated list of sessions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/PaginatedResponse" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": { "$ref": "#/components/schemas/Session" }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions/{id}": {
+      "get": {
+        "summary": "Get a session",
+        "operationId": "getSession",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Session object",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Session" }
+              }
+            }
+          },
+          "404": { "description": "Session not found or not accepted" }
+        }
+      }
+    },
+    "/speakers": {
+      "get": {
+        "summary": "List speakers",
+        "operationId": "listSpeakers",
+        "parameters": [
+          { "$ref": "#/components/parameters/pageParam" },
+          { "$ref": "#/components/parameters/pageSizeParam" },
+          { "$ref": "#/components/parameters/qParam" },
+          {
+            "name": "track",
+            "in": "query",
+            "schema": { "type": "string" },
+            "description": "Filter by track id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated list of speakers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/PaginatedResponse" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": { "$ref": "#/components/schemas/Speaker" }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/speakers/{id}": {
+      "get": {
+        "summary": "Get a speaker",
+        "operationId": "getSpeaker",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Speaker object",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/SpeakerDetail" }
+              }
+            }
+          },
+          "404": { "description": "Speaker not found" }
+        }
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "pageParam": {
+        "name": "page",
+        "in": "query",
+        "schema": { "type": "integer", "default": 1, "minimum": 1 }
+      },
+      "pageSizeParam": {
+        "name": "pageSize",
+        "in": "query",
+        "schema": { "type": "integer", "default": 25, "minimum": 1, "maximum": 100 }
+      },
+      "qParam": {
+        "name": "q",
+        "in": "query",
+        "schema": { "type": "string" },
+        "description": "Search in title, abstract and speaker name"
+      }
+    },
+    "schemas": {
+      "Event": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "tagline": { "type": ["string", "null"] },
+          "timezone": { "type": "string" },
+          "startsOn": { "type": "string", "format": "date-time" },
+          "endsOn": { "type": "string", "format": "date-time" },
+          "cfpOpensAt": { "type": ["string", "null"], "format": "date-time" },
+          "cfpClosesAt": { "type": ["string", "null"], "format": "date-time" },
+          "agendaPublished": { "type": "boolean" },
+          "url": { "type": "string" }
+        }
+      },
+      "PaginatedResponse": {
+        "type": "object",
+        "properties": {
+          "data": { "type": "array", "items": {} },
+          "pagination": {
+            "type": "object",
+            "properties": {
+              "currentPage": { "type": "integer" },
+              "pageSize": { "type": "integer" },
+              "totalPages": { "type": "integer" },
+              "totalResults": { "type": "integer" }
+            }
+          }
+        }
+      },
+      "Track": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": ["string", "null"] },
+          "colour": { "type": ["string", "null"] }
+        }
+      },
+      "Room": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": ["string", "null"] },
+          "capacity": { "type": ["integer", "null"] }
+        }
+      },
+      "SpeakerRef": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": ["string", "null"] },
+          "title": { "type": ["string", "null"] },
+          "company": { "type": ["string", "null"] },
+          "bio": { "type": ["string", "null"] },
+          "headshotUrl": { "type": ["string", "null"] }
+        }
+      },
+      "Session": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "eventId": { "type": "string" },
+          "title": { "type": "string" },
+          "abstract": { "type": ["string", "null"] },
+          "format": { "type": "string" },
+          "level": { "type": ["string", "null"] },
+          "status": { "type": "string" },
+          "contentStatus": { "type": "string" },
+          "track": { "oneOf": [{ "$ref": "#/components/schemas/Track" }, { "type": "null" }] },
+          "room": { "oneOf": [{ "$ref": "#/components/schemas/Room" }, { "type": "null" }] },
+          "startsAt": { "type": ["string", "null"], "format": "date-time" },
+          "endsAt": { "type": ["string", "null"], "format": "date-time" },
+          "speaker": { "oneOf": [{ "$ref": "#/components/schemas/SpeakerRef" }, { "type": "null" }] },
+          "isAbstract": { "type": "boolean" }
+        }
+      },
+      "Speaker": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": ["string", "null"] },
+          "title": { "type": ["string", "null"] },
+          "company": { "type": ["string", "null"] },
+          "bio": { "type": ["string", "null"] },
+          "headshotUrl": { "type": ["string", "null"] },
+          "acceptedCount": { "type": "integer" },
+          "tracks": { "type": "array", "items": { "type": "string" } },
+          "keywords": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "SpeakerSessionRef": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "format": { "type": "string" },
+          "trackName": { "type": ["string", "null"] },
+          "trackColour": { "type": ["string", "null"] },
+          "startsAt": { "type": ["string", "null"], "format": "date-time" },
+          "roomName": { "type": ["string", "null"] }
+        }
+      },
+      "SpeakerDetail": {
+        "allOf": [
+          { "$ref": "#/components/schemas/Speaker" },
+          {
+            "type": "object",
+            "properties": {
+              "sessions": { "type": "array", "items": { "$ref": "#/components/schemas/SpeakerSessionRef" } }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

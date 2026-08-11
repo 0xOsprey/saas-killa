@@ -11,6 +11,7 @@ Conference programme software. It runs the whole CFP-to-agenda pipeline:
 - Speaker file uploads
 - ePoster gallery
 - Public agenda and embeddable widgets
+- Public API (`/api/v1`) for sessions, speakers and event metadata
 - One-way push to Accelevents
 
 **Stack:** Next.js 15 (App Router, Server Actions) · React 19 · TypeScript ·
@@ -176,6 +177,21 @@ with the `reviewer` role and writes ordinary `reviews` rows tagged
 It sees the abstract, format, level and track — never the speaker — and returns
 its rubric breakdown through a tool call rather than parseable prose. Without
 `ANTHROPIC_API_KEY` it is simply off and the organizer screen says so.
+
+## Public API
+
+A read-only public API is available under `/api/v1`:
+
+- `GET /api/v1/event` — event metadata
+- `GET /api/v1/sessions` — paginated list of accepted sessions
+- `GET /api/v1/sessions/{id}` — single session
+- `GET /api/v1/speakers` — paginated list of accepted speakers
+- `GET /api/v1/speakers/{id}` — single speaker with their sessions
+- `GET /api/v1/openapi.json` — OpenAPI 3.0 spec
+
+All list endpoints support `page`, `pageSize` and `q`, and sessions additionally
+support `track` and `room` filters. Responses use the Sessionboard-style
+`{ data: [], pagination: {} }` envelope.
 
 ## Tests
 

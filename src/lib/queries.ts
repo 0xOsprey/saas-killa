@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { and, asc, count, desc, eq, ilike, inArray, lte, ne, or, sql, type SQL } from 'drizzle-orm';
 import { db } from '@/db';
 import { events, reviews, rooms, slots, submissions, tracks, users } from '@/db/schema';
@@ -12,13 +13,19 @@ import { writableBy } from './abstracts';
 import { EFFECTIVE_SCORE } from './rubric';
 import { UNSCHEDULED } from './speaker-calendar';
 
-export async function getEvent(): Promise<Event> {
+/**
+ * The event row is read by the root layout, the public agenda, the embed feeds,
+ * and many server actions. `cache` deduplicates the query within a single
+ * request so those callers share one database hit without serializing Date
+ * objects through a cross-request cache.
+ */
+export const getEvent = cache(async (): Promise<Event> => {
   const found = await db.query.events.findFirst({ orderBy: asc(events.createdAt) });
   if (!found) {
     throw new Error('No event row. Run `pnpm db:seed` to create one.');
   }
   return found;
-}
+});
 
 export function cfpIsOpen(event: Event, now = new Date()): boolean {
   return now >= event.cfpOpensAt && now <= event.cfpClosesAt;
