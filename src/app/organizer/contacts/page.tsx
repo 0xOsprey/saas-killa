@@ -164,7 +164,13 @@ export default async function ContactsDirectoryPage({
           <Card className="space-y-2">
             <h2 className="text-sm font-semibold text-ink">Contacts by pipeline stage</h2>
             {kpis.byStage.length === 0 ? (
-              <Empty>The sourcing board has no stages yet.</Empty>
+              <Empty>
+                The sourcing board has no stages yet. Create them on the{' '}
+                <Link href="/organizer/contacts/pipeline" className="text-accent hover:underline">
+                  pipeline
+                </Link>{' '}
+                page.
+              </Empty>
             ) : (
               <ul className="space-y-1.5">
                 {kpis.byStage.map((stage) => (
