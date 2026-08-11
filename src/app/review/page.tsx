@@ -252,7 +252,9 @@ export default async function ReviewPage({
                         you scored {row.myScore}
                       </Badge>
                     ) : (
-                      <Badge>ungraded</Badge>
+                      <Link href={`#grade-${row.id}`} className="inline-flex" data-testid={`ungraded-${row.id}`}>
+                        <Badge>ungraded</Badge>
+                      </Link>
                     )}
                     <Badge>{row.reviewCount} review(s)</Badge>
                   </div>
@@ -290,7 +292,11 @@ export default async function ReviewPage({
                   </details>
                 ) : null}
 
-                <form action={submitReview} className="space-y-3 border-t border-line pt-3">
+                <form
+                  id={`grade-${row.id}`}
+                  action={submitReview}
+                  className="space-y-3 border-t border-line pt-3"
+                >
                   <input type="hidden" name="submissionId" value={row.id} />
                   <div className="grid gap-3 sm:grid-cols-2">
                     {criteria.map((criterion) => (
