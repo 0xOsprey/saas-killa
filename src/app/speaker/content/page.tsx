@@ -244,6 +244,11 @@ export default async function SpeakerContentPage({
                   // would refuse to submit the form on a value this app wrote.
                   defaultValue={row.slidesUrl ?? ''}
                   disabled={locks.slidesUrl}
+                  title={
+                    locks.slidesUrl
+                      ? 'Frozen by an organizer. Ask them to unlock it.'
+                      : 'A URL or an uploaded file path'
+                  }
                   data-testid={`slides-${row.id}`}
                 />
               </Field>
@@ -259,6 +264,11 @@ export default async function SpeakerContentPage({
                   name="slidesFile"
                   accept={acceptAttribute('slides')}
                   disabled={locks.slidesUrl}
+                  title={
+                    locks.slidesUrl
+                      ? 'Frozen by an organizer. Ask them to unlock it.'
+                      : 'Upload a PDF or image to replace the URL above'
+                  }
                   data-testid={`slides-file-${row.id}`}
                   className={FILE_INPUT}
                 />
@@ -276,6 +286,11 @@ export default async function SpeakerContentPage({
                   type="url"
                   defaultValue={row.recordingUrl ?? ''}
                   disabled={locks.recordingUrl}
+                  title={
+                    locks.recordingUrl
+                      ? 'Frozen by an organizer. Ask them to unlock it.'
+                      : 'A link to a recording of this talk'
+                  }
                 />
               </Field>
 
@@ -291,17 +306,38 @@ export default async function SpeakerContentPage({
                   className="min-h-20"
                   defaultValue={row.resourcesNote ?? ''}
                   disabled={locks.resourcesNote}
+                  title={
+                    locks.resourcesNote
+                      ? 'Frozen by an organizer. Ask them to unlock it.'
+                      : 'Notes, links and other resources'
+                  }
                 />
               </Field>
 
               <div className="flex flex-wrap items-center gap-2">
-                <Button type="submit" variant="secondary" disabled={frozen}>
+                <Button
+                  type="submit"
+                  variant="secondary"
+                  disabled={frozen}
+                  title={
+                    frozen
+                      ? 'Frozen by an organizer. Ask them to unlock it.'
+                      : 'Save your content without making it public'
+                  }
+                >
                   Save draft
                 </Button>
                 <Button
                   type="submit"
                   formAction={submitContentForReview}
                   disabled={frozen || pending}
+                  title={
+                    frozen
+                      ? 'Frozen by an organizer. Ask them to unlock it.'
+                      : pending
+                        ? 'This content is already submitted for review'
+                        : 'Send this content to the organizers for approval'
+                  }
                   data-testid={`submit-review-${row.id}`}
                 >
                   Submit for review
