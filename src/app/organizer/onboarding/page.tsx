@@ -1,10 +1,13 @@
 import Link from 'next/link';
+import type { ReactNode } from 'react';
 import { Badge, Card, Empty, Notice, PageHeader } from '@/components/ui';
 import { inEventZone } from '@/lib/format';
 import { onboardingOverview } from '@/lib/onboarding';
 import { getEvent } from '@/lib/queries';
 import { TASK_KIND_LABELS } from '@/lib/speaker-labels';
+import { ReminderForm } from '@/app/organizer/speakers/ReminderForm';
 import { AutoRefresh } from './AutoRefresh';
+import { ConfirmationReminderForm } from './ConfirmationReminderForm';
 
 /**
  * Speaker onboarding at a glance.
@@ -23,6 +26,7 @@ function Tile({
   tone,
   testId,
   href,
+  children,
 }: {
   label: string;
   value: number;
@@ -30,6 +34,7 @@ function Tile({
   tone?: 'bad' | 'good';
   testId: string;
   href?: string;
+  children?: ReactNode;
 }) {
   const body = (
     <Card className="h-full">
@@ -47,9 +52,10 @@ function Tile({
           {hint}
         </p>
       ) : null}
+      {children ? <div className="mt-3">{children}</div> : null}
     </Card>
   );
-  return href ? (
+  return href && !children ? (
     <Link href={href} className="block hover:opacity-90">
       {body}
     </Link>
@@ -92,8 +98,27 @@ export default async function OnboardingDashboard() {
           hint={`${view.overdueTasks} task(s) past their date`}
           tone="bad"
           testId="tile-overdue"
-          href="/organizer/speakers?filter=overdue"
-        />
+        >
+          <div className="space-y-2">
+            <ReminderForm
+              scope="all"
+              filter="overdue"
+              label="Remind everyone overdue"
+              variant="primary"
+              className="inline"
+              buttonClassName="w-full text-xs"
+            />
+            <p className="text-xs">
+              <Link
+                href="/organizer/speakers?filter=overdue"
+                className="text-accent hover:underline"
+                data-testid="overdue-view"
+              >
+                View overdue speakers
+              </Link>
+            </p>
+          </div>
+        </Tile>
         <Tile
           label="Done this week"
           value={view.completedThisWeek}
@@ -128,16 +153,19 @@ export default async function OnboardingDashboard() {
           />
         </div>
         {view.unconfirmed > 0 ? (
-          <p className="mt-3 text-sm">
-            <Link
-              href="/organizer/speakers?filter=unconfirmed"
-              className="text-accent hover:underline"
-              data-testid="unconfirmed-link"
-            >
-              {view.unconfirmed} speaker(s) have not confirmed
-            </Link>{' '}
-            <span className="text-muted">— chase these before the programme goes out.</span>
-          </p>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm">
+              <Link
+                href="/organizer/speakers?filter=unconfirmed"
+                className="text-accent hover:underline"
+                data-testid="unconfirmed-link"
+              >
+                {view.unconfirmed} speaker(s) have not confirmed
+              </Link>{' '}
+              <span className="text-muted">— chase these before the programme goes out.</span>
+            </p>
+            <ConfirmationReminderForm count={view.unconfirmed} variant="primary" />
+          </div>
         ) : (
           <p className="mt-3 text-sm text-muted">Everyone accepted has confirmed.</p>
         )}

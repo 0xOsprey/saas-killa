@@ -35,6 +35,7 @@ const KIND_LABELS: Record<string, string> = {
   content_returned: 'Slides returned',
   decision_accepted: 'Accepted',
   decision_rejected: 'Rejected',
+  confirmation_reminder: 'Confirmation chase',
   reviewer_reminder: 'Reviewer nudged',
   schedule_cancelled: 'Taken off the grid',
   schedule_moved: 'Moved',

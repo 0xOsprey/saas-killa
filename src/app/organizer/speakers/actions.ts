@@ -520,6 +520,7 @@ export async function sendTaskRemindersAction(
   }
 
   refreshSpeakerScreens(input.userId ?? undefined);
+  revalidatePath('/organizer/onboarding');
   return { sent, skipped };
 }
 
