@@ -72,18 +72,16 @@ export async function middleware(request: NextRequest) {
   // the database. That path leaks the same way this one used to, but reaching
   // it means holding a signature only this server's secret can produce.
   //
-  // Built on `APP_URL`, not on `request.url`. The app is served by
-  // `next start -H 127.0.0.1 -p 9150` behind a Cloudflare tunnel, and the
-  // tunnel does not preserve the public Host header, so the origin a request
-  // arrives on in here is `https://localhost:9150`. A redirect resolved
-  // against that sends the browser to port 9150 on its own machine. Measured
-  // on the first cut of this file: every signed-out hit on an organizer URL
-  // answered `location: https://localhost:9150/login?next=...`.
+  // Built on `APP_URL`, not on `request.url`. When the app runs behind a
+  // reverse proxy or tunnel, the origin a request arrives with may not be the
+  // public origin. A redirect resolved against the wrong origin sends the
+  // browser to an internal host or port. `APP_URL` is the one place the public
+  // origin is already written down, and the server actions read it for the same
+  // reason.
   //
   // A relative Location would be the tidy answer and Next rejects it: it parses
   // the header itself and throws `ERR_INVALID_URL`, which turns the redirect
-  // into a 500. `APP_URL` is the one place the public origin is already
-  // written down, and the server actions read it for the same reason.
+  // into a 500.
   const origin = process.env.APP_URL ?? request.nextUrl.origin;
   const login = new URL('/login', origin);
   const next = `${request.nextUrl.pathname}${request.nextUrl.search}`;

@@ -5,6 +5,25 @@ dist/
 *.tsbuildinfo
 .cache/
 
+# OS and editor files
+.DS_Store
+.vscode/
+.idea/
+
+# Logs and scratch files
+*.log
+tmp/
+temp/
+*.local
+
+# Deployment / platform files that may carry account IDs or local env
+.wrangler/
+.dev.vars
+.vercel/
+.netlify/
+.turbo/
+.eslintcache
+
 # Secrets never enter the repo. Real values live in .env.local (dev) or the
 # host's env (prod). .env.example is the only committed env file.
 .env
@@ -26,6 +45,9 @@ CLAUDE.local.md
 /playwright-report/
 /blob-report/
 /.playwright/
+
+# Auth/session fixtures used by local eval harnesses
+/.auth/
 
 # Speaker uploads. Real files on this machine's disk, served by /files/<id>.
 # Headshots, slide decks, posters and supporting documents belong to the people

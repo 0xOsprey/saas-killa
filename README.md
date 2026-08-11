@@ -1,17 +1,16 @@
 # Saas Killa
 
-Running at https://saas-killa.0xosprey.com. Sign-in is a magic link, so use an
-address you can read mail at. A new address gets the speaker role and lands in
-its own portal. The agenda starts unpublished, which is the state an organizer
-publishes from, so `/agenda` and the embedded widgets say so until somebody
-does.
-
 Conference programme software: a call for papers, blind reviewer grading, an AI
 evaluator, accept/reject with speaker notification, a drag-and-drop schedule
 grid, calendar invitations that update in place, file uploads, awards, an
 ePoster gallery, a speaker portal with organizer-authored pages, a public
 agenda, embeddable widgets for the event's own website, and a one-way push of
 the finished programme to Accelevents.
+
+Sign-in is a magic link, so use an address you can read mail at. A new address
+gets the speaker role and lands in its own portal. The agenda starts
+unpublished, which is the state an organizer publishes from, so `/agenda` and
+the embedded widgets say so until somebody does.
 
 `SCOPE.md` is the requirement-by-requirement account of what is built, what is
 deliberately not, and which test covers each. It also records that four of the

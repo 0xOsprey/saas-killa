@@ -185,10 +185,9 @@ means every export is a dry run against fixtures. The suite never sets them.
 
 ## There is a live instance
 
-`https://saas-killa.0xosprey.com` serves real traffic from a persistent host, so
-`uploads/` is real disk and files survive a redeploy. It runs from its own
-checkout against its own database; the operational detail is in
-`CLAUDE.local.md`. Two consequences bind anyone editing this repo.
+A live instance is running; its URL and host-specific operational notes are in
+`CLAUDE.local.md`, which is gitignored. Read it before touching the live
+environment. Two consequences bind anyone editing this repo.
 
 Never reset the live database. `pnpm test` and `pnpm db:reset` both act on
 whatever `.env.local` names, and the live one names a different database from the
