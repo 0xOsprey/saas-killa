@@ -110,6 +110,18 @@ export default async function AbstractsIndexPage({
   flipped.set('sort', sort);
   flipped.set('direction', direction === 'desc' ? 'asc' : 'desc');
 
+  const clearFilters = '/organizer/abstracts';
+  const clearSearch = (() => {
+    const params = new URLSearchParams();
+    if (trackId) params.set('track', trackId);
+    if (status) params.set('status', status);
+    if (sort && sort !== 'title') {
+      params.set('sort', sort);
+      params.set('direction', direction);
+    }
+    return params.size > 0 ? `/organizer/abstracts?${params.toString()}` : '/organizer/abstracts';
+  })();
+
   return (
     <div className="space-y-5">
       <PageHeader
@@ -191,7 +203,23 @@ export default async function AbstractsIndexPage({
 
       {rows.length === 0 ? (
         <Empty>
-          Nothing matches. {q ? <>Try a shorter search than “{q}”.</> : 'Clear the filters.'}
+          Nothing matches.{" "}
+          {q ? (
+            <>
+              Try a shorter search than “{q}” or{' '}
+              <Link href={clearSearch} className="text-accent hover:underline">
+                clear the search
+              </Link>
+              .
+            </>
+          ) : (
+            <>
+              <Link href={clearFilters} className="text-accent hover:underline">
+                Clear the filters
+              </Link>
+              .
+            </>
+          )}
         </Empty>
       ) : null}
 
