@@ -1,0 +1,1 @@
+ALTER TABLE "submissions" ADD COLUMN "speaker_declined_at" timestamp with time zone;

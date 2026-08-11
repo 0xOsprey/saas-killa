@@ -1,0 +1,8 @@
+# Intentionally an empty workspace root.
+#
+# It was developed inside a checkout that has a pnpm-workspace.yaml of its own
+# two directories up. Without this file pnpm walks upward, finds that one, and
+# resolves against a workspace this package is not a member of. Declaring an
+# empty workspace here stops the search at the project root, so installs are
+# self-contained wherever the repo is cloned.
+packages: []

@@ -1,0 +1,79 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-ink: #0f172a;
+  --color-muted: #64748b;
+  --color-line: #e2e8f0;
+  --color-accent: #4f46e5;
+  --color-accent-soft: #eef2ff;
+  --color-surface: #f8fafc;
+  --color-subtle: #f1f5f9;
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+html {
+  color-scheme: light;
+}
+
+body {
+  background: var(--color-surface);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+/* The schedule grid is the one screen that is desktop-only by design: a
+   room-by-time matrix has no honest small-screen form. Everything public is
+   responsive. */
+.schedule-grid {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 46rem;
+}
+
+/* Organizer-authored wiki pages. Tailwind's utility classes cannot reach inside
+   `dangerouslySetInnerHTML`, so the handful of elements the sanitiser allows are
+   styled here by tag. Kept to spacing and weight: a page an organizer wrote
+   should look like the rest of the portal without them having to say so. */
+.prose-portal h2 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin-top: 1.25rem;
+}
+.prose-portal h3,
+.prose-portal h4 {
+  font-weight: 600;
+  margin-top: 1rem;
+}
+.prose-portal ul,
+.prose-portal ol {
+  padding-left: 1.25rem;
+  list-style: revert;
+}
+.prose-portal a {
+  color: var(--color-accent);
+  text-decoration: underline;
+}
+.prose-portal table {
+  border-collapse: collapse;
+  width: 100%;
+}
+.prose-portal th,
+.prose-portal td {
+  border: 1px solid var(--color-line);
+  padding: 0.375rem 0.5rem;
+  text-align: left;
+}
+.prose-portal blockquote {
+  border-left: 3px solid var(--color-line);
+  padding-left: 0.75rem;
+  color: var(--color-muted);
+}
+.prose-portal iframe {
+  max-width: 100%;
+  border: 0;
+}
+.prose-portal img {
+  max-width: 100%;
+  height: auto;
+}

@@ -1,0 +1,61 @@
+{
+  "name": "saas-killa",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.34.5",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "next dev -H 127.0.0.1 -p 9140",
+    "build": "next build",
+    "start": "next start -H 127.0.0.1 -p 9140",
+    "typecheck": "tsc --noEmit",
+    "db:up": "bash scripts/dev-db.sh up",
+    "db:down": "bash scripts/dev-db.sh down",
+    "db:push": "drizzle-kit push",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:seed": "tsx --env-file-if-exists=.env.local src/db/seed.ts",
+    "db:reset": "tsx --env-file-if-exists=.env.local src/db/seed.ts --reset",
+    "evaluate": "tsx --env-file-if-exists=.env.local src/scripts/evaluate.ts",
+    "test:e2e": "playwright test",
+    "test": "playwright test"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.68.0",
+    "clsx": "^2.1.1",
+    "drizzle-orm": "^0.45.2",
+    "lucide-react": "0.446.0",
+    "next": "^15.3.0",
+    "postgres": "^3.4.5",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "resend": "^4.0.0",
+    "tailwind-merge": "^2.6.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.50.0",
+    "@tailwindcss/postcss": "^4.0.0",
+    "@types/node": "^22.13.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "drizzle-kit": "^0.30.0",
+    "tailwindcss": "^4.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "postcss": "^8.5.23",
+      "sharp": "^0.35.0",
+      "esbuild": "^0.25.0"
+    },
+    "onlyBuiltDependencies": [
+      "sharp",
+      "esbuild"
+    ]
+  }
+}
