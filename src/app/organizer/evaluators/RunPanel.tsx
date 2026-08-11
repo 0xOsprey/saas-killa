@@ -36,7 +36,7 @@ export function RunPanel({
   const runnable = configured && personas.length > 0;
 
   return (
-    <Card className="space-y-4" data-testid="run-panel">
+    <Card id="run-panel" className="space-y-4" data-testid="run-panel">
       <div>
         <h2 className="text-sm font-semibold text-ink">Run an evaluator</h2>
         <p className="mt-0.5 text-xs text-muted">

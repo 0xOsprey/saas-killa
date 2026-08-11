@@ -93,8 +93,11 @@ export default async function EvaluatorsPage() {
         </div>
         {grades.length === 0 ? (
           <Empty>
-            No AI grade has been written yet. Run a persona above and its grades appear here with
-            their reasoning.
+            No AI grade has been written yet.{' '}
+            <Link href="#run-panel" className="text-accent hover:underline">
+              Run a persona
+            </Link>{' '}
+            and its grades appear here with their reasoning.
           </Empty>
         ) : (
           <ul className="space-y-2">
@@ -106,14 +109,20 @@ export default async function EvaluatorsPage() {
       </Card>
 
       {personas.length === 0 ? (
-        <Empty>No personas yet. The first one you create becomes the reviewer that grades.</Empty>
+        <Empty>
+          No personas yet.{' '}
+          <Link href="#new-persona" className="text-accent hover:underline">
+            Create the first one
+          </Link>{' '}
+          and it becomes the reviewer that grades.
+        </Empty>
       ) : null}
 
       {personas.map((persona) => (
         <PersonaCard key={persona.id} persona={persona} />
       ))}
 
-      <Card className="max-w-2xl space-y-3">
+      <Card id="new-persona" className="max-w-2xl space-y-3">
         <div>
           <h2 className="text-sm font-semibold text-ink">New persona</h2>
           <p className="mt-0.5 text-xs text-muted">
