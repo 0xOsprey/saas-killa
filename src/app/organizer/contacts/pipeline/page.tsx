@@ -118,8 +118,10 @@ export default async function PipelineScreen({
         // Columns scroll sideways rather than wrapping. A stage that has wrapped
         // onto a second row stops reading as a later step in the process, which
         // is the only thing the left-to-right order is carrying.
-        <div className="flex gap-3 overflow-x-auto pb-2">
-          {columns.map((column) => (
+        <>
+          <p className="text-xs text-muted">Scroll or drag to see more stages.</p>
+          <div className="flex gap-3 overflow-x-auto pb-2">
+            {columns.map((column) => (
             <section
               key={column.stage.id}
               className="w-72 shrink-0 space-y-2 rounded-lg border border-line bg-slate-50 p-3"
@@ -152,7 +154,8 @@ export default async function PipelineScreen({
               )}
             </section>
           ))}
-        </div>
+          </div>
+        </>
       )}
 
       <Duplicates

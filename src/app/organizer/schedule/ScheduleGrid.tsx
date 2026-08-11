@@ -200,8 +200,9 @@ export function ScheduleGrid({
           </Notice>
         ) : null}
 
+        <p className="text-xs text-muted">Scroll or drag to see more rooms.</p>
         <div className="overflow-x-auto">
-        <div className={cn('schedule-grid', pending && 'opacity-60')} style={gridStyle}>
+          <div className={cn('schedule-grid', pending && 'opacity-60')} style={gridStyle}>
           <div />
           {rooms.map((room) => (
             <div key={room.id} className="px-2 pb-1 text-xs font-semibold text-ink">

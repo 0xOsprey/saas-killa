@@ -378,8 +378,10 @@ export default async function ContactsDirectoryPage({
       {contacts.length === 0 ? (
         <Empty>Nobody matches those filters.</Empty>
       ) : (
-        <Card className="overflow-x-auto p-0">
-          <table className="w-full border-collapse text-sm">
+        <>
+          <p className="text-xs text-muted">Scroll to see more columns.</p>
+          <Card className="overflow-x-auto p-0">
+            <table className="w-full border-collapse text-sm">
             <thead className="border-b border-line bg-slate-50">
               <tr>
                 <Th>Name</Th>
@@ -462,7 +464,8 @@ export default async function ContactsDirectoryPage({
               ))}
             </tbody>
           </table>
-        </Card>
+          </Card>
+        </>
       )}
     </div>
   );

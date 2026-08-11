@@ -70,6 +70,7 @@ export function FilesLibrary({
         <span>{allSelected ? 'Clear selection' : `Select all ${rows.length} files`}</span>
       </div>
 
+      <p className="text-xs text-muted">Scroll to see more columns.</p>
       <div className="overflow-x-auto rounded-lg border border-line bg-white">
         <table className="w-full min-w-3xl text-left text-sm">
           <thead className="border-b border-line text-xs uppercase tracking-wide text-muted">

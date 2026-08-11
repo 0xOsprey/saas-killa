@@ -104,6 +104,7 @@ export function ImportForm() {
             </p>
           </div>
 
+          <p className="text-xs text-muted">Scroll to see more columns.</p>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="text-xs uppercase tracking-wide text-muted">

@@ -136,7 +136,9 @@ export function ScheduleViews({
   if (view === 'week') {
     const { days, times } = asWeek(entries);
     return (
-      <div className="overflow-x-auto" data-testid="schedule-week">
+      <>
+        <p className="text-xs text-muted">Scroll to see more days.</p>
+        <div className="overflow-x-auto" data-testid="schedule-week">
         <table className="w-full min-w-[40rem] border-collapse text-sm">
           <thead>
             <tr>
@@ -202,7 +204,8 @@ export function ScheduleViews({
             ))}
           </tbody>
         </table>
-      </div>
+        </div>
+      </>
     );
   }
 
