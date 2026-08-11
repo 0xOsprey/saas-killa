@@ -22,6 +22,7 @@ import {
   bulkSetStatus,
   bulkSetTrack,
   editSubmissionText,
+  notifyDecided,
   returnContent,
   setDecision,
   setFieldLock,
@@ -363,10 +364,28 @@ function Row({
           </form>
         ) : null}
 
-        <span className="ml-auto text-xs text-muted">
-          {row.notified ? 'speaker notified' : 'not notified'}
-          {row.scheduled ? ' · scheduled' : ''}
-        </span>
+        {row.notified ? (
+          <span className="ml-auto text-xs text-muted">
+            speaker notified
+            {row.scheduled ? ' · scheduled' : ''}
+          </span>
+        ) : row.status === 'accepted' || row.status === 'rejected' ? (
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => run(notifyDecided, { ids: row.id })}
+            disabled={pending}
+            className="ml-auto h-auto gap-0 rounded-none px-0 py-0 text-xs text-muted hover:bg-transparent hover:text-ink hover:underline"
+            data-testid={`notify-${row.id}`}
+          >
+            not notified · send
+          </Button>
+        ) : (
+          <span className="ml-auto text-xs text-muted">
+            not notified
+            {row.scheduled ? ' · scheduled' : ''}
+          </span>
+        )}
       </div>
 
       <details className="rounded-md border border-line p-3">

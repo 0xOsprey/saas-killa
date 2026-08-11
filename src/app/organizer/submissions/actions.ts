@@ -1,6 +1,6 @@
 'use server';
 
-import { and, eq, inArray, isNull } from 'drizzle-orm';
+import { and, eq, inArray, isNull, type SQL } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { db } from '@/db';
@@ -31,6 +31,12 @@ import {
 import { getEvent } from '@/lib/queries';
 import { activeRound } from '@/lib/rounds';
 import { contentReturnedMail } from './mail';
+
+const idsSchema = z.array(z.string().uuid()).min(1).max(500);
+
+function readIds(formData: FormData): string[] {
+  return idsSchema.parse(formData.getAll('ids').map(String));
+}
 
 const decisionSchema = z.object({
   submissionId: z.string().uuid(),
@@ -76,9 +82,20 @@ export async function setDecision(formData: FormData): Promise<void> {
  * Without that write, `notifySchedule` would read the talk as newly placed and
  * send a second invitation minutes later for a time nothing had changed about.
  */
-export async function notifyDecided(): Promise<void> {
+export async function notifyDecided(formData: FormData): Promise<void> {
   await requireRole('organizer');
   const event = await getEvent();
+
+  const idList =
+    formData.getAll('ids').length > 0
+      ? readIds(formData)
+      : null;
+
+  const where: SQL[] = [
+    inArray(submissions.status, ['accepted', 'rejected']),
+    isNull(submissions.decisionEmailedAt),
+  ];
+  if (idList) where.push(inArray(submissions.id, idList));
 
   const rows = await db
     .select({
@@ -90,12 +107,7 @@ export async function notifyDecided(): Promise<void> {
     })
     .from(submissions)
     .innerJoin(users, eq(users.id, submissions.speakerId))
-    .where(
-      and(
-        inArray(submissions.status, ['accepted', 'rejected']),
-        isNull(submissions.decisionEmailedAt),
-      ),
-    );
+    .where(and(...where));
 
   const accepted = rows.filter((row) => row.status === 'accepted').map((row) => row.id);
   const placed = new Map(
@@ -222,12 +234,6 @@ export async function editSubmissionText(formData: FormData): Promise<void> {
 // ---------------------------------------------------------------------------
 // Content moderation
 // ---------------------------------------------------------------------------
-
-const idsSchema = z.array(z.string().uuid()).min(1).max(500);
-
-function readIds(formData: FormData): string[] {
-  return idsSchema.parse(formData.getAll('ids').map(String));
-}
 
 /**
  * Move content to a new status and log the move. Approval and send-back are the
