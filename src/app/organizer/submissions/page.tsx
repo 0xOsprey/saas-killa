@@ -304,6 +304,11 @@ export default async function OrganizerSubmissionsPage({
               <Button
                 type="submit"
                 disabled={totals.awaitingEmail === 0}
+                title={
+                  totals.awaitingEmail === 0
+                    ? 'Everyone decided has already been told'
+                    : `Email ${totals.awaitingEmail} speaker(s) their decision`
+                }
                 data-testid="notify-decided"
               >
                 {/* At zero this has always been disabled, but it still read
