@@ -41,7 +41,7 @@ export default async function IntegrationsScreen({
         title="Accelevents"
         description="One-way. The programme goes out; nothing comes back and nothing here is ever overwritten by theirs."
         action={
-          <form action={runAcceleventsExport}>
+          <form id="export" action={runAcceleventsExport}>
             <Button type="submit" data-testid="run-export">
               {dryRun ? 'Run a dry export' : 'Push to Accelevents'}
             </Button>
@@ -135,7 +135,13 @@ export default async function IntegrationsScreen({
       <Card>
         <h2 className="mb-3 font-medium">Every push, most recent first</h2>
         {runs.length === 0 ? (
-          <Empty>Nothing has been exported yet.</Empty>
+          <Empty>
+            Nothing has been exported yet.{' '}
+            <Link href="#export" className="text-accent hover:underline">
+              Run the first export
+            </Link>
+            .
+          </Empty>
         ) : (
           <ul className="space-y-2" data-testid="run-list">
             {runs.map((run) => (
