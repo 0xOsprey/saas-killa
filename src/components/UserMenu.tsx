@@ -50,9 +50,9 @@ export function UserMenu({
         type="button"
         onClick={() => setOpen((prev) => !prev)}
         className={cn(
-          'flex items-center gap-2 rounded-full border border-line bg-white p-1 pr-2.5 text-sm',
-          'transition-colors hover:bg-subtle focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
-          open && 'bg-subtle',
+          'flex items-center gap-2 rounded-full border border-line/50 bg-surface p-1 pr-2.5 text-sm',
+          'transition-colors hover:bg-ink/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink',
+          open && 'bg-ink/5',
         )}
         aria-haspopup="menu"
         aria-expanded={open}
@@ -78,7 +78,7 @@ export function UserMenu({
       {open && (
         <div
           className={cn(
-            'absolute right-0 z-50 mt-2 w-60 overflow-hidden rounded-lg border border-line bg-white shadow-lg',
+            'absolute right-0 z-50 mt-2 w-60 overflow-hidden rounded-lg border border-line/50 bg-surface shadow-lg',
             'origin-top-right',
           )}
           role="menu"
@@ -105,7 +105,7 @@ export function UserMenu({
               onClick={() => setOpen(false)}
               className={cn(
                 'flex items-center gap-2.5 px-4 py-2 text-sm text-muted transition-colors',
-                'hover:bg-subtle hover:text-ink',
+                'hover:bg-ink/5 hover:text-ink',
               )}
               role="menuitem"
             >
@@ -119,7 +119,7 @@ export function UserMenu({
                 onClick={() => setOpen(false)}
                 className={cn(
                   'flex items-center gap-2.5 px-4 py-2 text-sm text-muted transition-colors',
-                  'hover:bg-subtle hover:text-ink',
+                  'hover:bg-ink/5 hover:text-ink',
                 )}
                 role="menuitem"
               >
@@ -138,7 +138,7 @@ export function UserMenu({
                 data-testid="sign-out"
                 className={cn(
                   'flex w-full items-center gap-2.5 px-4 py-2 text-left text-sm text-muted transition-colors',
-                  'hover:bg-subtle hover:text-ink',
+                  'hover:bg-ink/5 hover:text-ink',
                 )}
                 role="menuitem"
               >

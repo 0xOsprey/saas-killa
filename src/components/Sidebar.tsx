@@ -72,8 +72,8 @@ export function Sidebar({
       <nav
         aria-label="Sidebar"
         className={cn(
-          'z-40 w-56 shrink-0 border-r border-line bg-white',
-          'fixed left-0 top-14 h-[calc(100vh-3.5rem)] transform transition-transform',
+          'z-40 w-56 shrink-0 border-r border-line/50 bg-surface',
+          'fixed left-0 top-14 h-[calc(100dvh-3.5rem)] transform transition-transform',
           'lg:sticky lg:top-14 lg:translate-x-0',
           mobileOpen ? 'translate-x-0' : '-translate-x-full',
           !user && 'lg:hidden',
@@ -85,7 +85,7 @@ export function Sidebar({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-md p-1 text-muted hover:bg-subtle hover:text-ink"
+              className="rounded-md p-1 text-muted transition-colors hover:bg-ink/5 hover:text-ink"
               aria-label="Close menu"
             >
               <ICONS.X className="h-5 w-5" />
@@ -130,7 +130,7 @@ function Section({
 }) {
   return (
     <div className={cn('mb-6', className)}>
-      <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-muted">
+      <p className="mb-2 px-3 text-xs font-mono uppercase tracking-wider text-muted">
         {title}
       </p>
       <ul className="space-y-0.5">
@@ -146,8 +146,8 @@ function Section({
                 className={cn(
                   'flex items-center gap-2.5 rounded-md border-l-2 px-3 py-1.5 text-sm transition-colors',
                   active
-                    ? 'border-accent bg-accent-soft font-medium text-accent'
-                    : 'border-transparent text-muted hover:bg-subtle hover:text-ink',
+                    ? 'border-ink bg-ink/5 font-medium text-ink'
+                    : 'border-transparent text-muted hover:bg-ink/5 hover:text-ink',
                 )}
               >
                 {Icon ? <Icon className="h-4 w-4 shrink-0" aria-hidden="true" /> : null}

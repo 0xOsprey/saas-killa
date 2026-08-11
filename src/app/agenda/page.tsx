@@ -106,7 +106,7 @@ export default async function AgendaPage({
         <Empty>
           {filters.mine && !user ? (
             <>
-              <Link href="/login" className="text-accent underline">
+              <Link href="/login" className="text-ink underline">
                 Sign in
               </Link>{' '}
               to star talks and build your own agenda.
@@ -123,16 +123,16 @@ export default async function AgendaPage({
 
       {populated.map((day) => (
         <section key={day.label} className="space-y-3">
-          <h2 className="text-sm font-semibold tracking-tight text-ink">{day.label}</h2>
+          <h2 className="text-xs font-mono uppercase tracking-wider text-muted">{day.label}</h2>
           {[...day.times.values()].map((bucket) => (
             <div key={bucket.time} className="grid gap-3 sm:grid-cols-[5rem_1fr]">
-              <div className="pt-1 text-sm tabular-nums text-muted">{bucket.time}</div>
+              <div className="pt-1 text-xs font-mono tabular-nums text-muted">{bucket.time}</div>
               <div className="space-y-2">
                 {[...bucket.blocks.entries()].map(([label, roomNames]) => (
                   <div
                     key={label}
                     data-testid={`block-${label}`}
-                    className="rounded-lg border border-dashed border-line bg-slate-100 px-3 py-2 text-sm font-medium text-muted"
+                    className="rounded-lg border border-dashed border-line/50 bg-ink/5 px-3 py-2 text-sm font-medium text-muted"
                   >
                     {label}
                     {roomNames.length === 1 ? (

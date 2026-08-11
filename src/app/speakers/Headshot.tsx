@@ -37,7 +37,7 @@ export function Headshot({
 }) {
   const [broken, setBroken] = useState(false);
   const shell = cn(
-    'shrink-0 overflow-hidden rounded-full border border-line bg-slate-100',
+    'shrink-0 overflow-hidden rounded-full border border-line/50 bg-ink/5',
     SIZES[size],
     className,
   );

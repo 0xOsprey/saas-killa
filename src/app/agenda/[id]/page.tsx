@@ -111,7 +111,7 @@ export default async function SubmissionDetailPage({
         cold arrival neither of those reads as "the rest of the programme is
         over here". One link costs nothing and answers it in place.
       */}
-      <Link href="/agenda" className="text-sm text-accent hover:underline" data-testid="back-to-agenda">
+      <Link href="/agenda" className="text-sm text-ink underline hover:text-muted" data-testid="back-to-agenda">
         ← Back to the agenda
       </Link>
       <PageHeader
@@ -158,7 +158,7 @@ export default async function SubmissionDetailPage({
           <img
             src={row.posterUrl}
             alt={`Poster for ${row.title}`}
-            className="w-full rounded-md border border-line"
+            className="w-full rounded-md border border-line/50"
           />
         </Card>
       ) : null}

@@ -54,7 +54,7 @@ export function Tabs({
 }
 
 export function TabList({ className, ...props }: ComponentProps<'div'>) {
-  return <div className={cn('flex border-b border-line', className)} {...props} />;
+  return <div className={cn('flex border-b border-line/50', className)} {...props} />;
 }
 
 export function Tab({

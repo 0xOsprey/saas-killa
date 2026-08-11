@@ -41,14 +41,14 @@ export async function Nav() {
   }
 
   return (
-    <header className="border-b border-line bg-white">
+    <header className="border-b border-line/50 bg-surface">
       <nav className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-5 gap-y-2 px-4 py-3">
-        <Link href="/" className="text-sm font-semibold tracking-tight text-ink">
+        <Link href="/" className="font-display text-base tracking-tight text-ink">
           {event?.name ?? 'Saas Killa'}
         </Link>
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono uppercase tracking-wider">
           {links.map((link) => (
-            <Link key={link.href} href={link.href} className="text-muted hover:text-ink">
+            <Link key={link.href} href={link.href} className="text-muted transition-colors hover:text-ink">
               {link.label}
             </Link>
           ))}

@@ -39,8 +39,8 @@ export function PosterMedia({
         alt={`Poster: ${title}`}
         className={
           variant === 'card'
-            ? 'mx-auto max-h-64 w-auto max-w-full rounded-md border border-line bg-white'
-            : 'mx-auto h-auto w-full rounded-md border border-line bg-white'
+            ? 'mx-auto max-h-64 w-auto max-w-full rounded-md border border-line/50 bg-surface'
+            : 'mx-auto h-auto w-full rounded-md border border-line/50 bg-surface'
         }
       />
     );
@@ -53,7 +53,7 @@ export function PosterMedia({
           data={url}
           type="application/pdf"
           aria-label={`Poster PDF: ${title}`}
-          className={`w-full rounded-md border border-line bg-white ${frame}`}
+          className={`w-full rounded-md border border-line/50 bg-surface ${frame}`}
         >
           {/* Shown by the browser when it will not render a PDF inline, which is
               most mobile browsers. */}
@@ -110,7 +110,7 @@ export function PosterMedia({
       href={url}
       target="_blank"
       rel="noreferrer"
-      className={`flex flex-col items-center justify-center gap-1 rounded-md border border-dashed border-line bg-slate-50 p-6 text-center hover:bg-slate-100 ${
+      className={`flex flex-col items-center justify-center gap-1 rounded-md border border-dashed border-line/50 bg-ink/5 p-6 text-center transition-colors hover:bg-ink/10 ${
         variant === 'card' ? 'h-40' : 'h-56'
       }`}
     >

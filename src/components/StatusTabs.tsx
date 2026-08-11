@@ -17,7 +17,7 @@ export function StatusTabs({
   buildHref: (value: string | null) => string;
 }) {
   return (
-    <div className="flex items-center gap-1 border-b border-line">
+    <div className="flex items-center gap-1 border-b border-line/50">
       {tabs.map((tab) => {
         const isActive = active === tab.value;
         return (
@@ -27,7 +27,7 @@ export function StatusTabs({
             className={cn(
               'px-4 py-2.5 text-sm font-medium transition-colors',
               isActive
-                ? '-mb-px border-b-2 border-accent text-accent'
+                ? '-mb-px border-b-2 border-ink text-ink'
                 : 'text-muted hover:text-ink',
             )}
           >
@@ -36,7 +36,7 @@ export function StatusTabs({
               <span
                 className={cn(
                   'ml-1.5 rounded-full px-1.5 py-0.5 text-xs',
-                  isActive ? 'bg-accent-soft text-accent' : 'bg-slate-100 text-slate-600',
+                  isActive ? 'bg-ink/10 text-ink' : 'bg-ink/5 text-muted',
                 )}
               >
                 {tab.count}

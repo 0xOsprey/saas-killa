@@ -4,7 +4,7 @@ import { toggleBookmark } from './actions';
 
 const BASE =
   'inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs transition-colors ' +
-  'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
+  'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink';
 
 /**
  * The star. A signed-out visitor gets a link to /login rather than a control
@@ -29,7 +29,7 @@ export function StarButton({
       <Link
         href="/login"
         title="Sign in to build your own agenda"
-        className={cn(BASE, 'text-muted hover:bg-slate-100 hover:text-ink')}
+        className={cn(BASE, 'text-muted hover:bg-ink/5 hover:text-ink')}
       >
         <span aria-hidden>☆</span>
         <span className="sr-only">Sign in to star this</span>
@@ -48,7 +48,7 @@ export function StarButton({
         aria-pressed={starred}
         className={cn(
           BASE,
-          starred ? 'text-amber-600 hover:bg-amber-50' : 'text-muted hover:bg-slate-100 hover:text-ink',
+          starred ? 'text-amber-400 hover:bg-amber-500/10' : 'text-muted hover:bg-ink/5 hover:text-ink',
         )}
       >
         <span aria-hidden>{starred ? '★' : '☆'}</span>
