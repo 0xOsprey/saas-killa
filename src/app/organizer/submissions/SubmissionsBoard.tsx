@@ -364,28 +364,38 @@ function Row({
           </form>
         ) : null}
 
-        {row.notified ? (
-          <span className="ml-auto text-xs text-muted">
-            speaker notified
-            {row.scheduled ? ' · scheduled' : ''}
-          </span>
-        ) : row.status === 'accepted' || row.status === 'rejected' ? (
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => run(notifyDecided, { ids: row.id })}
-            disabled={pending}
-            className="ml-auto h-auto gap-0 rounded-none px-0 py-0 text-xs text-muted hover:bg-transparent hover:text-ink hover:underline"
-            data-testid={`notify-${row.id}`}
-          >
-            not notified · send
-          </Button>
-        ) : (
-          <span className="ml-auto text-xs text-muted">
-            not notified
-            {row.scheduled ? ' · scheduled' : ''}
-          </span>
-        )}
+        <span className="ml-auto flex items-center gap-1 text-xs text-muted">
+          {row.notified ? (
+            'speaker notified'
+          ) : row.status === 'accepted' || row.status === 'rejected' ? (
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => run(notifyDecided, { ids: row.id })}
+              disabled={pending}
+              className="h-auto gap-0 rounded-none px-0 py-0 text-xs text-muted hover:bg-transparent hover:text-ink hover:underline"
+              data-testid={`notify-${row.id}`}
+            >
+              not notified · send
+            </Button>
+          ) : (
+            'not notified'
+          )}
+          {row.status === 'accepted' && !row.scheduled ? (
+            <>
+              {' · '}
+              <Link
+                href="/organizer/schedule"
+                className="text-ink underline hover:text-accent"
+                data-testid={`schedule-${row.id}`}
+              >
+                not scheduled
+              </Link>
+            </>
+          ) : row.scheduled ? (
+            <>{' · '}scheduled</>
+          ) : null}
+        </span>
       </div>
 
       <details className="rounded-md border border-line p-3">
