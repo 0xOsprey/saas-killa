@@ -191,7 +191,13 @@ export default async function OrganizerCfpPage({
         </div>
 
         {rounds.length === 0 ? (
-          <Empty>No rounds yet. Open the first one before assigning anybody anything.</Empty>
+          <Empty>
+            No rounds yet.{' '}
+            <Link href="#open-round" className="text-accent hover:underline">
+              Open the first one
+            </Link>{' '}
+            to start assigning reviewers.
+          </Empty>
         ) : (
           <ul className="divide-y divide-line">
             {rounds.map((row) => (
@@ -229,6 +235,7 @@ export default async function OrganizerCfpPage({
         )}
 
         <form
+          id="open-round"
           action={openRound}
           className="grid gap-4 border-t border-line pt-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end"
         >
@@ -375,7 +382,13 @@ export default async function OrganizerCfpPage({
           </div>
 
           {completion.length === 0 ? (
-            <Empty>Nobody holds the reviewer role yet.</Empty>
+            <Empty>
+              Nobody holds the reviewer role yet. Grant it on the{' '}
+              <Link href="/organizer/speakers" className="text-accent hover:underline">
+                Speakers
+              </Link>{' '}
+              tab.
+            </Empty>
           ) : (
             <table className="w-full text-sm">
               <thead>
@@ -499,7 +512,15 @@ export default async function OrganizerCfpPage({
             </p>
           </div>
 
-          {coverage.length === 0 ? <Empty>Nothing has been submitted yet.</Empty> : null}
+          {coverage.length === 0 ? (
+            <Empty>
+              Nothing has been submitted yet.{' '}
+              <Link href="/cfp" className="text-accent hover:underline">
+                Open the public call for papers
+              </Link>{' '}
+              to see what a speaker sees.
+            </Empty>
+          ) : null}
 
           {coverage.map((row) => {
             const held = bySubmission.get(row.submissionId) ?? [];
