@@ -324,10 +324,19 @@ export default async function OrganizerSubmissionsPage({
 
       {totals.pending > 0 ? (
         <Notice tone="accent">
-          <span data-testid="content-queue">
-            {totals.pending} submission(s) have content awaiting review. Nothing submitted for
-            review appears on the public agenda until it is approved.
-          </span>
+          <div className="flex flex-wrap items-center gap-3">
+            <span data-testid="content-queue">
+              {totals.pending} submission(s) have content awaiting review. Nothing submitted for
+              review appears on the public agenda until it is approved.
+            </span>
+            <Link
+              href={submissionsHref({ ...current, content: 'pending', page: 1 })}
+              className="whitespace-nowrap text-ink underline hover:text-accent"
+              data-testid="review-pending-content"
+            >
+              Review pending
+            </Link>
+          </div>
         </Notice>
       ) : null}
 
