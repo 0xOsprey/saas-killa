@@ -370,7 +370,7 @@ export async function agendaFeed(params: AgendaSearchParams = {}): Promise<Agend
 export const EMBED_CSS = `
 .sb-embed{--sb-line:#e2e8f0;--sb-ink:#0f172a;--sb-muted:#64748b;box-sizing:border-box;
  font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:15px;
- line-height:1.45;color:var(--sb-ink);text-align:left}
+ line-height:1.45;color:var(--sb-ink);text-align:left;padding:16px}
 .sb-embed *,.sb-embed *::before,.sb-embed *::after{box-sizing:inherit}
 .sb-grid{display:grid;gap:12px;grid-template-columns:1fr;margin:0;padding:0;list-style:none}
 @media (min-width:540px){.sb-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
