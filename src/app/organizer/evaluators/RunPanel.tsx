@@ -104,8 +104,12 @@ export function RunPanel({
         </Button>
       </form>
 
-      {personas.length === 0 ? (
-        <p className="text-xs text-muted">No active persona to run. Create one below.</p>
+      {!runnable ? (
+        <Notice tone="warn">
+          {configured
+            ? 'No active persona to run. Create one below.'
+            : 'Set ANTHROPIC_API_KEY to run a persona. Personas can still be written and edited.'}
+        </Notice>
       ) : null}
 
       {report ? <Report report={report} /> : null}
