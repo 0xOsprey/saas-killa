@@ -9,7 +9,7 @@ import {
   isDuplicateTitleError,
   titleAlreadyFiled,
 } from '@/lib/abstracts';
-import { currentUser, issueMagicLink, MagicLinkRateLimitError, startSession, upsertUserByEmail } from '@/lib/auth';
+import { currentUser, grantRole, issueMagicLink, MagicLinkRateLimitError, startSession, upsertUserByEmail } from '@/lib/auth';
 import {
   alertOrganizers,
   magicLinkMail,
@@ -139,6 +139,11 @@ export async function submitProposal(_prev: CfpState, formData: FormData): Promi
   }
 
   const speaker = signedIn ?? (await upsertUserByEmail(input.email, input.name));
+
+  // Filing a proposal is what makes a user a speaker. `upsertUserByEmail` only
+  // grants the role on a newly created account, so a signed-in user whose role
+  // was revoked (or who never had one) still regains it here.
+  await grantRole(speaker.id, 'speaker');
 
   // The back button, not a race. With scripting off, filing a proposal and
   // pressing back leaves the form populated, and pressing submit again filed a
