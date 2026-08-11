@@ -1,60 +1,67 @@
 # Saas Killa
 
-Conference programme software: a call for papers, blind reviewer grading, an AI
-evaluator, accept/reject with speaker notification, a drag-and-drop schedule
-grid, calendar invitations that update in place, file uploads, awards, an
-ePoster gallery, a speaker portal with organizer-authored pages, a public
-agenda, embeddable widgets for the event's own website, and a one-way push of
-the finished programme to Accelevents.
+Conference programme software. It runs the whole CFP-to-agenda pipeline:
 
-Sign-in is a magic link, so use an address you can read mail at. A new address
-gets the speaker role and lands in its own portal. The agenda starts
-unpublished, which is the state an organizer publishes from, so `/agenda` and
-the embedded widgets say so until somebody does.
+- Public call for papers
+- Blind reviewer grading
+- Optional AI-assisted scoring
+- Organizer accept/reject with batch email
+- Drag-and-drop schedule builder
+- Calendar invites that update in place
+- Speaker file uploads
+- ePoster gallery
+- Public agenda and embeddable widgets
+- One-way push to Accelevents
+
+**Stack:** Next.js 15 (App Router, Server Actions) · React 19 · TypeScript ·
+Postgres · Drizzle ORM · Tailwind v4 · Resend · Playwright.
 
 `SCOPE.md` is the requirement-by-requirement account of what is built, what is
-deliberately not, and which test covers each. It also records that four of the
-brief's nine requirements are struck through in the source document, all four of
-which were built here before that was noticed.
+deliberately not, and which test covers each. `FLOWS.md` is every user flow by
+role: 175 flows across 796 numbered steps, each with route, preconditions, server
+action, and refusal paths.
 
-`FLOWS.md` is the other axis: every user flow in the app, 175 of them across 796
-numbered steps, by role. Each one carries its route, its preconditions, the
-server action behind each control, the column it writes, and its refusal paths.
+## Quickstart
 
-Next.js 15 (App Router, Server Actions) · Postgres via Drizzle · Tailwind v4 ·
-Playwright.
+### What you need
 
-## Run it
+- Node.js 20+
+- pnpm
+- Docker (for the local Postgres container)
+
+### Install and run
 
 ```bash
 pnpm install
+cp .env.example .env.local
+# Edit .env.local and set SESSION_SECRET to the output of:
+openssl rand -hex 32
 
-cp .env.example .env.local          # then fill SESSION_SECRET
-openssl rand -hex 32                # a value for SESSION_SECRET
-
-pnpm db:up                          # Postgres 17 in Docker, 127.0.0.1:5433
-pnpm db:migrate                     # apply drizzle/*.sql
-pnpm db:seed                        # one event, 40 submissions, 24 speakers,
-                                    # a two-day grid with 9 talks on it
-pnpm dev                            # http://127.0.0.1:9140
+pnpm db:up       # Postgres 17 on 127.0.0.1:5433
+pnpm db:migrate  # apply drizzle/*.sql
+pnpm db:seed     # one event, 40 submissions, 24 speakers, 2-day grid
+pnpm dev         # http://127.0.0.1:9140
 ```
 
-Sign in at `/login` as `organizer@example.com`, which lands on the organizer
-screens. `reviewer1@example.com` lands in the grading queue, and any of
-`speaker1@example.com` .. `speaker24@example.com` lands in that speaker's own
-portal.
+### Sign in
 
-With `RESEND_API_KEY` unset the app never sends anything: every message is
-printed to the terminal and written to `.mail/`, so the sign-in link is in your
-scrollback. That is also how the end-to-end test reads its magic links.
+The seed creates:
+
+- `organizer@example.com` — organizer screens
+- `reviewer1@example.com` — blind review queue
+- `speaker1@example.com` .. `speaker24@example.com` — speaker portals
+
+With `RESEND_API_KEY` unset, the app does not send real email; every message is
+printed to the terminal and written to `.mail/`. To browse from another machine,
+run the dev inbox:
 
 ```bash
-node scripts/dev-inbox.mjs          # http://127.0.0.1:9141
+node scripts/dev-inbox.mjs   # http://127.0.0.1:9141
 ```
 
-serves that directory newest-first with each sign-in link rendered as a button,
-which is the only practical way in when you are browsing from another machine
-and cannot read the terminal.
+Then the pipeline is: `/cfp` to submit, `/review` to grade,
+`/organizer/submissions` to decide, `/organizer/schedule` to place, and
+`/organizer/schedule` again to publish.
 
 ## The pipeline
 
