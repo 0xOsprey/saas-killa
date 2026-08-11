@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
+import { useActionState, useState, useTransition } from 'react';
 import {
   Badge,
   Button,
@@ -172,6 +173,14 @@ function Row({
   const [draft, setDraft] = useState<{ title: string; abstract: string } | null>(null);
   const [reason, setReason] = useState('');
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
+
+  async function submitDecision(_prev: void, formData: FormData): Promise<void> {
+    await setDecision(formData);
+    router.refresh();
+  }
+
+  const [_, formAction, deciding] = useActionState(submitDecision, undefined);
 
   function save() {
     if (!draft) return;
@@ -321,29 +330,34 @@ function Row({
       )}
 
       <div className="flex flex-wrap items-center gap-2 border-t border-line pt-3">
-        <form action={setDecision}>
+        <form action={formAction}>
           <input type="hidden" name="submissionId" value={row.id} />
           <input type="hidden" name="status" value="accepted" />
           <Button
             type="submit"
             variant={row.status === 'accepted' ? 'primary' : 'secondary'}
+            disabled={deciding}
             data-testid={`accept-${row.id}`}
           >
             Accept
           </Button>
         </form>
-        <form action={setDecision}>
+        <form action={formAction}>
           <input type="hidden" name="submissionId" value={row.id} />
           <input type="hidden" name="status" value="rejected" />
-          <Button type="submit" variant={row.status === 'rejected' ? 'danger' : 'secondary'}>
+          <Button
+            type="submit"
+            variant={row.status === 'rejected' ? 'danger' : 'secondary'}
+            disabled={deciding}
+          >
             Reject
           </Button>
         </form>
         {row.status !== 'submitted' ? (
-          <form action={setDecision}>
+          <form action={formAction}>
             <input type="hidden" name="submissionId" value={row.id} />
             <input type="hidden" name="status" value="submitted" />
-            <Button type="submit" variant="ghost" className="text-xs">
+            <Button type="submit" variant="ghost" className="text-xs" disabled={deciding}>
               Undecide
             </Button>
           </form>
