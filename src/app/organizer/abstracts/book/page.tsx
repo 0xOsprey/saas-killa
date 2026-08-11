@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { AuthorListView } from '@/components/AuthorList';
 import { Empty, LinkButton, PageHeader } from '@/components/ui';
 import { acceptedForBook, authorsForMany, withSpeakerFallback, type BookRow } from '@/lib/abstracts';
@@ -57,7 +58,15 @@ export default async function AbstractBookPage() {
         {event.tagline ? <p className="mt-1 text-sm text-muted">{event.tagline}</p> : null}
       </header>
 
-      {rows.length === 0 ? <Empty>Nothing has been accepted yet.</Empty> : null}
+      {rows.length === 0 ? (
+        <Empty>
+          Nothing has been accepted yet. Accept submissions on the{' '}
+          <Link href="/organizer/submissions" className="text-accent hover:underline">
+            submissions board
+          </Link>
+          .
+        </Empty>
+      ) : null}
 
       {groups.map((group) => (
         <section key={group.track} className="book-track space-y-5 pt-2">
