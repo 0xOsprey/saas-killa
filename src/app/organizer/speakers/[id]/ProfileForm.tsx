@@ -1,7 +1,7 @@
 'use client';
 
 import { useActionState } from 'react';
-import { Button, Field, Input, Notice, Textarea } from '@/components/ui';
+import { Button, Field, FieldAction, Input, Notice, Textarea } from '@/components/ui';
 import { Headshot } from '@/app/speakers/Headshot';
 import { updateSpeakerProfileAction, type ProfileState } from '../actions';
 
@@ -145,7 +145,9 @@ export function ProfileForm({
             />
           </Field>
         </div>
-        <Headshot src={headshotUrl} name={name} size="md" className="self-end" />
+        <FieldAction>
+          <Headshot src={headshotUrl} name={name} size="md" />
+        </FieldAction>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">

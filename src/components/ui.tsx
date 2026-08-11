@@ -119,10 +119,35 @@ export function Field({
 }) {
   return (
     <label className="block space-y-1.5">
-      <span className="block text-sm font-medium text-ink">{label}</span>
+      <span className="block text-sm font-medium leading-5 text-ink">{label}</span>
       {children}
       {hint ? <span className="block text-xs text-muted">{hint}</span> : null}
     </label>
+  );
+}
+
+export function FieldAction({
+  label,
+  children,
+  className,
+}: {
+  label?: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn('flex flex-col space-y-1.5', className)}>
+      <span
+        className={cn(
+          'block text-sm font-medium leading-5',
+          label ? 'text-ink' : 'invisible',
+        )}
+        aria-hidden={label ? undefined : 'true'}
+      >
+        {label || '\u00A0'}
+      </span>
+      {children}
+    </div>
   );
 }
 

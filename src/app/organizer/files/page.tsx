@@ -1,4 +1,4 @@
-import { Button, Card, Empty, Field, Input, LinkButton, Notice, PageHeader } from '@/components/ui';
+import { Button, Card, Empty, Field, FieldAction, Input, LinkButton, Notice, PageHeader } from '@/components/ui';
 import { inEventZone } from '@/lib/format';
 import { uuidOrNull } from '@/lib/ids';
 import { getEvent } from '@/lib/queries';
@@ -145,9 +145,11 @@ export default async function OrganizerFilesPage({
           <Field label="Search" hint="File name, session title, speaker name and email.">
             <Input name="q" defaultValue={q} placeholder="slides" data-testid="files-search" />
           </Field>
-          <Button type="submit" variant="secondary" data-testid="files-apply" className="self-end">
-            Apply
-          </Button>
+          <FieldAction>
+            <Button type="submit" variant="secondary" data-testid="files-apply">
+              Apply
+            </Button>
+          </FieldAction>
           {params.submission ? (
             <input type="hidden" name="submission" value={params.submission} />
           ) : null}

@@ -6,6 +6,7 @@ import {
   Card,
   Empty,
   Field,
+  FieldAction,
   Input,
   LinkButton,
   PageHeader,
@@ -149,9 +150,11 @@ export default async function AbstractsIndexPage({
               ))}
             </Select>
           </Field>
-          <Button type="submit" variant="secondary" className="self-end">
-            Apply
-          </Button>
+          <FieldAction>
+            <Button type="submit" variant="secondary">
+              Apply
+            </Button>
+          </FieldAction>
         </form>
 
         <div className="mt-3 flex flex-wrap items-end gap-3 border-t border-line pt-3">

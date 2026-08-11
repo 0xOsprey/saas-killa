@@ -5,6 +5,7 @@ import {
   Card,
   Empty,
   Field,
+  FieldAction,
   Input,
   LinkButton,
   Notice,
@@ -389,9 +390,11 @@ export default async function OrganizerSubmissionsPage({
               <option value="asc">{DIRECTION_LABELS[sort].asc}</option>
             </Select>
           </Field>
-          <Button type="submit" variant="secondary" data-testid="board-apply" className="self-end">
-            Apply
-          </Button>
+          <FieldAction>
+            <Button type="submit" variant="secondary" data-testid="board-apply">
+              Apply
+            </Button>
+          </FieldAction>
           {content ? <input type="hidden" name="content" value={content} /> : null}
           {showAll ? <input type="hidden" name="per" value="all" /> : null}
         </form>

@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Badge, Button, Card, Empty, Field, Input, Notice, PageHeader, Select } from '@/components/ui';
+import { Badge, Button, Card, Empty, Field, FieldAction, Input, Notice, PageHeader, Select } from '@/components/ui';
 import { STATUS_LABELS, dayLabel, instantToWallClock } from '@/lib/format';
 import {
   assignmentRoster,
@@ -333,14 +333,18 @@ export default async function OrganizerCfpPage({
             <Field label="Due (optional)" hint="Applied to the rows this run creates.">
               <Input type="datetime-local" name="dueAt" data-testid="distribute-due-at" />
             </Field>
-            <div className="self-end space-y-3">
-              <label className="flex items-center gap-2 text-sm text-ink">
-                <input type="checkbox" name="matchTrack" data-testid="match-track" />
-                Match on track
-              </label>
-              <Button type="submit" data-testid="auto-distribute">
-                Distribute
-              </Button>
+            <div className="flex flex-wrap items-start gap-2">
+              <FieldAction>
+                <label className="flex h-9 items-center gap-2 text-sm text-ink">
+                  <input type="checkbox" name="matchTrack" data-testid="match-track" />
+                  Match on track
+                </label>
+              </FieldAction>
+              <FieldAction>
+                <Button type="submit" data-testid="auto-distribute">
+                  Distribute
+                </Button>
+              </FieldAction>
             </div>
           </form>
         </Card>

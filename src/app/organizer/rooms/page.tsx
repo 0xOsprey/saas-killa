@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Badge, Button, Card, Empty, Field, Input, Notice, PageHeader } from '@/components/ui';
+import { Badge, Button, Card, Empty, Field, FieldAction, Input, Notice, PageHeader } from '@/components/ui';
 import {
   createRoom,
   createTrack,
@@ -97,7 +97,7 @@ export default async function RoomsPage({
         {rooms.length === 0 ? <Empty>No rooms yet. Add the first one below.</Empty> : null}
 
         {rooms.map((room, index) => (
-          <Card key={room.id} className="flex flex-wrap items-end gap-3">
+          <Card key={room.id} className="flex flex-wrap items-start gap-3">
             <form action={updateRoom} className="flex flex-wrap items-start gap-3">
               <input type="hidden" name="id" value={room.id} />
               <Field label="Name">
@@ -120,58 +120,68 @@ export default async function RoomsPage({
                   data-testid={`room-capacity-${room.id}`}
                 />
               </Field>
-              <Button type="submit" variant="secondary" className="self-end">
-                Save
-              </Button>
+              <FieldAction>
+                <Button type="submit" variant="secondary">
+                  Save
+                </Button>
+              </FieldAction>
             </form>
 
-            <div className="flex items-end gap-1">
-              <form action={moveRoom}>
-                <input type="hidden" name="id" value={room.id} />
-                <input type="hidden" name="direction" value="up" />
-                <Button type="submit" variant="ghost" disabled={index === 0} title="Move left">
-                  ←
-                </Button>
-              </form>
-              <form action={moveRoom}>
-                <input type="hidden" name="id" value={room.id} />
-                <input type="hidden" name="direction" value="down" />
-                <Button
-                  type="submit"
-                  variant="ghost"
-                  disabled={index === rooms.length - 1}
-                  title="Move right"
-                >
-                  →
-                </Button>
-              </form>
-            </div>
+            <FieldAction>
+              <div className="flex items-start gap-1">
+                <form action={moveRoom}>
+                  <input type="hidden" name="id" value={room.id} />
+                  <input type="hidden" name="direction" value="up" />
+                  <Button type="submit" variant="ghost" disabled={index === 0} title="Move left">
+                    ←
+                  </Button>
+                </form>
+                <form action={moveRoom}>
+                  <input type="hidden" name="id" value={room.id} />
+                  <input type="hidden" name="direction" value="down" />
+                  <Button
+                    type="submit"
+                    variant="ghost"
+                    disabled={index === rooms.length - 1}
+                    title="Move right"
+                  >
+                    →
+                  </Button>
+                </form>
+              </div>
+            </FieldAction>
 
-            <span className="pb-2 text-xs text-muted">
-              {room.slotCount} slot(s), {room.placedCount} placed
-            </span>
+            <FieldAction>
+              <span className="flex h-9 items-center text-xs text-muted">
+                {room.slotCount} slot(s), {room.placedCount} placed
+              </span>
+            </FieldAction>
 
             <form action={deleteRoom} className="ml-auto">
-              <input type="hidden" name="id" value={room.id} />
-              <Button type="submit" variant="danger" data-testid={`delete-room-${room.id}`}>
-                Delete
-              </Button>
+              <FieldAction>
+                <input type="hidden" name="id" value={room.id} />
+                <Button type="submit" variant="danger" data-testid={`delete-room-${room.id}`}>
+                  Delete
+                </Button>
+              </FieldAction>
             </form>
           </Card>
         ))}
 
         <Card className="space-y-3">
           <h3 className="text-sm font-semibold text-ink">Add a room</h3>
-          <form action={createRoom} className="flex flex-wrap items-end gap-3">
+          <form action={createRoom} className="flex flex-wrap items-start gap-3">
             <Field label="Name">
               <Input name="name" required maxLength={80} className="w-56" data-testid="new-room-name" />
             </Field>
             <Field label="Capacity">
               <Input name="capacity" type="number" min={1} className="w-32" />
             </Field>
-            <Button type="submit" variant="secondary" data-testid="add-room">
-              Add room
-            </Button>
+            <FieldAction>
+              <Button type="submit" variant="secondary" data-testid="add-room">
+                Add room
+              </Button>
+            </FieldAction>
           </form>
         </Card>
       </section>
@@ -182,8 +192,8 @@ export default async function RoomsPage({
         {tracks.length === 0 ? <Empty>No tracks yet. Add the first one below.</Empty> : null}
 
         {tracks.map((track) => (
-          <Card key={track.id} className="flex flex-wrap items-end gap-3">
-            <form action={updateTrack} className="flex flex-wrap items-end gap-3">
+          <Card key={track.id} className="flex flex-wrap items-start gap-3">
+            <form action={updateTrack} className="flex flex-wrap items-start gap-3">
               <input type="hidden" name="id" value={track.id} />
               <Field label="Name">
                 <Input
@@ -204,27 +214,36 @@ export default async function RoomsPage({
                   data-testid={`track-colour-${track.id}`}
                 />
               </Field>
-              <Button type="submit" variant="secondary" className="self-end">
-                Save
-              </Button>
+              <FieldAction>
+                <Button type="submit" variant="secondary">
+                  Save
+                </Button>
+              </FieldAction>
             </form>
 
-            <Badge className="mb-2" style={{ backgroundColor: `${track.colour}22`, color: track.colour }}>
-              {track.submissionCount} submission(s)
-            </Badge>
+            <FieldAction>
+              <Badge
+                className="flex h-9 items-center"
+                style={{ backgroundColor: `${track.colour}22`, color: track.colour }}
+              >
+                {track.submissionCount} submission(s)
+              </Badge>
+            </FieldAction>
 
             <form action={deleteTrack} className="ml-auto">
-              <input type="hidden" name="id" value={track.id} />
-              <Button type="submit" variant="danger" data-testid={`delete-track-${track.id}`}>
-                Delete
-              </Button>
+              <FieldAction>
+                <input type="hidden" name="id" value={track.id} />
+                <Button type="submit" variant="danger" data-testid={`delete-track-${track.id}`}>
+                  Delete
+                </Button>
+              </FieldAction>
             </form>
           </Card>
         ))}
 
         <Card className="space-y-3">
           <h3 className="text-sm font-semibold text-ink">Add a track</h3>
-          <form action={createTrack} className="flex flex-wrap items-end gap-3">
+          <form action={createTrack} className="flex flex-wrap items-start gap-3">
             <Field label="Name">
               <Input
                 name="name"
@@ -237,9 +256,11 @@ export default async function RoomsPage({
             <Field label="Colour">
               <Input name="colour" type="color" defaultValue="#64748b" className="h-10 w-20 p-1" />
             </Field>
-            <Button type="submit" variant="secondary" data-testid="add-track">
-              Add track
-            </Button>
+            <FieldAction>
+              <Button type="submit" variant="secondary" data-testid="add-track">
+                Add track
+              </Button>
+            </FieldAction>
           </form>
         </Card>
       </section>

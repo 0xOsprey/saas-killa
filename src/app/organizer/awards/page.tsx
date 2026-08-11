@@ -5,6 +5,7 @@ import {
   Card,
   Empty,
   Field,
+  FieldAction,
   Input,
   LinkButton,
   Notice,
@@ -309,9 +310,11 @@ export default async function OrganizerAwardsPage({
                         ))}
                     </Select>
                   </Field>
-                  <Button type="submit" variant="secondary" className="self-end">
-                    Add
-                  </Button>
+                  <FieldAction>
+                    <Button type="submit" variant="secondary">
+                      Add
+                    </Button>
+                  </FieldAction>
                 </form>
               ) : null}
             </section>
@@ -340,9 +343,11 @@ export default async function OrganizerAwardsPage({
                       <option value="community">People&apos;s Choice tally</option>
                     </Select>
                   </Field>
-                  <Button type="submit" disabled={detail.nominees.length === 0} className="self-end">
-                    Close voting
-                  </Button>
+                  <FieldAction>
+                    <Button type="submit" disabled={detail.nominees.length === 0}>
+                      Close voting
+                    </Button>
+                  </FieldAction>
                 </form>
               ) : (
                 <>
