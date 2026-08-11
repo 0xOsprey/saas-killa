@@ -920,11 +920,10 @@ Signed-in-but-wrong-role never 403s at the page level — it renders a `Notice` 
 6. **`isPresenter` is not an access control.** It renders a `not presenting` badge and nothing else.
    Its neighbour `canEdit` in the same table is a genuine capability.
 
-7. **Three `/organizer/*` route handlers sit outside the layout gate, and they disagree on the
-   signed-out answer.** `/organizer/abstracts/export` answers 401 then 403;
-   `/organizer/speakers/export` and `/organizer/integrations/[id]/bundle` answer 403 for both cases,
-   because `NotAuthorised` does not distinguish them at the catch site. All three are gated; the
-   status codes are inconsistent.
+7. **Three `/organizer/*` route handlers sit outside the layout gate — closed.**
+   `/organizer/abstracts/export`, `/organizer/speakers/export` and
+   `/organizer/integrations/[id]/bundle` now all call `guardRoute('organizer')` from
+   `src/lib/auth.ts`, which answers 401 for signed-out and 403 for wrong-role.
 
 8. **`/embed/*` is seven unauthenticated, CORS-`*` routes.** They never read the session cookie
    (documented at `src/lib/embed.ts:29-31`) and are gated solely on `event.agendaPublished`. This is
@@ -936,13 +935,16 @@ Signed-in-but-wrong-role never 403s at the page level — it renders a `Notice` 
    (`src/app/login/actions.ts:29` → `src/lib/auth.ts:57`). The non-enumeration property is real; the
    side effect is that `users` grows on request.
 
-10. **Nothing expires `auth_sessions` or `magic_link_tokens`.** `currentUser` refuses an expired
-    session but leaves the row, with the reason given at `src/lib/auth.ts:130-131`. There is no
-    sweeper anywhere in the codebase.
+10. **Nothing expires `auth_sessions` or `magic_link_tokens` — closed.** `currentUser` still
+    refuses an expired session and leaves the row (it runs during render, and Next forbids writes
+    there), but `sweepExpiredAuth` in `src/lib/auth.ts:140-143` now runs from `startSession` and
+    deletes all rows past their `expiresAt`.
 
-11. **The AI evaluator bot holds a real `reviewer` row** and is filtered out of four human-facing
-    reviewer surfaces by `isBot`, not by role. Any query that forgets the `isBot` filter counts a bot
-    as a committee member.
+11. **The AI evaluator bot holds a real `reviewer` row** and is filtered out of human-facing
+    reviewer surfaces by `isBot`, not by role. All `userRoles.role = 'reviewer'` joins in
+    `src/lib/grading.ts`, `src/app/organizer/cfp/actions.ts` and
+    `src/app/organizer/rounds/actions.ts` also filter `users.isBot = false`. Any new query
+    that forgets the filter would count the bot as a committee member.
 
 12. **`secure` is off outside production** (`src/lib/auth.ts:109`), so the session cookie travels
     over plaintext HTTP on any non-production deployment. Expected for local development; worth
