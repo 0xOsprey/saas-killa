@@ -1,5 +1,6 @@
 import type { AgendaSearchParams } from './agenda-filters';
 import { agendaSlots, parseAgendaFilters } from './agenda-filters';
+import { currentUser } from './auth';
 import { env } from './env';
 import { FORMAT_LABELS, dayKey, dayLabel, timeOfDay } from './format';
 import { getEvent } from './queries';
@@ -227,17 +228,30 @@ function absolute(url: string | null): string | null {
 }
 
 /**
+ * Whether a request is allowed to see the embed before the agenda is published.
+ * The `preview=1` query is only meaningful for signed-in organizers.
+ */
+export async function isEmbedPreview(params: AgendaSearchParams): Promise<boolean> {
+  if (first(params.preview) !== '1') return false;
+  const user = await currentUser();
+  return user?.roles.includes('organizer') ?? false;
+}
+
+/**
  * The speaker gallery. Empty and flagged `published: false` before the agenda
  * goes out rather than a 404: a widget already pasted into a host page has to
  * say something honest on the morning before publication, and a broken request
  * in the host's console reads as our fault.
  */
-export async function speakerFeed(params: AgendaSearchParams = {}): Promise<SpeakerFeed> {
+export async function speakerFeed(
+  params: AgendaSearchParams = {},
+  { preview = false }: { preview?: boolean } = {},
+): Promise<SpeakerFeed> {
   const event = await getEvent();
   const base = env().APP_URL;
   const meta = { name: event.name, timezone: event.timezone, url: `${base}/speakers` };
 
-  if (!event.agendaPublished) return { event: meta, published: false, speakers: [] };
+  if (!event.agendaPublished && !preview) return { event: meta, published: false, speakers: [] };
 
   const filters = parseAgendaFilters(params);
   const rows = await speakerDirectory({
@@ -274,12 +288,15 @@ export async function speakerFeed(params: AgendaSearchParams = {}): Promise<Spea
  * "Lunch" three times in a row, so blocks collapse on (start, end, label) and
  * keep a room name only when they really are in one room.
  */
-export async function agendaFeed(params: AgendaSearchParams = {}): Promise<AgendaFeed> {
+export async function agendaFeed(
+  params: AgendaSearchParams = {},
+  { preview = false }: { preview?: boolean } = {},
+): Promise<AgendaFeed> {
   const event = await getEvent();
   const base = env().APP_URL;
   const meta = { name: event.name, timezone: event.timezone, url: `${base}/agenda` };
 
-  if (!event.agendaPublished) return { event: meta, published: false, days: [] };
+  if (!event.agendaPublished && !preview) return { event: meta, published: false, days: [] };
 
   // Anonymous by construction: "my agenda" is a signed-in view and there is no
   // session on a cross-origin fetch, so it would silently return nothing.

@@ -1,4 +1,4 @@
-import { embedDocument, renderSpeakersHtml, speakerFeed } from '@/lib/embed';
+import { embedDocument, isEmbedPreview, renderSpeakersHtml, speakerFeed } from '@/lib/embed';
 
 /**
  * The iframe fallback for the speaker gallery: a whole document, server
@@ -7,6 +7,6 @@ import { embedDocument, renderSpeakersHtml, speakerFeed } from '@/lib/embed';
  */
 export async function GET(request: Request): Promise<Response> {
   const params = Object.fromEntries(new URL(request.url).searchParams);
-  const feed = await speakerFeed(params);
+  const feed = await speakerFeed(params, { preview: await isEmbedPreview(params) });
   return embedDocument(`Speakers · ${feed.event.name}`, renderSpeakersHtml(feed));
 }

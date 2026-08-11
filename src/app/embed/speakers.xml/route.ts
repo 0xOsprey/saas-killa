@@ -1,4 +1,4 @@
-import { preflightResponse, speakerFeed, speakersXml, xmlResponse } from '@/lib/embed';
+import { isEmbedPreview, preflightResponse, speakerFeed, speakersXml, xmlResponse } from '@/lib/embed';
 
 export function OPTIONS(): Response {
   return preflightResponse();
@@ -11,5 +11,5 @@ export function OPTIONS(): Response {
  */
 export async function GET(request: Request): Promise<Response> {
   const params = Object.fromEntries(new URL(request.url).searchParams);
-  return xmlResponse(speakersXml(await speakerFeed(params)));
+  return xmlResponse(speakersXml(await speakerFeed(params, { preview: await isEmbedPreview(params) })));
 }

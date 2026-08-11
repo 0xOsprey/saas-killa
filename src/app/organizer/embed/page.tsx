@@ -154,6 +154,7 @@ export default async function EmbedPage({
     .filter(Boolean)
     .join('&');
   const suffix = query ? `?${query}` : '';
+  const previewSuffix = suffix ? `${suffix}&preview=1` : '?preview=1';
   const ignored =
     widget === 'speakers' &&
     Boolean(requested.day || requested.roomId || requested.format || requested.level);
@@ -257,9 +258,10 @@ export default async function EmbedPage({
 
       {event.agendaPublished ? null : (
         <Notice>
-          Both widgets stay closed until the agenda is published, and they say so on the host page
-          rather than rendering empty. The embed never reads a sign-in cookie, so this is what you
-          will see on the preview too, even as an organizer.
+          The public widget stays closed until the agenda is published, and it says so on the host
+          page rather than rendering empty. The preview below uses your organizer sign-in to show
+          the real data anyway, so you can configure it before it goes live. The snippets you copy
+          never carry that sign-in, and they will show the closed notice to the public.
         </Notice>
       )}
 
@@ -511,14 +513,14 @@ export default async function EmbedPage({
         <div>
           <h2 className="text-sm font-semibold text-ink">Preview</h2>
           <p className="mt-1 text-sm text-muted">
-            The configured widget, served by the same route the snippet points at. It is framed
-            rather than drawn into this page because the embed is deliberately the only markup here
-            that no sanitiser has seen, and it renders in the widget&rsquo;s own colours: an iframe
-            cannot take the palette above.
+            The configured widget with the current filters and fields, shown as it will render once
+            the agenda is published. It is framed rather than drawn into this page because the embed
+            is deliberately the only markup here that no sanitiser has seen, and it renders in the
+            widget&rsquo;s own colours: an iframe cannot take the palette above.
           </p>
         </div>
         <iframe
-          src={`/embed/${widget}${suffix}`}
+          src={`/embed/${widget}${previewSuffix}`}
           title={`Preview of the ${widget === 'agenda' ? 'schedule' : 'speaker gallery'} widget`}
           className="h-96 w-full rounded-md border border-line bg-white"
           loading="lazy"

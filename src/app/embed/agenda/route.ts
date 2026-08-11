@@ -1,4 +1,4 @@
-import { agendaFeed, embedDocument, renderAgendaHtml } from '@/lib/embed';
+import { agendaFeed, embedDocument, isEmbedPreview, renderAgendaHtml } from '@/lib/embed';
 
 /**
  * The iframe fallback for the schedule itinerary. Same document shape as
@@ -7,6 +7,6 @@ import { agendaFeed, embedDocument, renderAgendaHtml } from '@/lib/embed';
  */
 export async function GET(request: Request): Promise<Response> {
   const params = Object.fromEntries(new URL(request.url).searchParams);
-  const feed = await agendaFeed(params);
+  const feed = await agendaFeed(params, { preview: await isEmbedPreview(params) });
   return embedDocument(`Schedule · ${feed.event.name}`, renderAgendaHtml(feed));
 }
