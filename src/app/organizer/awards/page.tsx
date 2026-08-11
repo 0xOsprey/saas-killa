@@ -186,7 +186,15 @@ export default async function OrganizerAwardsPage({
         </Notice>
       ) : null}
 
-      {details.length === 0 ? <Empty>No award categories yet.</Empty> : null}
+      {details.length === 0 ? (
+        <Empty>
+          No award categories yet.{' '}
+          <Link href="#new-award" className="text-accent hover:underline">
+            Create the first one
+          </Link>
+          .
+        </Empty>
+      ) : null}
 
       {details.map((detail) => {
         const { award, criteria } = detail;
@@ -570,7 +578,7 @@ export default async function OrganizerAwardsPage({
         </Card>
       ) : null}
 
-      <Card className="max-w-xl space-y-3">
+      <Card id="new-award" className="max-w-xl space-y-3">
         <h2 className="text-sm font-semibold text-ink">New award category</h2>
         <form action={createAward} className="space-y-3">
           <Field label="Name">
