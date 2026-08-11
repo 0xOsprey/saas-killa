@@ -141,11 +141,11 @@ export default async function OrganizerFilesPage({
       ) : null}
 
       <Card>
-        <form method="get" className="grid items-end gap-3 sm:grid-cols-[3fr_auto]">
+        <form method="get" className="grid items-start gap-3 sm:grid-cols-[3fr_auto]">
           <Field label="Search" hint="File name, session title, speaker name and email.">
             <Input name="q" defaultValue={q} placeholder="slides" data-testid="files-search" />
           </Field>
-          <Button type="submit" variant="secondary" data-testid="files-apply">
+          <Button type="submit" variant="secondary" data-testid="files-apply" className="self-end">
             Apply
           </Button>
           {params.submission ? (

@@ -307,7 +307,7 @@ export default async function OrganizerCfpPage({
             </p>
           </div>
 
-          <form action={autoDistribute} className="grid gap-4 sm:grid-cols-4 sm:items-end">
+          <form action={autoDistribute} className="grid gap-4 sm:grid-cols-4 sm:items-start">
             <Field label="Reviews per submission">
               <Input
                 type="number"
@@ -333,7 +333,7 @@ export default async function OrganizerCfpPage({
             <Field label="Due (optional)" hint="Applied to the rows this run creates.">
               <Input type="datetime-local" name="dueAt" data-testid="distribute-due-at" />
             </Field>
-            <div className="space-y-3">
+            <div className="self-end space-y-3">
               <label className="flex items-center gap-2 text-sm text-ink">
                 <input type="checkbox" name="matchTrack" data-testid="match-track" />
                 Match on track

@@ -134,7 +134,7 @@ export default async function AbstractsIndexPage({
       <StatusTabs tabs={statusTabs} active={status} buildHref={tabHref} />
 
       <Card>
-        <form method="get" className="grid items-end gap-3 sm:grid-cols-[2fr_1fr_auto]">
+        <form method="get" className="grid items-start gap-3 sm:grid-cols-[2fr_1fr_auto]">
           <input type="hidden" name="status" value={status ?? ''} />
           <Field label="Search" hint="Title, abstract text and keywords.">
             <Input name="q" defaultValue={q} placeholder="observability" data-testid="abstract-search" />
@@ -149,7 +149,7 @@ export default async function AbstractsIndexPage({
               ))}
             </Select>
           </Field>
-          <Button type="submit" variant="secondary">
+          <Button type="submit" variant="secondary" className="self-end">
             Apply
           </Button>
         </form>

@@ -293,7 +293,7 @@ export default async function OrganizerAwardsPage({
               )}
 
               {open ? (
-                <form action={nominate} className="flex flex-wrap items-end gap-2 pt-1">
+                <form action={nominate} className="flex flex-wrap items-start gap-2 pt-1">
                   <input type="hidden" name="awardId" value={award.id} />
                   <Field label="Nominate" hint="Accepted submissions only.">
                     <Select name="submissionId" className="w-72" defaultValue="" required>
@@ -309,7 +309,7 @@ export default async function OrganizerAwardsPage({
                         ))}
                     </Select>
                   </Field>
-                  <Button type="submit" variant="secondary">
+                  <Button type="submit" variant="secondary" className="self-end">
                     Add
                   </Button>
                 </form>
@@ -327,7 +327,7 @@ export default async function OrganizerAwardsPage({
 
             <div className="flex flex-wrap items-end gap-3 border-t border-line pt-3">
               {open ? (
-                <form action={closeVoting} className="flex flex-wrap items-end gap-2">
+                <form action={closeVoting} className="flex flex-wrap items-start gap-2">
                   <input type="hidden" name="awardId" value={award.id} />
                   <input
                     type="hidden"
@@ -340,7 +340,7 @@ export default async function OrganizerAwardsPage({
                       <option value="community">People&apos;s Choice tally</option>
                     </Select>
                   </Field>
-                  <Button type="submit" disabled={detail.nominees.length === 0}>
+                  <Button type="submit" disabled={detail.nominees.length === 0} className="self-end">
                     Close voting
                   </Button>
                 </form>

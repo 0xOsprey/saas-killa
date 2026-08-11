@@ -118,7 +118,7 @@ export function ProfileForm({
         />
       </Field>
 
-      <div className="flex items-end gap-3">
+      <div className="flex items-start gap-3">
         <div className="flex-1">
           <Field
             label="Headshot URL"
@@ -145,7 +145,7 @@ export function ProfileForm({
             />
           </Field>
         </div>
-        <Headshot src={headshotUrl} name={name} size="md" />
+        <Headshot src={headshotUrl} name={name} size="md" className="self-end" />
       </div>
 
       <div className="flex flex-wrap items-center gap-2">

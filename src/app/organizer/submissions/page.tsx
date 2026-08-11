@@ -349,7 +349,7 @@ export default async function OrganizerSubmissionsPage({
             too high and nothing says why. */}
         <form
           method="get"
-          className="grid items-end gap-3 sm:grid-cols-[2fr_1fr_1fr_1fr_auto]"
+          className="grid items-start gap-3 sm:grid-cols-[2fr_1fr_1fr_1fr_auto]"
         >
           <input type="hidden" name="status" value={status ?? ''} />
           <Field label="Search" hint="Title, abstract, speaker name and email.">
@@ -389,7 +389,7 @@ export default async function OrganizerSubmissionsPage({
               <option value="asc">{DIRECTION_LABELS[sort].asc}</option>
             </Select>
           </Field>
-          <Button type="submit" variant="secondary" data-testid="board-apply">
+          <Button type="submit" variant="secondary" data-testid="board-apply" className="self-end">
             Apply
           </Button>
           {content ? <input type="hidden" name="content" value={content} /> : null}

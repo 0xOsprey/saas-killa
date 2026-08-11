@@ -98,7 +98,7 @@ export default async function RoomsPage({
 
         {rooms.map((room, index) => (
           <Card key={room.id} className="flex flex-wrap items-end gap-3">
-            <form action={updateRoom} className="flex flex-wrap items-end gap-3">
+            <form action={updateRoom} className="flex flex-wrap items-start gap-3">
               <input type="hidden" name="id" value={room.id} />
               <Field label="Name">
                 <Input
@@ -120,7 +120,7 @@ export default async function RoomsPage({
                   data-testid={`room-capacity-${room.id}`}
                 />
               </Field>
-              <Button type="submit" variant="secondary">
+              <Button type="submit" variant="secondary" className="self-end">
                 Save
               </Button>
             </form>
@@ -204,7 +204,7 @@ export default async function RoomsPage({
                   data-testid={`track-colour-${track.id}`}
                 />
               </Field>
-              <Button type="submit" variant="secondary">
+              <Button type="submit" variant="secondary" className="self-end">
                 Save
               </Button>
             </form>
