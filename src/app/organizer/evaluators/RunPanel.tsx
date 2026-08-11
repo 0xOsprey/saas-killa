@@ -34,6 +34,11 @@ export function RunPanel({
     null,
   );
   const runnable = configured && personas.length > 0;
+  const disabledTitle = !configured
+    ? 'Set ANTHROPIC_API_KEY to run a persona.'
+    : personas.length === 0
+      ? 'Create an active persona below first.'
+      : undefined;
 
   return (
     <Card id="run-panel" className="space-y-4" data-testid="run-panel">
@@ -47,7 +52,12 @@ export function RunPanel({
 
       <form action={formAction} className="flex flex-wrap items-end gap-3">
         <Field label="Persona">
-          <Select name="personaId" className="w-56" disabled={!runnable}>
+          <Select
+            name="personaId"
+            className="w-56"
+            disabled={!runnable}
+            title={disabledTitle}
+          >
             {personas.map((persona) => (
               <option key={persona.id} value={persona.id}>
                 {persona.name} ({persona.gradeCount} graded)
@@ -61,6 +71,7 @@ export function RunPanel({
             className="w-32"
             defaultValue={String(defaultLimit)}
             disabled={!runnable}
+            title={disabledTitle}
           >
             {batchOptions.map((option) => (
               <option key={option} value={option}>
@@ -73,7 +84,13 @@ export function RunPanel({
           label="Or one proposal"
           hint="Naming one grades it whichever button you press, decided or not."
         >
-          <Select name="submissionId" className="w-64" disabled={!runnable} data-testid="run-one">
+          <Select
+            name="submissionId"
+            className="w-64"
+            disabled={!runnable}
+            title={disabledTitle}
+            data-testid="run-one"
+          >
             <option value="">Every open proposal</option>
             {submissions.map((option) => (
               <option key={option.id} value={option.id}>
@@ -88,6 +105,7 @@ export function RunPanel({
           name="mode"
           value="pending"
           disabled={!runnable || isPending}
+          title={isPending ? 'Running…' : disabledTitle}
           data-testid="run-pending"
         >
           {isPending ? 'Running…' : 'Grade what it has not seen'}
@@ -98,6 +116,7 @@ export function RunPanel({
           value="replace"
           variant="danger"
           disabled={!runnable || isPending}
+          title={isPending ? 'Running…' : disabledTitle}
           data-testid="run-replace"
         >
           Re-run and replace its own grades
