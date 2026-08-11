@@ -256,7 +256,13 @@ export default async function RoundDetailPage({
         </div>
 
         {pool.length === 0 ? (
-          <Empty>Nobody scoped to this round yet, so it is open to every reviewer.</Empty>
+          <p className="text-sm text-muted">
+            Nobody scoped to this round yet, so it is open to every reviewer.{" "}
+            <Link href="#add-reviewer" className="text-ink underline hover:text-accent">
+              Add one
+            </Link>
+            .
+          </p>
         ) : (
           <ul className="flex flex-wrap gap-2" data-testid="pool-list">
             {pool.map((member) => (
@@ -283,7 +289,7 @@ export default async function RoundDetailPage({
         )}
 
         {addable.length > 0 ? (
-          <form action={addPoolMember} className="flex flex-wrap items-end gap-3">
+          <form id="add-reviewer" action={addPoolMember} className="flex flex-wrap items-end gap-3">
             <input type="hidden" name="roundId" value={round.id} />
             <Field label="Add a reviewer">
               <Select
