@@ -105,7 +105,11 @@ export default async function OrganizerAwardsPage({
               Public page
             </LinkButton>
             <form action={notifyWinners}>
-              <Button type="submit" disabled={unmailed === 0}>
+              <Button
+                type="submit"
+                disabled={unmailed === 0}
+                title={unmailed === 0 ? 'Every winner has already been emailed' : `Email ${unmailed} winner${unmailed === 1 ? '' : 's'}`}
+              >
                 {unmailed === 0
                   ? 'Winners all notified'
                   : `Email ${unmailed} winner${unmailed === 1 ? '' : 's'}`}
@@ -352,7 +356,15 @@ export default async function OrganizerAwardsPage({
                     </Select>
                   </Field>
                   <FieldAction>
-                    <Button type="submit" disabled={detail.nominees.length === 0}>
+                    <Button
+                      type="submit"
+                      disabled={detail.nominees.length === 0}
+                      title={
+                        detail.nominees.length === 0
+                          ? 'Add nominees before closing voting'
+                          : 'Close voting and calculate tallies'
+                      }
+                    >
                       Close voting
                     </Button>
                   </FieldAction>
@@ -365,6 +377,11 @@ export default async function OrganizerAwardsPage({
                       type="submit"
                       variant="secondary"
                       disabled={award.winnerSubmissionId !== null}
+                      title={
+                        award.winnerSubmissionId
+                          ? 'Clear the winner before reopening voting'
+                          : 'Reopen voting for this category'
+                      }
                     >
                       Reopen voting
                     </Button>
