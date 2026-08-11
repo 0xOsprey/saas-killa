@@ -62,7 +62,13 @@ export default async function OrganizerRoundsPage({
       {saved && SAVED[saved] ? <Notice tone="good">{SAVED[saved]}</Notice> : null}
 
       {rounds.length === 0 ? (
-        <Empty>No rounds yet. Open the first one below before assigning anybody anything.</Empty>
+        <Empty>
+          No rounds yet.{' '}
+          <Link href="#new-round" className="text-accent hover:underline">
+            Open the first one
+          </Link>{' '}
+          below before assigning anybody anything.
+        </Empty>
       ) : null}
 
       {rounds.map((round) => {
@@ -116,7 +122,7 @@ export default async function OrganizerRoundsPage({
         );
       })}
 
-      <Card className="max-w-2xl space-y-4">
+      <Card id="new-round" className="max-w-2xl space-y-4">
         <div>
           <h2 className="text-sm font-semibold text-ink">New round</h2>
           <p className="mt-0.5 text-xs text-muted">
