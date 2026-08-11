@@ -247,7 +247,7 @@ export default async function SchedulePage({
               className={cn(
                 'rounded-full border px-3 py-1',
                 selectedDay === key
-                  ? 'border-accent bg-accent-soft text-accent'
+                  ? 'border-ink bg-ink/5 text-ink'
                   : 'border-line text-muted hover:text-ink',
               )}
             >

@@ -98,7 +98,6 @@ export default async function PosterDetailPage({
 
       <Card
         className="space-y-3"
-        style={{ borderLeft: `3px solid ${poster.trackColour ?? '#cbd5e1'}` }}
       >
         <PosterMedia url={poster.posterUrl} title={poster.title} variant="full" />
       </Card>

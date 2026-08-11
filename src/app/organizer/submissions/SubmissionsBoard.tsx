@@ -214,7 +214,7 @@ function Row({
 
   return (
     <Card
-      className={cn('space-y-3', pending && 'opacity-60', selected && 'border-accent')}
+      className={cn('space-y-3', pending && 'opacity-60', selected && 'border-ink bg-ink/5')}
       data-testid={`submission-${row.id}`}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -474,7 +474,7 @@ function Row({
                       'rounded-full border px-2 py-0.5 text-xs',
                       locked
                         ? 'border-amber-300 bg-amber-50 text-amber-900'
-                        : 'border-line bg-white text-muted hover:border-accent',
+                        : 'border-line bg-white text-muted hover:border-ink',
                     )}
                   >
                     {option.label}

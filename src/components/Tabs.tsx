@@ -74,7 +74,7 @@ export function Tab({
       className={cn(
         '-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors',
         active
-          ? 'border-accent text-accent'
+          ? 'border-ink text-ink'
           : 'border-transparent text-muted hover:text-ink',
         className,
       )}

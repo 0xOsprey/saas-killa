@@ -149,7 +149,6 @@ export default async function AgendaPage({
                         <Card
                           key={entry.slotId}
                           className="flex items-start justify-between gap-2 p-3"
-                          style={{ borderLeft: `3px solid ${entry.trackColour ?? '#cbd5e1'}` }}
                         >
                           <div className="min-w-0">
                             <Link

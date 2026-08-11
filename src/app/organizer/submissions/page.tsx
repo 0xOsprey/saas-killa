@@ -407,7 +407,7 @@ export default async function OrganizerSubmissionsPage({
             className={cn(
               'rounded-md border px-2 py-1 text-xs',
               content === option.value
-                ? 'border-accent bg-accent-soft text-accent'
+                ? 'border-ink bg-ink/5 text-ink'
                 : 'border-line bg-white text-muted hover:text-ink',
             )}
           >

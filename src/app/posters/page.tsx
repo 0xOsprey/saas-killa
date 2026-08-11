@@ -171,7 +171,6 @@ export default async function PostersPage({
             <Card
               key={poster.id}
               className="flex flex-col gap-2 p-3"
-              style={{ borderLeft: `3px solid ${poster.trackColour ?? '#cbd5e1'}` }}
               data-testid={`poster-${poster.id}`}
             >
               {poster.posterUrl ? (

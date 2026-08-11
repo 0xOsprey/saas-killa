@@ -58,11 +58,6 @@ function Line({ entry, show }: { entry: ScheduleEntry; show: 'room' | 'track' | 
       <span className="min-w-0 flex-1">
         <span
           className={isBreak ? 'text-sm italic text-muted' : 'text-sm font-medium text-ink'}
-          style={
-            entry.trackColour && !isBreak
-              ? { borderLeft: `3px solid ${entry.trackColour}`, paddingLeft: '0.5rem' }
-              : undefined
-          }
         >
           {entry.title ?? entry.label}
         </span>

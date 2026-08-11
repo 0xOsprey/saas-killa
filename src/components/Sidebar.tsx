@@ -144,7 +144,7 @@ function Section({
                 onClick={onClick}
                 aria-current={active ? 'page' : undefined}
                 className={cn(
-                  'flex items-center gap-2.5 rounded-md border-l-2 px-3 py-1.5 text-sm transition-colors',
+                  'flex items-center gap-2.5 rounded-md border px-3 py-1.5 text-sm transition-colors',
                   active
                     ? 'border-ink bg-ink/5 font-medium text-ink'
                     : 'border-transparent text-muted hover:bg-ink/5 hover:text-ink',

@@ -77,7 +77,6 @@ export default async function SpeakerProfilePage({
           <Card
             key={submission.id}
             className="space-y-2"
-            style={{ borderLeft: `3px solid ${submission.trackColour ?? '#cbd5e1'}` }}
           >
             <Link
               href={`/agenda/${submission.id}`}

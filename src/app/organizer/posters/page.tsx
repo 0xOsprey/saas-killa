@@ -136,7 +136,6 @@ export default async function OrganizerPostersPage({
           <Card
             key={row.id}
             className="flex flex-wrap items-center gap-3"
-            style={{ borderLeft: `3px solid ${row.trackColour ?? '#cbd5e1'}` }}
           >
             <form
               action={setBoardNumber}

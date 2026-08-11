@@ -171,10 +171,9 @@ export function ScheduleGrid({
             className={cn(
               'block w-full rounded-md border p-2 text-left text-xs',
               held === item.id
-                ? 'border-accent bg-accent-soft ring-2 ring-accent/30'
-                : 'border-line bg-white hover:border-accent',
+                ? 'border-ink bg-ink/5 ring-2 ring-ink/20'
+                : 'border-line bg-white hover:border-ink',
             )}
-            style={{ borderLeft: `3px solid ${item.trackColour ?? '#cbd5e1'}` }}
           >
             <span className="block font-medium text-ink">{item.title}</span>
             <span className="block text-muted">{item.speakerName ?? 'Unnamed'}</span>
@@ -288,22 +287,19 @@ export function ScheduleGrid({
                     data-testid={`slot-${cell.slotId}`}
                     className={cn(
                       'min-h-16 cursor-pointer rounded-md border p-2 text-xs transition-colors',
-                      'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
+                      'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink',
                       cell.submissionId
                         ? 'border-line bg-white'
                         : cell.label
                           ? 'border-slate-300 bg-slate-100'
-                          : 'border-dashed border-line bg-slate-50 hover:border-accent hover:bg-accent-soft',
+                          : 'border-dashed border-line bg-slate-50 hover:border-ink hover:bg-ink/5',
                       (cell.conflicted || cell.roomConflicted) && 'border-red-300 bg-red-50',
                       cell.unavailable !== null && 'border-amber-300 bg-amber-50',
-                      held === cell.submissionId && 'ring-2 ring-accent/40',
-                      over === cell.slotId && 'border-accent bg-accent-soft ring-2 ring-accent/40',
+                      held === cell.submissionId && 'ring-2 ring-ink/40',
+                      over === cell.slotId && 'border-ink bg-ink/5 ring-2 ring-ink/40',
                     )}
                     style={{
                       gridColumn: columnOfRoom.get(cell.roomId),
-                      ...(cell.trackColour
-                        ? { borderLeft: `3px solid ${cell.trackColour}` }
-                        : null),
                     }}
                   >
                     {cell.submissionId ? (

@@ -129,10 +129,10 @@ function Tile({
   return (
     <Link
       href={href}
-      className="block rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+      className="block rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
       data-testid={`tile-${label.toLowerCase().replace(/[^a-z]+/g, '-')}`}
     >
-      <Card className="h-full transition-colors hover:border-accent">
+      <Card className="h-full transition-colors hover:border-ink">
         <p className="text-xs font-medium uppercase tracking-wide text-muted">{label}</p>
         <p className={cn('mt-1 text-2xl font-semibold tabular-nums', TONE_VALUE[tone])}>{value}</p>
         <p className="mt-1 text-xs text-muted">{hint}</p>
