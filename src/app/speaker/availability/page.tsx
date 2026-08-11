@@ -72,8 +72,11 @@ export default async function SpeakerAvailabilityPage({
 
         {blocks.length === 0 ? (
           <Empty>
-            Nothing recorded. Add a window below and the schedule will flag anything placed inside
-            it.
+            Nothing recorded.{' '}
+            <a href="#add-availability" className="text-accent hover:underline">
+              Add a window
+            </a>{' '}
+            below and the schedule will flag anything placed inside it.
           </Empty>
         ) : (
           <ul className="space-y-2" data-testid="availability-list">

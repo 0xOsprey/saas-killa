@@ -72,7 +72,11 @@ export default async function SpeakerPostersPage({
 
       {mine.length === 0 ? (
         <Empty>
-          You have no poster submissions. Only a submission filed as a poster can carry artwork.
+          You have no poster submissions.{' '}
+          <Link href="/speaker" className="text-accent hover:underline">
+            View your submissions
+          </Link>{' '}
+          — only a submission filed as a poster can carry artwork.
         </Empty>
       ) : null}
 

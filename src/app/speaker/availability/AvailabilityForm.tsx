@@ -16,7 +16,7 @@ export function AvailabilityForm({ timezone }: { timezone: string }) {
   const [state, formAction, pending] = useActionState(addAvailabilityBlock, EMPTY);
 
   return (
-    <form action={formAction} className="space-y-3" data-testid="availability-form">
+    <form id="add-availability" action={formAction} className="space-y-3" data-testid="availability-form">
       <div className="grid gap-3 sm:grid-cols-3">
         <Field label="From" hint={timezone}>
           <Input type="datetime-local" name="startsAt" required data-testid="availability-from" />
