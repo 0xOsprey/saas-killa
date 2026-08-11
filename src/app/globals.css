@@ -1,20 +1,46 @@
 @import 'tailwindcss';
 
 @theme {
+  /* Base (light) tokens. These are overridden under html.theme-ai-engineer. */
+  --color-ink: #0f172a;
+  --color-muted: #64748b;
+  --color-line: #e2e8f0;
+  --color-accent: #4f46e5;
+  --color-accent-soft: #eef2ff;
+  --color-surface: #f8fafc;
+  --color-subtle: #f1f5f9;
+  --color-background: #ffffff;
+  --font-sans:
+    var(--font-body), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono:
+    var(--font-code), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-display:
+    var(--font-display-face), ui-serif, Georgia, 'Times New Roman', Times, serif;
+}
+
+html {
+  color-scheme: light;
+}
+
+body {
+  background: var(--color-surface);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+/* The ai-engineer theme is opt-in via a cookie/setting that adds this class. */
+html.theme-ai-engineer {
+  color-scheme: dark;
+
+  /* Near-black palette. */
   --color-ink: #f6f6f6;
   --color-muted: #a1a1aa;
   --color-line: rgba(255, 255, 255, 0.1);
   --color-accent: #ffffff;
   --color-accent-soft: #171717;
-  --color-background: #040404;
   --color-surface: #0c0c0c;
   --color-subtle: #161616;
-  --font-sans:
-    var(--font-body), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --font-mono:
-    var(--font-code), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  --font-display:
-    var(--font-display-face), ui-serif, Georgia, 'Times New Roman', Times, serif;
+  --color-background: #040404;
 
   /* Dark-mode overrides for the literal Tailwind palette still used in many
      components. This keeps bg-white, bg-slate-50, text-red-700, etc. honest
@@ -51,17 +77,11 @@
   --color-indigo-900: #c7d2fe;
 }
 
-html {
-  color-scheme: dark;
-}
-
-body {
+html.theme-ai-engineer body {
   background:
     radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.06), transparent 28%),
     linear-gradient(180deg, #0a0a0a 0%, var(--color-background) 36%, #020202 100%);
   background-color: var(--color-background);
-  color: var(--color-ink);
-  font-family: var(--font-sans);
 }
 
 ::selection {
@@ -98,7 +118,7 @@ body {
   list-style: revert;
 }
 .prose-portal a {
-  color: var(--color-ink);
+  color: var(--color-accent);
   text-decoration: underline;
 }
 .prose-portal table {
@@ -125,8 +145,8 @@ body {
   height: auto;
 }
 
-/* Focus rings use the ink accent so keyboard navigation stays crisp on dark
-   surfaces. */
+/* Focus rings use the ink accent so keyboard navigation stays crisp in both
+   themes. */
 :focus-visible {
   outline-color: var(--color-ink);
 }
