@@ -43,7 +43,7 @@ export function Avatar({
   return (
     <span
       className={cn(
-        'inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-accent-soft font-medium uppercase text-accent',
+        'inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-ink/10 font-medium uppercase text-ink',
         AVATAR_SIZES[size],
         className,
       )}
@@ -65,15 +65,15 @@ export function Avatar({
 }
 
 const BUTTON_BASE =
-  'inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium ' +
+  'inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-medium ' +
   'transition-colors disabled:cursor-not-allowed disabled:opacity-50 ' +
-  'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
+  'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink';
 
 const BUTTON_VARIANTS = {
-  primary: 'bg-accent text-white hover:bg-indigo-700',
-  secondary: 'border border-line bg-white text-ink hover:bg-slate-50',
-  danger: 'border border-red-200 bg-white text-red-700 hover:bg-red-50',
-  ghost: 'text-muted hover:bg-slate-100 hover:text-ink',
+  primary: 'bg-ink/10 text-ink border border-ink/20 hover:bg-ink/15 active:scale-[0.98]',
+  secondary: 'border border-line bg-surface text-ink hover:bg-subtle active:scale-[0.98]',
+  danger: 'border border-red-500/20 bg-red-500/10 text-red-300 hover:bg-red-500/15 active:scale-[0.98]',
+  ghost: 'text-muted hover:bg-ink/5 hover:text-ink',
 } as const;
 
 export function Button({
@@ -93,8 +93,8 @@ export function LinkButton({
 }
 
 const FIELD =
-  'w-full rounded-md border border-line bg-white px-3 py-2 text-sm text-ink ' +
-  'placeholder:text-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20';
+  'w-full rounded-md border border-line/50 bg-surface px-3 py-2 text-sm text-ink ' +
+  'placeholder:text-muted focus:border-ink/40 focus:outline-none focus:ring-2 focus:ring-ink/10';
 
 export function Input({ className, ...props }: ComponentProps<'input'>) {
   return <input className={cn(FIELD, className)} {...props} />;
@@ -129,18 +129,18 @@ export function Field({
 export function Card({ className, ...props }: ComponentProps<'div'>) {
   return (
     <div
-      className={cn('overflow-hidden rounded-lg border border-line bg-white p-4 shadow-sm', className)}
+      className={cn('overflow-hidden rounded-lg border border-line/50 bg-surface p-4', className)}
       {...props}
     />
   );
 }
 
 const BADGE_TONES = {
-  neutral: 'bg-slate-100 text-slate-700',
-  accent: 'bg-accent-soft text-accent',
-  good: 'bg-emerald-100 text-emerald-700',
-  bad: 'bg-red-100 text-red-700',
-  warn: 'bg-amber-100 text-amber-800',
+  neutral: 'bg-ink/5 text-muted',
+  accent: 'bg-ink/10 text-ink',
+  good: 'bg-emerald-500/10 text-emerald-300',
+  bad: 'bg-red-500/10 text-red-300',
+  warn: 'bg-amber-500/10 text-amber-300',
 } as const;
 
 export function Badge({
@@ -219,7 +219,7 @@ export function ShowMoreText({
     <details className="group">
       <summary className="cursor-pointer list-none">
         <span className={cn(body, CLAMP_LINES[lines], 'group-open:line-clamp-none')}>{text}</span>
-        <span className="mt-0.5 block text-xs font-medium text-accent" data-testid={testId}>
+        <span className="mt-0.5 block text-xs font-medium text-ink" data-testid={testId}>
           <span className="group-open:hidden">Show more</span>
           <span className="hidden group-open:inline">Show less</span>
         </span>
@@ -241,7 +241,7 @@ export function PageHeader({
     <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-ink">{title}</h1>
-        {description ? <p className="mt-1 text-sm text-muted">{description}</p> : null}
+        {description ? <p className="mt-1 text-sm font-medium text-muted">{description}</p> : null}
       </div>
       {action}
     </div>
@@ -250,7 +250,7 @@ export function PageHeader({
 
 export function Empty({ children }: { children: ReactNode }) {
   return (
-    <div className="rounded-lg border border-dashed border-line bg-white p-8 text-center text-sm text-muted">
+    <div className="rounded-lg border border-dashed border-line bg-surface p-8 text-center text-sm text-muted">
       {children}
     </div>
   );
@@ -264,10 +264,10 @@ export function Notice({
   children: ReactNode;
 }) {
   const tones = {
-    warn: 'border-amber-200 bg-amber-50 text-amber-900',
-    bad: 'border-red-200 bg-red-50 text-red-900',
-    good: 'border-emerald-200 bg-emerald-50 text-emerald-900',
-    accent: 'border-indigo-200 bg-accent-soft text-indigo-900',
+    warn: 'border-amber-500/20 bg-amber-500/10 text-amber-300',
+    bad: 'border-red-500/20 bg-red-500/10 text-red-300',
+    good: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300',
+    accent: 'border-ink/20 bg-ink/5 text-ink',
   } as const;
   return (
     <div className={cn('rounded-md border px-4 py-3 text-sm', tones[tone])}>{children}</div>
@@ -283,7 +283,7 @@ export function ScoreDots({ score }: { score: number | null }) {
           key={n}
           className={cn(
             'h-2 w-2 rounded-full',
-            n <= Math.round(score) ? 'bg-accent' : 'bg-slate-200',
+            n <= Math.round(score) ? 'bg-ink' : 'bg-ink/10',
           )}
         />
       ))}
@@ -304,7 +304,7 @@ export function DropdownMenu({ className, ...props }: ComponentProps<'ul'>) {
   return (
     <ul
       className={cn(
-        'absolute right-0 z-50 mt-1 min-w-[12rem] overflow-hidden rounded-lg border border-line bg-white py-1 shadow-lg',
+        'absolute right-0 z-50 mt-1 min-w-[12rem] overflow-hidden rounded-lg border border-line bg-surface py-1 shadow-lg',
         className,
       )}
       {...props}
@@ -326,7 +326,7 @@ export function DropdownItem({
   ...props
 }: DropdownItemProps) {
   const classes = cn(
-    'block w-full px-4 py-2 text-left text-sm text-ink transition-colors hover:bg-slate-50',
+    'block w-full px-4 py-2 text-left text-sm text-ink transition-colors hover:bg-ink/5',
     className,
   );
   if (href) {
@@ -365,15 +365,15 @@ export function Table({ className, ...props }: ComponentProps<'table'>) {
 }
 
 export function TableHeader({ className, ...props }: ComponentProps<'thead'>) {
-  return <thead className={cn('border-b border-line bg-slate-50 text-xs uppercase text-muted', className)} {...props} />;
+  return <thead className={cn('border-b border-line bg-surface text-xs uppercase tracking-wider text-muted', className)} {...props} />;
 }
 
 export function TableBody({ className, ...props }: ComponentProps<'tbody'>) {
-  return <tbody className={cn('divide-y divide-line bg-white', className)} {...props} />;
+  return <tbody className={cn('divide-y divide-line bg-surface', className)} {...props} />;
 }
 
 export function TableRow({ className, ...props }: ComponentProps<'tr'>) {
-  return <tr className={cn('hover:bg-slate-50', className)} {...props} />;
+  return <tr className={cn('hover:bg-subtle', className)} {...props} />;
 }
 
 export function TableHead({ className, ...props }: ComponentProps<'th'>) {

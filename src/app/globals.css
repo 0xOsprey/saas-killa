@@ -1,6 +1,7 @@
 @import 'tailwindcss';
 
 @theme {
+  /* Base (light) tokens. These are overridden under html.theme-ai-engineer. */
   --color-ink: #0f172a;
   --color-muted: #64748b;
   --color-line: #e2e8f0;
@@ -8,8 +9,13 @@
   --color-accent-soft: #eef2ff;
   --color-surface: #f8fafc;
   --color-subtle: #f1f5f9;
+  --color-background: #ffffff;
   --font-sans:
-    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    var(--font-body), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono:
+    var(--font-code), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-display:
+    var(--font-display-face), ui-serif, Georgia, 'Times New Roman', Times, serif;
 }
 
 html {
@@ -20,6 +26,67 @@ body {
   background: var(--color-surface);
   color: var(--color-ink);
   font-family: var(--font-sans);
+}
+
+/* The ai-engineer theme is opt-in via a cookie/setting that adds this class. */
+html.theme-ai-engineer {
+  color-scheme: dark;
+
+  /* Near-black palette. */
+  --color-ink: #f6f6f6;
+  --color-muted: #a1a1aa;
+  --color-line: rgba(255, 255, 255, 0.1);
+  --color-accent: #ffffff;
+  --color-accent-soft: #171717;
+  --color-surface: #0c0c0c;
+  --color-subtle: #161616;
+  --color-background: #040404;
+
+  /* Dark-mode overrides for the literal Tailwind palette still used in many
+     components. This keeps bg-white, bg-slate-50, text-red-700, etc. honest
+     on the new near-black ground without rewriting every file. */
+  --color-white: #0c0c0c;
+  --color-slate-50: #161616;
+  --color-slate-100: #1f1f1f;
+  --color-slate-200: rgba(255, 255, 255, 0.1);
+  --color-slate-300: #52525b;
+  --color-slate-600: #a1a1aa;
+  --color-slate-700: #d4d4d8;
+  --color-slate-800: #e4e4e7;
+  --color-slate-900: #f4f4f5;
+  --color-red-50: #2a0a0a;
+  --color-red-100: rgba(248, 113, 113, 0.1);
+  --color-red-200: rgba(248, 113, 113, 0.2);
+  --color-red-300: #fca5a5;
+  --color-red-700: #fca5a5;
+  --color-red-900: #fee2e2;
+  --color-amber-50: #2a1a05;
+  --color-amber-100: rgba(251, 191, 36, 0.1);
+  --color-amber-200: rgba(251, 191, 36, 0.2);
+  --color-amber-300: #fcd34d;
+  --color-amber-800: #fcd34d;
+  --color-amber-900: #fde68a;
+  --color-emerald-50: #052e16;
+  --color-emerald-100: rgba(52, 211, 153, 0.1);
+  --color-emerald-200: rgba(52, 211, 153, 0.2);
+  --color-emerald-700: #6ee7b7;
+  --color-indigo-50: #1e1b4b;
+  --color-indigo-100: rgba(165, 180, 252, 0.1);
+  --color-indigo-200: rgba(165, 180, 252, 0.2);
+  --color-indigo-700: #a5b4fc;
+  --color-indigo-900: #c7d2fe;
+}
+
+html.theme-ai-engineer body {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.06), transparent 28%),
+    linear-gradient(180deg, #0a0a0a 0%, var(--color-background) 36%, #020202 100%);
+  background-color: var(--color-background);
+}
+
+::selection {
+  background: var(--color-ink);
+  color: var(--color-background);
 }
 
 /* The schedule grid is the one screen that is desktop-only by design: a
@@ -76,4 +143,10 @@ body {
 .prose-portal img {
   max-width: 100%;
   height: auto;
+}
+
+/* Focus rings use the ink accent so keyboard navigation stays crisp in both
+   themes. */
+:focus-visible {
+  outline-color: var(--color-ink);
 }

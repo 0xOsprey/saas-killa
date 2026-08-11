@@ -132,7 +132,7 @@ export function AgendaFilterBar({
 
       <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
         <div className="flex items-center gap-3">
-          <div className="flex overflow-hidden rounded-md border border-line">
+          <div className="flex overflow-hidden rounded-md border border-line/50">
             {[
               { mine: false, label: 'Full programme' },
               { mine: true, label: 'My agenda' },
@@ -142,10 +142,10 @@ export function AgendaFilterBar({
                 href={href(filters, { mine: view.mine })}
                 data-testid={view.mine ? 'view-mine' : 'view-all'}
                 className={cn(
-                  'px-3 py-1.5 text-sm',
+                  'px-3 py-1.5 text-sm transition-colors',
                   filters.mine === view.mine
-                    ? 'bg-accent text-white'
-                    : 'bg-white text-muted hover:bg-slate-50 hover:text-ink',
+                    ? 'bg-ink/10 text-ink'
+                    : 'bg-surface text-muted hover:bg-ink/5 hover:text-ink',
                 )}
               >
                 {view.label}

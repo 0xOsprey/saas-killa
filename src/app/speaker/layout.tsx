@@ -18,7 +18,7 @@ export default function SpeakerLayout({ children }: { children: React.ReactNode 
 
   return (
     <div className="space-y-6">
-      <nav className="flex items-center gap-1 border-b border-line pb-1" aria-label="Speaker portal">
+      <nav className="flex items-center gap-1 border-b border-line/50 pb-1" aria-label="Speaker portal">
         {TABS.map((tab) => {
           const Icon = ICONS[tab.icon];
           const active = pathname === tab.href || pathname.startsWith(`${tab.href}/`);
@@ -29,7 +29,7 @@ export default function SpeakerLayout({ children }: { children: React.ReactNode 
               className={cn(
                 'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium transition-colors',
                 active
-                  ? '-mb-px border-b-2 border-accent text-accent'
+                  ? '-mb-px border-b-2 border-ink text-ink'
                   : 'text-muted hover:text-ink',
               )}
             >

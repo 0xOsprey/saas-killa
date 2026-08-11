@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronDown, LogOut, Settings, User } from 'lucide-react';
+import { ChevronDown, LogOut, Palette, Settings, User } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
@@ -10,9 +10,11 @@ import type { CurrentUser } from '@/lib/auth';
 export function UserMenu({
   user,
   homeHref,
+  theme,
 }: {
   user: CurrentUser;
   homeHref: string;
+  theme: 'light' | 'ai-engineer';
 }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname() ?? '';
@@ -50,9 +52,9 @@ export function UserMenu({
         type="button"
         onClick={() => setOpen((prev) => !prev)}
         className={cn(
-          'flex items-center gap-2 rounded-full border border-line bg-white p-1 pr-2.5 text-sm',
-          'transition-colors hover:bg-subtle focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
-          open && 'bg-subtle',
+          'flex items-center gap-2 rounded-full border border-line/50 bg-surface p-1 pr-2.5 text-sm',
+          'transition-colors hover:bg-ink/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink',
+          open && 'bg-ink/5',
         )}
         aria-haspopup="menu"
         aria-expanded={open}
@@ -78,7 +80,7 @@ export function UserMenu({
       {open && (
         <div
           className={cn(
-            'absolute right-0 z-50 mt-2 w-60 overflow-hidden rounded-lg border border-line bg-white shadow-lg',
+            'absolute right-0 z-50 mt-2 w-60 overflow-hidden rounded-lg border border-line/50 bg-surface shadow-lg',
             'origin-top-right',
           )}
           role="menu"
@@ -105,12 +107,25 @@ export function UserMenu({
               onClick={() => setOpen(false)}
               className={cn(
                 'flex items-center gap-2.5 px-4 py-2 text-sm text-muted transition-colors',
-                'hover:bg-subtle hover:text-ink',
+                'hover:bg-ink/5 hover:text-ink',
               )}
               role="menuitem"
             >
               <User className="h-4 w-4" aria-hidden="true" />
               Profile
+            </Link>
+
+            <Link
+              href={`/theme?set=${theme === 'ai-engineer' ? 'light' : 'ai-engineer'}&redirect=${encodeURIComponent(pathname)}`}
+              onClick={() => setOpen(false)}
+              className={cn(
+                'flex items-center gap-2.5 px-4 py-2 text-sm text-muted transition-colors',
+                'hover:bg-ink/5 hover:text-ink',
+              )}
+              role="menuitem"
+            >
+              <Palette className="h-4 w-4" aria-hidden="true" />
+              {theme === 'ai-engineer' ? 'Switch to light' : 'Switch to AI Engineer'}
             </Link>
 
             {showAdmin && (
@@ -119,7 +134,7 @@ export function UserMenu({
                 onClick={() => setOpen(false)}
                 className={cn(
                   'flex items-center gap-2.5 px-4 py-2 text-sm text-muted transition-colors',
-                  'hover:bg-subtle hover:text-ink',
+                  'hover:bg-ink/5 hover:text-ink',
                 )}
                 role="menuitem"
               >
@@ -138,7 +153,7 @@ export function UserMenu({
                 data-testid="sign-out"
                 className={cn(
                   'flex w-full items-center gap-2.5 px-4 py-2 text-left text-sm text-muted transition-colors',
-                  'hover:bg-subtle hover:text-ink',
+                  'hover:bg-ink/5 hover:text-ink',
                 )}
                 role="menuitem"
               >

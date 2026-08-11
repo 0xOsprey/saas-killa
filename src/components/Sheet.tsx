@@ -97,7 +97,7 @@ export function SheetContent({ className, children, ...props }: ComponentProps<'
         aria-modal="true"
         aria-labelledby={ctx.titleId}
         className={cn(
-          'fixed right-0 top-0 z-50 h-full w-full max-w-md overflow-y-auto border-l border-line bg-white p-6 shadow-xl',
+          'fixed right-0 top-0 z-50 h-full w-full max-w-md overflow-y-auto border-l border-line/50 bg-surface p-6 shadow-xl',
           'flex flex-col',
           className,
         )}
@@ -132,7 +132,7 @@ export function SheetClose({ className, children, ...props }: ComponentProps<'bu
       type="button"
       onClick={() => ctx.setOpen(false)}
       aria-label="Close"
-      className={cn('rounded-md p-1 text-muted hover:bg-subtle hover:text-ink', className)}
+      className={cn('rounded-md p-1 text-muted transition-colors hover:bg-ink/5 hover:text-ink', className)}
       {...props}
     >
       {children ?? <X className="h-5 w-5" />}
