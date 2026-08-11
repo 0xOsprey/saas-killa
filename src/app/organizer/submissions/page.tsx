@@ -221,6 +221,9 @@ export default async function OrganizerSubmissionsPage({
   ];
   const sortLabel = ORGANIZER_SORTS.find((option) => option.value === sort)!.label;
 
+  const clearFilters = '/organizer/submissions';
+  const clearSearch = q ? submissionsHref({ ...current, q: undefined, page: 1 }) : undefined;
+
   const commentsBySubmission = new Map<string, ReviewCommentRow[]>();
   for (const comment of reviewComments) {
     const held = commentsBySubmission.get(comment.submissionId);
@@ -489,10 +492,32 @@ export default async function OrganizerSubmissionsPage({
       </div>
 
       {totals.total === 0 ? (
-        <Empty>No submissions yet.</Empty>
+        <Empty>
+          No submissions yet.{' '}
+          <Link href="/organizer/cfp" className="text-accent hover:underline">
+            Open or share the call for papers
+          </Link>
+          .
+        </Empty>
       ) : board.length === 0 ? (
         <Empty>
-          Nothing matches. {q ? <>Try a shorter search than “{q}”.</> : 'Clear the filters.'}
+          Nothing matches.{' '}
+          {q ? (
+            <>
+              Try a shorter search than “{q}” or{' '}
+              <Link href={clearSearch!} className="text-accent hover:underline">
+                clear the search
+              </Link>
+              .
+            </>
+          ) : (
+            <>
+              <Link href={clearFilters} className="text-accent hover:underline">
+                Clear the filters
+              </Link>
+              .
+            </>
+          )}
         </Empty>
       ) : (
         <SubmissionsBoard
