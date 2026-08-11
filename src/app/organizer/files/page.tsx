@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { Button, Card, Empty, Field, FieldAction, Input, LinkButton, Notice, PageHeader } from '@/components/ui';
 import { inEventZone } from '@/lib/format';
 import { uuidOrNull } from '@/lib/ids';
@@ -160,7 +161,15 @@ export default async function OrganizerFilesPage({
         <Empty>
           {all.length === 0
             ? 'Nobody has uploaded anything yet. Files appear here the moment a speaker attaches one.'
-            : 'Nothing matches. Clear the search.'}
+            : (
+              <>
+                Nothing matches.{' '}
+                <Link href="/organizer/files" className="text-accent hover:underline">
+                  Clear the search
+                </Link>
+                .
+              </>
+            )}
         </Empty>
       ) : (
         <FilesLibrary
