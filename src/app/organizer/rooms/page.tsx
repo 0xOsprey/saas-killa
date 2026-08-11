@@ -94,7 +94,15 @@ export default async function RoomsPage({
       <section className="space-y-3">
         <h2 className="text-sm font-semibold text-ink">Rooms ({rooms.length})</h2>
 
-        {rooms.length === 0 ? <Empty>No rooms yet. Add the first one below.</Empty> : null}
+        {rooms.length === 0 ? (
+          <Empty>
+            No rooms yet.{' '}
+            <Link href="#add-room" className="text-accent hover:underline">
+              Add the first one
+            </Link>
+            .
+          </Empty>
+        ) : null}
 
         {rooms.map((room, index) => (
           <Card key={room.id} className="flex flex-wrap items-start gap-3">
@@ -168,7 +176,7 @@ export default async function RoomsPage({
           </Card>
         ))}
 
-        <Card className="space-y-3">
+        <Card id="add-room" className="space-y-3">
           <h3 className="text-sm font-semibold text-ink">Add a room</h3>
           <form action={createRoom} className="flex flex-wrap items-start gap-3">
             <Field label="Name">
@@ -189,7 +197,15 @@ export default async function RoomsPage({
       <section className="space-y-3">
         <h2 className="text-sm font-semibold text-ink">Tracks ({tracks.length})</h2>
 
-        {tracks.length === 0 ? <Empty>No tracks yet. Add the first one below.</Empty> : null}
+        {tracks.length === 0 ? (
+          <Empty>
+            No tracks yet.{' '}
+            <Link href="#add-track" className="text-accent hover:underline">
+              Add the first one
+            </Link>
+            .
+          </Empty>
+        ) : null}
 
         {tracks.map((track) => (
           <Card key={track.id} className="flex flex-wrap items-start gap-3">
@@ -241,7 +257,7 @@ export default async function RoomsPage({
           </Card>
         ))}
 
-        <Card className="space-y-3">
+        <Card id="add-track" className="space-y-3">
           <h3 className="text-sm font-semibold text-ink">Add a track</h3>
           <form action={createTrack} className="flex flex-wrap items-start gap-3">
             <Field label="Name">
