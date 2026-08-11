@@ -252,10 +252,22 @@ function Row({
         <div className="flex flex-col items-end gap-1.5">
           <ScoreDots score={row.averageScore} />
           <span className="text-xs text-muted">{row.reviewCount} review(s)</span>
-          <Badge tone={row.statusTone}>{row.statusLabel}</Badge>
-          <Badge tone={CONTENT_TONE[row.contentStatus]}>
-            Content: {row.contentStatusLabel}
-          </Badge>
+          <Link
+            href={`/organizer/submissions?status=${row.status}`}
+            className="inline-block"
+            title={`Filter submissions by ${row.statusLabel}`}
+          >
+            <Badge tone={row.statusTone}>{row.statusLabel}</Badge>
+          </Link>
+          <Link
+            href={`/organizer/submissions?content=${row.contentStatus}`}
+            className="inline-block"
+            title={`Filter submissions by content status: ${row.contentStatusLabel}`}
+          >
+            <Badge tone={CONTENT_TONE[row.contentStatus]}>
+              Content: {row.contentStatusLabel}
+            </Badge>
+          </Link>
         </div>
       </div>
 

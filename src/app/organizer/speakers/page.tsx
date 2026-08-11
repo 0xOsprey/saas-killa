@@ -112,7 +112,13 @@ export default async function SpeakersPage({
       </Panel>
 
       {people.length === 0 ? (
-        <Empty>Nobody matches that filter.</Empty>
+        <Empty>
+          Nobody matches that filter.{' '}
+          <Link href="/organizer/speakers" className="text-accent hover:underline">
+            Clear the search and filter
+          </Link>
+          .
+        </Empty>
       ) : (
         <div className="space-y-2">
           {people.map((person) => {

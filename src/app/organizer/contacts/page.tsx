@@ -376,7 +376,13 @@ export default async function ContactsDirectoryPage({
       ) : null}
 
       {contacts.length === 0 ? (
-        <Empty>Nobody matches those filters.</Empty>
+        <Empty>
+          Nobody matches those filters.{' '}
+          <Link href="/organizer/contacts" className="text-accent hover:underline">
+            Clear the filters
+          </Link>
+          .
+        </Empty>
       ) : (
         <>
           <p className="text-xs text-muted">Scroll to see more columns.</p>
