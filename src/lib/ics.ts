@@ -10,8 +10,8 @@ import { FORMAT_LABELS } from '@/lib/format';
  * would be more surface than substance.
  */
 
-const PRODID = '-//sessionboard-clone//agenda//EN';
-const UID_DOMAIN = 'sessionboard-clone';
+const PRODID = '-//saas-killa//agenda//EN';
+const UID_DOMAIN = 'saas-killa';
 
 /**
  * Escape a TEXT value. Backslash goes first, or it would double-escape the
