@@ -208,13 +208,21 @@ export default async function RoundDetailPage({
           </p>
         </div>
 
-        {live.length === 0 ? <Empty>No criteria. Add the first one below.</Empty> : null}
+        {live.length === 0 ? (
+          <Empty>
+            No criteria.{' '}
+            <Link href="#add-criterion" className="text-accent hover:underline">
+              Add the first one
+            </Link>
+            .
+          </Empty>
+        ) : null}
 
         {live.map((criterion) => (
           <CriterionForm key={criterion.id} roundId={round.id} criterion={criterion} />
         ))}
 
-        <div className="space-y-3 border-t border-line pt-4">
+        <div id="add-criterion" className="space-y-3 border-t border-line pt-4">
           <h3 className="text-sm font-medium text-ink">Add a criterion</h3>
           <CriterionForm roundId={round.id} />
         </div>
