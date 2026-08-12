@@ -22,6 +22,12 @@
   --color-status-bad-bg: #ef4444;
   --color-status-bad-border: #ef4444;
 
+  /* AI Engineer brand accents used for coloured event cards and highlights. */
+  --color-pink: #FF78E2;
+  --color-cyan: #78EBFF;
+  --color-purple: #A578FF;
+  --color-gold: #F8DF8C;
+
   --font-sans:
     var(--font-body), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --font-mono:
@@ -40,19 +46,27 @@ body {
   font-family: var(--font-sans);
 }
 
-/* The ai-engineer theme is opt-in via a cookie/setting that adds this class. */
+/* The ai-engineer theme is the new default. It clones the dark, neon-accented
+   look of https://www.ai.engineer/: near-black ground, subtle grid, gold
+   primary accent, pink/cyan/purple highlights for event cards. */
 html.theme-ai-engineer {
   color-scheme: dark;
 
   /* Near-black palette. */
   --color-ink: #f6f6f6;
   --color-muted: #a1a1aa;
-  --color-line: rgba(255, 255, 255, 0.1);
-  --color-accent: #ffffff;
-  --color-accent-soft: #171717;
-  --color-surface: #0c0c0c;
-  --color-subtle: #161616;
-  --color-background: #040404;
+  --color-line: rgba(255, 255, 255, 0.12);
+  --color-accent: #F8DF8C;
+  --color-accent-soft: rgba(248, 223, 140, 0.12);
+  --color-surface: #0A0A0A;
+  --color-subtle: #141414;
+  --color-background: #050505;
+
+  /* AI Engineer brand accents. */
+  --color-pink: #FF78E2;
+  --color-cyan: #78EBFF;
+  --color-purple: #A578FF;
+  --color-gold: #F8DF8C;
 
   /* Dark-mode status colors. */
   --color-status-good-text: #6ee7b7;
@@ -68,8 +82,8 @@ html.theme-ai-engineer {
   /* Dark-mode overrides for the literal Tailwind palette still used in many
      components. This keeps bg-white, bg-slate-50, text-red-700, etc. honest
      on the new near-black ground without rewriting every file. */
-  --color-white: #0c0c0c;
-  --color-slate-50: #161616;
+  --color-white: #0A0A0A;
+  --color-slate-50: #141414;
   --color-slate-100: #1f1f1f;
   --color-slate-200: rgba(255, 255, 255, 0.1);
   --color-slate-300: #52525b;
@@ -102,8 +116,11 @@ html.theme-ai-engineer {
 
 html.theme-ai-engineer body {
   background:
-    radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.06), transparent 28%),
-    linear-gradient(180deg, #0a0a0a 0%, var(--color-background) 36%, #020202 100%);
+    linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+    radial-gradient(circle at 50% 0%, rgba(248, 223, 140, 0.08), transparent 32%),
+    linear-gradient(180deg, #0a0a0a 0%, var(--color-background) 40%, #020202 100%);
+  background-size: 40px 40px, 40px 40px, auto, auto;
   background-color: var(--color-background);
 }
 

@@ -70,8 +70,8 @@ const BUTTON_BASE =
   'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink';
 
 const BUTTON_VARIANTS = {
-  primary: 'bg-ink/10 text-ink border border-ink/20 hover:bg-ink/15 active:scale-[0.98]',
-  secondary: 'border border-line bg-surface text-ink hover:bg-subtle active:scale-[0.98]',
+  primary: 'bg-accent text-background border border-accent hover:bg-accent/90 active:scale-[0.98]',
+  secondary: 'border border-line bg-surface text-ink hover:bg-subtle hover:border-ink/20 active:scale-[0.98]',
   danger: 'border border-status-bad-border/20 bg-status-bad-bg/10 text-status-bad-text hover:bg-status-bad-bg/15 active:scale-[0.98]',
   ghost: 'text-muted hover:bg-ink/5 hover:text-ink',
 } as const;
@@ -162,7 +162,7 @@ export function Card({ className, ...props }: ComponentProps<'div'>) {
 
 const BADGE_TONES = {
   neutral: 'bg-ink/5 text-muted',
-  accent: 'bg-ink/10 text-ink',
+  accent: 'border border-accent/20 bg-accent/10 text-accent',
   good: 'border border-status-good-border/20 bg-status-good-bg/10 text-status-good-text',
   bad: 'border border-status-bad-border/20 bg-status-bad-bg/10 text-status-bad-text',
   warn: 'border border-status-warn-border/20 bg-status-warn-bg/10 text-status-warn-text',
@@ -292,7 +292,7 @@ export function Notice({
     warn: 'border-status-warn-border/20 bg-status-warn-bg/10 text-status-warn-text',
     bad: 'border-status-bad-border/20 bg-status-bad-bg/10 text-status-bad-text',
     good: 'border-status-good-border/20 bg-status-good-bg/10 text-status-good-text',
-    accent: 'border-ink/20 bg-ink/5 text-ink',
+    accent: 'border-accent/20 bg-accent/5 text-accent',
   } as const;
   return (
     <div className={cn('rounded-md border px-4 py-3 text-sm', tones[tone])}>{children}</div>

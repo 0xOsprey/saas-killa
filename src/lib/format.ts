@@ -60,6 +60,51 @@ export function dayLabel(date: Date, timezone: string): string {
 }
 
 /**
+ * A compact, poster-style date range: "NOV 10-11, 2026" or "JUL 29 – SEP 11, 2026".
+ * Used on the hero and public landing cards where the full day name is noise.
+ */
+export function shortDateRange(start: Date, end: Date, timezone: string): string {
+  const day = (date: Date) =>
+    inEventZone(date, timezone, { day: 'numeric' });
+  const month = (date: Date) =>
+    inEventZone(date, timezone, { month: 'short' }).toUpperCase();
+  const year = (date: Date) =>
+    inEventZone(date, timezone, { year: 'numeric' });
+
+  const startMonth = month(start);
+  const endMonth = month(end);
+  const startDay = day(start);
+  const endDay = day(end);
+  const startYear = year(start);
+  const endYear = year(end);
+
+  if (startYear !== endYear) {
+    return `${startMonth} ${startDay}, ${startYear} – ${endMonth} ${endDay}, ${endYear}`;
+  }
+  if (startMonth !== endMonth) {
+    return `${startMonth} ${startDay} – ${endMonth} ${endDay}, ${endYear}`;
+  }
+  return `${startMonth} ${startDay}-${endDay}, ${endYear}`;
+}
+
+/**
+ * A best-effort city label for a timezone, in the all-caps style the AI Engineer
+ * site uses on its event cards.
+ */
+export function eventCity(timezone: string): string | null {
+  const map: Record<string, string> = {
+    'Europe/London': 'LONDON, UK',
+    'America/Los_Angeles': 'SAN FRANCISCO, CA',
+    'America/New_York': 'NEW YORK, NY',
+    'Europe/Paris': 'PARIS, FRANCE',
+    'Asia/Singapore': 'SINGAPORE',
+  };
+  if (map[timezone]) return map[timezone];
+  const tail = timezone.split('/').pop();
+  return tail ? tail.replace(/_/g, ' ').toUpperCase() : null;
+}
+
+/**
  * Stable key for one day, computed in the event's timezone.
  *
  * `en-CA` rather than this module's usual `en-GB`, because the key is not only a

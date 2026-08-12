@@ -74,8 +74,8 @@ export function AppShell({
                   className={cn(
                     'flex items-center gap-1.5 rounded-full px-3 py-1.5 transition-colors',
                     isActive(link.href, activePath)
-                      ? 'bg-ink/10 font-medium text-ink'
-                      : 'text-muted hover:bg-ink/5 hover:text-ink',
+                      ? 'bg-accent/10 font-medium text-accent'
+                      : 'text-muted hover:bg-accent/5 hover:text-accent',
                   )}
                 >
                   {PublicIcon ? <PublicIcon className="h-4 w-4" aria-hidden="true" /> : null}
@@ -101,7 +101,7 @@ export function AppShell({
             ) : (
               <Link
                 href="/login"
-                className="rounded-full border border-line/50 bg-surface px-4 py-1.5 text-xs font-mono uppercase tracking-wider text-ink transition-colors hover:bg-ink/5"
+                className="rounded-full border border-line/50 bg-surface px-4 py-1.5 text-xs font-mono uppercase tracking-wider text-ink transition-colors hover:border-accent/30 hover:text-accent"
               >
                 Sign in
               </Link>

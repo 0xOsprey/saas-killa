@@ -1,14 +1,14 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import { cookies } from 'next/headers';
-import { Sora, Instrument_Serif, JetBrains_Mono } from 'next/font/google';
+import { Inter, Instrument_Serif, JetBrains_Mono } from 'next/font/google';
 import { AppShell } from '@/components/AppShell';
 import { currentUser } from '@/lib/auth';
 import { getEvent } from '@/lib/queries';
 import { cn } from '@/components/ui';
 import './globals.css';
 
-const bodyFont = Sora({
+const bodyFont = Inter({
   subsets: ['latin'],
   variable: '--font-body',
   display: 'swap',
@@ -43,7 +43,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
     cookies(),
   ]);
 
-  const theme = cookieStore.get('theme')?.value === 'ai-engineer' ? 'ai-engineer' : 'light';
+  const theme = cookieStore.get('theme')?.value === 'light' ? 'light' : 'ai-engineer';
 
   return (
     <html

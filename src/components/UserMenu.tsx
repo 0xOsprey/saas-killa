@@ -127,7 +127,7 @@ export function UserMenu({
                 type="submit"
                 className={cn(
                   'flex w-full items-center gap-2.5 px-4 py-2 text-left text-sm text-muted transition-colors',
-                  'hover:bg-ink/5 hover:text-ink',
+                  'hover:bg-accent/5 hover:text-accent',
                 )}
                 role="menuitem"
               >
@@ -146,7 +146,7 @@ export function UserMenu({
                 onClick={() => setOpen(false)}
                 className={cn(
                   'flex items-center gap-2.5 px-4 py-2 text-sm text-muted transition-colors',
-                  'hover:bg-ink/5 hover:text-ink',
+                  'hover:bg-accent/5 hover:text-accent',
                 )}
                 role="menuitem"
               >
@@ -165,7 +165,7 @@ export function UserMenu({
                 data-testid="sign-out"
                 className={cn(
                   'flex w-full items-center gap-2.5 px-4 py-2 text-left text-sm text-muted transition-colors',
-                  'hover:bg-ink/5 hover:text-ink',
+                  'hover:bg-accent/5 hover:text-accent',
                 )}
                 role="menuitem"
               >

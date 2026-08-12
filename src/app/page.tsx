@@ -1,19 +1,21 @@
 import { Card, LinkButton, Notice } from '@/components/ui';
-import { dayLabel } from '@/lib/format';
+import { eventCity, shortDateRange } from '@/lib/format';
 import { cfpIsOpen, getEvent } from '@/lib/queries';
 
 export default async function HomePage() {
   const event = await getEvent();
   const open = cfpIsOpen(event);
   const zone = event.timezone;
+  const location = eventCity(zone);
 
   return (
     <div className="-mx-4 -my-8 flex min-h-[calc(100dvh-7rem)] flex-col justify-center px-4 py-8">
       <div className="mx-auto max-w-3xl text-center">
-        <p className="mb-4 text-xs font-mono uppercase tracking-[0.2em] text-muted">
-          {dayLabel(event.startsOn, zone)} to {dayLabel(event.endsOn, zone)} · {zone}
+        <p className="mb-4 text-xs font-mono uppercase tracking-[0.2em] text-accent">
+          {shortDateRange(event.startsOn, event.endsOn, zone)}
+          {location ? ` · ${location}` : null}
         </p>
-        <h1 className="font-display text-5xl tracking-tight text-ink md:text-7xl">
+        <h1 className="font-display text-5xl tracking-tight text-ink md:text-7xl lg:text-8xl">
           {event.name}
         </h1>
         {event.tagline ? (
@@ -34,23 +36,25 @@ export default async function HomePage() {
         </div>
 
         <div className="mt-12 grid gap-4 sm:grid-cols-2">
-          <Card>
+          <Card className="border-t-2 border-t-accent">
             <h2 className="text-xs font-mono uppercase tracking-wider text-muted">When</h2>
-            <p className="mt-1 text-sm text-ink">
-              {dayLabel(event.startsOn, zone)} to {dayLabel(event.endsOn, zone)}
+            <p className="mt-1 font-mono text-sm uppercase tracking-wider text-ink">
+              {shortDateRange(event.startsOn, event.endsOn, zone)}
             </p>
           </Card>
-          <Card>
+          <Card className="border-t-2 border-t-accent">
             <h2 className="text-xs font-mono uppercase tracking-wider text-muted">Call for papers</h2>
-            <p className="mt-1 text-sm text-ink">
-              {dayLabel(event.cfpOpensAt, zone)} to {dayLabel(event.cfpClosesAt, zone)}
+            <p className="mt-1 font-mono text-sm uppercase tracking-wider text-ink">
+              {open
+                ? shortDateRange(event.cfpOpensAt, event.cfpClosesAt, zone)
+                : 'Closed'}
             </p>
           </Card>
         </div>
 
         <div className="mt-6">
           {open ? (
-            <Notice tone="good">
+            <Notice tone="accent">
               The call for papers is open. Talks, workshops, lightning talks and posters are all
               welcome.
             </Notice>
