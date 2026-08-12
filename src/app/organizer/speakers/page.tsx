@@ -165,7 +165,7 @@ export default async function SpeakersPage({
                   {/* The byline is its own line and simply absent when both
                       halves are empty, which is still most of the roster. */}
                   {billing(person.title, person.company) ? (
-                    <p className="text-xs text-ink" data-testid={`roster-billing-${person.id}`}>
+                    <p className="text-xs text-ink" data-testid={`speaker-billing-${person.id}`}>
                       {billing(person.title, person.company)}
                     </p>
                   ) : null}
@@ -178,7 +178,7 @@ export default async function SpeakersPage({
                       <Link
                         href={`/organizer/speakers/${person.id}`}
                         className="inline-flex"
-                        data-testid={`roster-bio-${person.id}`}
+                        data-testid={`speaker-bio-${person.id}`}
                       >
                         <Badge tone="warn">bio missing</Badge>
                       </Link>
@@ -187,7 +187,7 @@ export default async function SpeakersPage({
                       <Link
                         href={`/organizer/speakers/${person.id}`}
                         className="inline-flex"
-                        data-testid={`roster-headshot-${person.id}`}
+                        data-testid={`speaker-headshot-${person.id}`}
                       >
                         <Badge tone="warn">headshot missing</Badge>
                       </Link>
@@ -196,7 +196,7 @@ export default async function SpeakersPage({
                       <Link
                         href={`/organizer/speakers/${person.id}`}
                         className="inline-flex"
-                        data-testid={`roster-unconfirmed-${person.id}`}
+                        data-testid={`speaker-unconfirmed-${person.id}`}
                       >
                         <Badge tone="warn">not confirmed</Badge>
                       </Link>
@@ -205,7 +205,7 @@ export default async function SpeakersPage({
                       <Link
                         href={`/organizer/speakers/${person.id}`}
                         className="inline-flex"
-                        data-testid={`roster-declined-${person.id}`}
+                        data-testid={`speaker-declined-${person.id}`}
                       >
                         <Badge tone="bad">
                           {person.declined} declined

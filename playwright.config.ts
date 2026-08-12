@@ -12,6 +12,10 @@ process.env.BOOTSTRAP_ORGANIZER_EMAIL = process.env.BOOTSTRAP_ORGANIZER_EMAIL ??
 process.env.RESEND_API_KEY = '';
 process.env.MAIL_NOTIFICATIONS = 'off';
 
+// Lift the magic-link rate limit so the suite can sign the same test users in
+// many times without tripping the rolling window.
+process.env.MAGIC_LINK_LIMIT = '1000';
+
 /**
  * The suite runs against a production build on its own port, not the dev
  * server on 9140, so a `pnpm dev` you have open in another terminal does not
@@ -45,6 +49,7 @@ export default defineConfig({
       BOOTSTRAP_ORGANIZER_EMAIL: process.env.BOOTSTRAP_ORGANIZER_EMAIL,
       RESEND_API_KEY: '',
       MAIL_NOTIFICATIONS: 'off',
+      MAGIC_LINK_LIMIT: process.env.MAGIC_LINK_LIMIT,
     },
     // Server-side exceptions reach the browser as an opaque digest. Piping the
     // server's own output is the only way a failing run shows the stack that

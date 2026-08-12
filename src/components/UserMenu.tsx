@@ -58,6 +58,7 @@ export function UserMenu({
         )}
         aria-haspopup="menu"
         aria-expanded={open}
+        data-testid="user-menu"
       >
         <Avatar
           src={user.headshotUrl}

@@ -55,12 +55,28 @@ function Tile({
       {children ? <div className="mt-3">{children}</div> : null}
     </Card>
   );
-  return href && !children ? (
-    <Link href={href} className="block hover:opacity-90">
-      {body}
-    </Link>
-  ) : (
-    body
+  if (!href) return body;
+
+  return (
+    <Card className="h-full">
+      <Link href={href} className="block hover:opacity-90">
+        <p className="text-xs uppercase tracking-wide text-muted">{label}</p>
+        <p
+          data-testid={testId}
+          className={`mt-1 text-3xl font-semibold ${
+            tone === 'bad' && value > 0 ? 'text-rose-600' : tone === 'good' ? 'text-emerald-600' : ''
+          }`}
+        >
+          {value}
+        </p>
+        {hint ? (
+          <p data-testid={`${testId}-hint`} className="mt-1 text-xs text-muted">
+            {hint}
+          </p>
+        ) : null}
+      </Link>
+      {children ? <div className="mt-3">{children}</div> : null}
+    </Card>
   );
 }
 
@@ -98,6 +114,7 @@ export default async function OnboardingDashboard() {
           hint={`${view.overdueTasks} task(s) past their date`}
           tone="bad"
           testId="tile-overdue"
+          href="/organizer/speakers?filter=overdue"
         >
           <div className="space-y-2">
             <ReminderForm

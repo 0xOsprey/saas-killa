@@ -63,7 +63,7 @@ export const CONFIGURE_SECTION: NavSection = {
   title: 'Configure',
   links: [
     { href: '/organizer/settings', label: 'Settings', icon: 'Settings' },
-    { href: '/organizer/integrations', label: 'Integrations', icon: 'Plug' },
+    { href: '/organizer/integrations', label: 'Accelevents', icon: 'Plug' },
   ],
 };
 

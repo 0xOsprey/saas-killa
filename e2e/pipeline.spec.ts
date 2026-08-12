@@ -25,6 +25,8 @@ const ORGANIZER_EMAIL = 'organizer@example.com';
 async function signOut(page: Page) {
   // Click the real control rather than hitting the route directly: sign-out is
   // POST-only, and driving it through the nav is what proves that still works.
+  if ((await page.getByTestId('current-user').count()) === 0) return;
+  await page.getByTestId('user-menu').click();
   await page.getByTestId('sign-out').click();
   await expect(page.getByTestId('current-user')).toHaveCount(0);
 }
@@ -64,7 +66,6 @@ test('a proposal travels from the CFP to the published agenda', async ({ page })
   await waitForMail((m) => m.to === SPEAKER_EMAIL && m.subject.includes('sign-in link'));
 
   // 2. Grade, as the organizer (who also holds the reviewer role) ------------
-  await signOut(page);
   await signInVia(page, ORGANIZER_EMAIL);
 
   await page.goto('/review');

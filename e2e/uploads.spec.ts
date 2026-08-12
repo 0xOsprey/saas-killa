@@ -57,6 +57,8 @@ async function signInVia(page: Page, email: string) {
 }
 
 async function signOut(page: Page) {
+  if ((await page.getByTestId('current-user').count()) === 0) return;
+  await page.getByTestId('user-menu').click();
   await page.getByTestId('sign-out').click();
   await expect(page.getByTestId('current-user')).toHaveCount(0);
 }

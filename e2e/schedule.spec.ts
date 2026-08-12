@@ -440,7 +440,7 @@ test('a wall clock on the morning the clocks go forward stores the time it says'
 
   const remove = page.locator(`form:has(input[name="startsAt"][value="${RIGHT}"])`);
   await page.getByText('Remove a time band or break').click();
-  await expect(remove.getByRole('button')).toContainText('8 March 03:00');
+  await expect(remove.getByRole('button')).toContainText('8 March 2026 03:00');
 
   await remove.getByRole('button').click();
   await page.getByTestId('confirm-delete-band-submit').click();

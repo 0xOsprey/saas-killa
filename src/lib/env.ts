@@ -22,6 +22,11 @@ const schema = z.object({
   // string: `MAIL_NOTIFICATIONS=false` is a boot failure, not silent sending.
   MAIL_NOTIFICATIONS: z.enum(['on', 'off']).default('on'),
 
+  // Rate limit knobs, primarily so the Playwright suite can sign the same test
+  // users in dozens of times in a few minutes without tripping the gate.
+  MAGIC_LINK_LIMIT: z.coerce.number().int().nonnegative().default(3),
+  MAGIC_LINK_WINDOW_MS: z.coerce.number().int().nonnegative().default(600000),
+
   // The Accelevents push. All three unset means dry run, which is the mode this
   // app reaches unless someone deliberately configures otherwise, and the only
   // mode any test has ever run in. See `src/lib/accelevents.ts`.

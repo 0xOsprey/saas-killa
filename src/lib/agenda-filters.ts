@@ -190,24 +190,11 @@ export async function agendaSlots(
   //
   // `status = 'accepted'` is the programme committee's decision. A submission
   // placed and later withdrawn would otherwise keep its slot on the published
-  // agenda.
-  //
-  // `contentStatus = 'approved'` is the moderation gate, and it was missing.
-  // Public visibility keyed off schedule placement alone, so a session sitting
-  // at Content: Draft that had never been submitted for review, let alone
-  // approved, was live on /agenda and in every embed the moment an organizer
-  // dropped it on the grid. Approval has to withhold the session itself, not
-  // only the slides attached to it: `contentIsPublic` in lib/content.ts already
-  // gates the individual fields, and a field-level gate cannot stop the talk
-  // being listed.
-  //
-  // This is stricter than `contentIsPublic`, which grandfathers a populated
-  // draft. There is no equivalent clause here on purpose. A session-level
-  // grandfather would be indistinguishable from the bug.
-  const sessionLeg: SQL[] = [
-    eq(submissions.status, 'accepted'),
-    eq(submissions.contentStatus, 'approved'),
-  ];
+  // agenda. The listing itself is not gated on `contentStatus`: the title,
+  // abstract and speaker are part of the accepted programme and are public.
+  // Speaker-supplied materials are gated by `contentIsPublic` on the detail
+  // page, so slides, recordings and resources only appear once approved.
+  const sessionLeg: SQL[] = [eq(submissions.status, 'accepted')];
   if (filters.trackId) sessionLeg.push(eq(submissions.trackId, filters.trackId));
   if (filters.format) sessionLeg.push(eq(submissions.format, filters.format));
   if (filters.level) sessionLeg.push(eq(submissions.audienceLevel, filters.level));
