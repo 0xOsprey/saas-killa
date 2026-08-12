@@ -441,26 +441,16 @@ export default async function SchedulePage({
         </Notice>
       ) : null}
 
-      {/*
-        Last of the warnings, because it is the only one that is not about the
-        schedule being wrong. Everything above says an organizer has put a talk
-        somewhere it should not be; this says the talk is fine and the public
-        page is holding it back, which is a question they ask after pressing
-        Publish and finding /agenda shorter than the grid.
-
-        Naming the publish button is the point of the last sentence. Publishing
-        is the control an organizer reaches for when the public page looks
-        wrong, and it is not the one that fixes this.
-      */}
       {unapproved.length > 0 ? (
         <Notice tone="warn">
           <span data-testid="unapproved-warning">
-            {unapproved.length} placed session(s) are not on the public agenda yet:{' '}
+            {unapproved.length} placed session(s) are listed on the public agenda but their
+            materials are not public yet:{' '}
             {unapproved
               .map((row) => `${row.title} (${CONTENT_STATUS_LABELS[row.contentStatus]})`)
               .join(', ')}
-            . The agenda lists an accepted session once its content is approved, so these stay off
-            it whether or not the agenda is published. Approve them on the{' '}
+            . The title, abstract and speaker are already visible; slides, recordings and resources
+            appear once the content is approved. Approve them on the{' '}
             <Link
               href="/organizer/submissions?status=accepted"
               className="underline"
@@ -468,7 +458,7 @@ export default async function SchedulePage({
             >
               submissions board
             </Link>{' '}
-            and they appear.
+            and their materials will be public.
           </span>
         </Notice>
       ) : null}

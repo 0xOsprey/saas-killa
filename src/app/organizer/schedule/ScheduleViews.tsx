@@ -12,7 +12,7 @@ import {
 } from '@/lib/schedule-views';
 
 /**
- * The reading views: list, week, month, rooms and conflicts.
+ * The reading views: list, week, track, rooms and conflicts.
  *
  * All server-rendered and all links-free. Placement happens in the grid, so
  * nothing here is interactive; the job is answering a question about a schedule

@@ -13,15 +13,16 @@ import { dayKey, dayLabel, timeOfDay } from './format';
  * scanning a wall of cells.
  *
  * Grouping happens here rather than in SQL: it is the same `agenda()` rows
- * arranged six ways, and six queries that differ only by ORDER BY would be six
- * chances for one of them to disagree with the grid about what is scheduled.
+ * arranged six reading ways, and six queries that differ only by ORDER BY would
+ * be six chances for one of them to disagree with the grid about what is
+ * scheduled. `grid` is the building view; `month` is not implemented and is
+ * absent from the selector.
  */
 export const SCHEDULE_VIEWS = {
   grid: 'Grid',
   list: 'List',
   day: 'Day',
   week: 'Week',
-  month: 'Month',
   track: 'Track',
   room: 'Rooms',
   conflicts: 'Conflicts',
