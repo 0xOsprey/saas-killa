@@ -182,11 +182,10 @@ A read-only public API is available under `/api/v1`:
 - `GET /api/v1/sessions/{id}` — single session
 - `GET /api/v1/speakers` — paginated list of accepted speakers
 - `GET /api/v1/speakers/{id}` — single speaker with their sessions
-- `GET /api/v1/openapi.json` — OpenAPI 3.0 spec
 
-All list endpoints support `page`, `pageSize` and `q`, and sessions additionally
-support `track` and `room` filters. Responses use the Sessionboard-style
-`{ data: [], pagination: {} }` envelope.
+All list endpoints support `page`, `pageSize` and `q`. Sessions additionally
+support `track` and `room` filters, and speakers support `track`. Responses use
+the Sessionboard-style `{ data: [], pagination: {} }` envelope.
 
 ## Tests
 
@@ -195,7 +194,7 @@ pnpm exec playwright install chromium   # once
 pnpm test                               # resets the database first
 ```
 
-Seventeen specs, 78 tests, no unit runner. `pipeline.spec.ts` walks one proposal the
+Eighteen specs, 84 tests, no unit runner. `pipeline.spec.ts` walks one proposal the
 length of the pipeline: submit, grade, accept, notify, schedule, publish, then
 read it as a signed-out visitor, checking the acceptance email actually landed.
 `smoke.spec.ts` opens every route the nav leads to, reading the tab list off the
@@ -261,14 +260,14 @@ the gesture picks up whichever cell arrives at the point.
 5. **Install a systemd unit** like `saas-killa.service`:
    ```ini
    [Unit]
-   Description=Saas Killa, the live hackathon instance
+   Description=Saas Killa
    After=network-online.target
 
    [Service]
    Type=simple
    WorkingDirectory=/path/to/saas-killa
-   ExecStart=/path/to/saas-killa/node_modules/.bin/next start -H 127.0.0.1 -p 9150
-   Environment=NODE_ENV=production
+   ExecStart=/path/to/saas-killa/node_modules/.bin/next start -H 127.0.0.1 -p ${PORT}
+   Environment="NODE_ENV=production"
    Restart=always
    RestartSec=5
 
@@ -276,10 +275,13 @@ the gesture picks up whichever cell arrives at the point.
    WantedBy=default.target
    ```
 
+   Live host-specific ports, unit names and tunnel commands belong in
+   `CLAUDE.local.md` (gitignored) rather than the public repo.
+
 6. **Start it**:
    ```bash
-   systemctl --user enable saas-killa.service saas-killa-tunnel.service
-   systemctl --user start saas-killa.service saas-killa-tunnel.service
+   systemctl --user enable <your-service>.service
+   systemctl --user start <your-service>.service
    ```
 
 ### Deploy after a code change
@@ -290,9 +292,8 @@ git fetch && git reset --hard origin/main
 pnpm install        # only if pnpm-lock.yaml changed
 pnpm db:migrate     # only if drizzle/ changed
 pnpm build
-systemctl --user restart saas-killa.service saas-killa-tunnel.service
-sleep 3
-curl -s -o /dev/null -w "%{http_code}\n" https://saas-killa.0xosprey.com/healthz
+systemctl --user restart <your-service>.service
+curl -s -o /dev/null -w "%{http_code}\n" https://<your-domain>/healthz
 ```
 
 The `reset --hard` is intentional: `main` is sometimes force-squashed, and `.env.local`, `.mail/`, and `uploads/` are all gitignored, so they stay in place.

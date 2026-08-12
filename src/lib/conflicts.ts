@@ -341,30 +341,23 @@ export type UnapprovedPlacement = {
 };
 
 /**
- * A talk on the grid that the public agenda is withholding, because its content
- * has not been approved.
+ * A talk on the grid whose materials are not public yet.
  *
- * `agendaSlots` in `src/lib/agenda-filters.ts` gates on two columns: accepted by
- * the committee, and `contentStatus = 'approved'`. Placement gates on the first
- * one only. So an organizer can drop a talk into a box, press Publish, open
- * `/agenda` and find nothing there, with the grid and the public page each
- * telling the truth and neither explaining the other. That silence reads as a
- * broken publish, which is the failure this exists to prevent.
+ * `agendaSlots` in `src/lib/agenda-filters.ts` lists every accepted, placed
+ * submission. The title, abstract and speaker are public; speaker-supplied
+ * materials are gated by `contentIsPublic` on the detail page. So an organizer
+ * can drop a talk into a box, press Publish, open `/agenda` and find the session
+ * there, but the slides/recording/resources are not visible until the content is
+ * approved. This warning exists so an organizer does not wonder why a session's
+ * materials are missing.
  *
  * The content leg is the only one reported here. A withdrawn or unaccepted talk
- * is withheld too, but by the status leg, and it already has a warning of its
- * own above; naming it twice would offer "approve the content" as the remedy for
- * a talk nobody is giving.
+ * is not placed, or is already warned about elsewhere.
  *
  * `contentStatus` rides along because draft and pending are different problems
  * wearing the same absence. Draft means the speaker has not sent it for review;
  * pending means they have and it is sitting with an organizer. Only one of those
  * is the organizer's move to make.
- *
- * There is no grandfather clause here, matching the gate exactly. `contentIsPublic`
- * in `src/lib/content.ts` does grandfather a populated draft, but that governs
- * individual fields on a page, not whether the session is listed at all, and a
- * count computed from the looser rule would under-report the withheld set.
  */
 export async function unapprovedPlacements(): Promise<UnapprovedPlacement[]> {
   return db

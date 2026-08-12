@@ -70,7 +70,7 @@ name. The nav is where they look identical and are not. `Nav.tsx` renders
 unseeded or unreachable database, that fallback never renders on a working
 instance. The word in the top left of every page is the event name, always.
 Changing it is one organizer edit and no deploy. Changing the product name is
-six hardcoded strings in `src/`, a build and a restart.
+seven hardcoded strings in `src/`, a build and a restart.
 
 ## Invariants worth not breaking
 
@@ -105,9 +105,9 @@ six hardcoded strings in `src/`, a build and a restart.
   disk is `<uuid><sniffed ext>`, so no part of a user's filename reaches the
   filesystem. SVG is refused everywhere, being the one image format that runs
   script.
-- **The only string that reaches `dangerouslySetInnerHTML` is `sanitizeHtml`
-  output.** `portal_pages.body` holds raw authored HTML on purpose, so the
-  sanitiser can be tightened later and a page can be edited back out of a
+- **The only user-authored string that reaches `dangerouslySetInnerHTML` is
+  `sanitizeHtml` output.** `portal_pages.body` holds raw authored HTML on purpose,
+  so the sanitiser can be tightened later and a page can be edited back out of a
   mistake. `src/lib/portal-pages.ts` is the seam: it returns `html`, already
   sanitised, and never exports the row's raw body to a screen. A page component
   that queries `portalPages` directly has stepped around the one control here.
