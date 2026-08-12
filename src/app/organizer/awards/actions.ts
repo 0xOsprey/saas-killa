@@ -23,6 +23,14 @@ import { getEvent } from '@/lib/queries';
  * page, and the committee ballot. A declared winner also shows on the agenda
  * detail page, which is why `/agenda` is still in the list.
  */
+/** Every outcome this page reports comes back as a query string, so the page stays a server component. */
+function back(params: Record<string, string | number>): never {
+  const query = new URLSearchParams(
+    Object.entries(params).map(([key, value]) => [key, String(value)]),
+  );
+  redirect(`/organizer/awards?${query.toString()}`);
+}
+
 function revalidateAwards() {
   revalidatePath('/organizer/awards');
   revalidatePath('/awards');
@@ -91,7 +99,7 @@ export async function editAward(formData: FormData): Promise<void> {
     ? wallClockToInstant(input.votingClosesAt, event.timezone)
     : null;
   if (opensAt && closesAt && opensAt >= closesAt) {
-    throw new Error('Community voting has to open before it closes.');
+    back({ error: 'voting-order' });
   }
 
   await db
@@ -106,6 +114,7 @@ export async function editAward(formData: FormData): Promise<void> {
     })
     .where(eq(awards.id, input.awardId));
   revalidateAwards();
+  back({ saved: 'award' });
 }
 
 /**
@@ -187,7 +196,8 @@ export async function nominate(formData: FormData): Promise<void> {
   const target = await db.query.submissions.findFirst({
     where: eq(submissions.id, input.submissionId),
   });
-  if (!target || target.status !== 'accepted') return;
+  if (!target) back({ error: 'nominate-not-found' });
+  if (target && target.status !== 'accepted') back({ error: 'nominate-not-accepted' });
 
   await db.insert(awardNominees).values(input).onConflictDoNothing();
   revalidateAwards();
@@ -298,7 +308,8 @@ export async function closeVoting(formData: FormData): Promise<void> {
     });
 
   const detail = await awardDetail(input.awardId);
-  if (!detail || detail.award.votingClosedAt) return;
+  if (!detail) back({ error: 'award-not-found' });
+  if (detail && detail.award.votingClosedAt) back({ error: 'award-already-closed' });
 
   // A hand-picked winner outranks the tally. An organizer who overrode first
   // and closed second meant the override, and recomputing here would throw away
@@ -327,7 +338,8 @@ export async function reopenVoting(formData: FormData): Promise<void> {
   const awardId = z.string().uuid().parse(formData.get('awardId'));
 
   const award = await db.query.awards.findFirst({ where: eq(awards.id, awardId) });
-  if (!award || award.winnerSubmissionId) return;
+  if (!award) back({ error: 'award-not-found' });
+  if (award && award.winnerSubmissionId) back({ error: 'award-has-winner' });
 
   await db.update(awards).set({ votingClosedAt: null }).where(eq(awards.id, awardId));
   revalidateAwards();
@@ -365,7 +377,7 @@ export async function overrideWinner(formData: FormData): Promise<void> {
       eq(awardNominees.submissionId, input.submissionId),
     ),
   });
-  if (!nominee) return;
+  if (!nominee) back({ error: 'not-nominated' });
 
   await db
     .update(awards)

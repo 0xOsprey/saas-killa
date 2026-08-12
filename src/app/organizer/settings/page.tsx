@@ -9,8 +9,12 @@ import { saveEventSettings } from './actions';
  * window: `cfpOpensAt` and `cfpClosesAt` are edited at /organizer/cfp, which is
  * where the rest of the call-for-papers controls live.
  */
-export default async function EventSettingsPage() {
-  const event = await getEvent();
+export default async function EventSettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string; saved?: string }>;
+}) {
+  const [params, event] = await Promise.all([searchParams, getEvent()]);
 
   return (
     <div className="space-y-5">
@@ -18,6 +22,14 @@ export default async function EventSettingsPage() {
         title="Event settings"
         description="The name, dates and timezone every other screen renders against."
       />
+
+      {params.error === 'event-order' ? (
+        <Notice tone="bad">The event cannot end before it starts.</Notice>
+      ) : null}
+
+      {params.saved === 'settings' ? (
+        <Notice tone="good">Settings saved.</Notice>
+      ) : null}
 
       <form action={saveEventSettings} className="space-y-5">
         <input type="hidden" name="renderedTimezone" value={event.timezone} />

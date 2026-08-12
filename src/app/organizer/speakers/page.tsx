@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import { Badge, Button, Card, Empty, Input, PageHeader, Select } from '@/components/ui';
+import { Badge, Button, Card, Empty, Input, Notice, PageHeader, Select } from '@/components/ui';
 import { dayLabel } from '@/lib/format';
 import { allTracks, getEvent } from '@/lib/queries';
 import { ROSTER_FILTERS, billing, isRosterFilter, speakerRoster } from '@/lib/speakers';
@@ -28,7 +28,13 @@ function Panel({ summary, children, open }: { summary: string; children: ReactNo
 export default async function SpeakersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; filter?: string; fromContact?: string }>;
+  searchParams: Promise<{
+    q?: string;
+    filter?: string;
+    fromContact?: string;
+    error?: string;
+    saved?: string;
+  }>;
 }) {
   const params = await searchParams;
   const q = params.q?.trim() ?? '';
@@ -61,6 +67,18 @@ export default async function SpeakersPage({
           </Link>
         }
       />
+
+      {params.error === 'revoke-self' ? (
+        <Notice tone="bad">You cannot revoke your own organizer role.</Notice>
+      ) : null}
+
+      {params.error === 'revoke-speaker-submissions' ? (
+        <Notice tone="bad">Cannot revoke a speaker role from someone with submissions.</Notice>
+      ) : null}
+
+      {params.saved === 'role' ? (
+        <Notice tone="good">Role updated.</Notice>
+      ) : null}
 
       {/* A GET form: the filter belongs in the URL so a view is linkable, and so
           the bulk actions can post the same two values back. */}

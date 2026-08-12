@@ -12,6 +12,14 @@ import { FORMAT_MINUTES, wallClockToInstant } from '@/lib/format';
 import { getEvent, unscheduledAccepted } from '@/lib/queries';
 import { bookmarkDemand, openSlots } from './queries';
 
+/** Every outcome this page reports comes back as a query string, so the page stays a server component. */
+function back(params: Record<string, string | number>): never {
+  const query = new URLSearchParams(
+    Object.entries(params).map(([key, value]) => [key, String(value)]),
+  );
+  redirect(`/organizer/schedule?${query.toString()}`);
+}
+
 function revalidateSchedule() {
   revalidatePath('/organizer/schedule');
   revalidatePath('/organizer/submissions');
@@ -260,7 +268,7 @@ export async function addTimeBand(formData: FormData): Promise<void> {
   });
 
   const [allRooms, event] = await Promise.all([db.select().from(rooms), getEvent()]);
-  if (allRooms.length === 0) return;
+  if (allRooms.length === 0) back({ error: 'no-rooms' });
 
   const startsAt = wallClockToInstant(input.startsAt, event.timezone);
   const endsAt = new Date(startsAt.getTime() + input.minutes * 60_000);
@@ -293,7 +301,7 @@ export async function addBreakBand(formData: FormData): Promise<void> {
   });
 
   const [allRooms, event] = await Promise.all([db.select().from(rooms), getEvent()]);
-  if (allRooms.length === 0) return;
+  if (allRooms.length === 0) back({ error: 'no-rooms' });
 
   const startsAt = wallClockToInstant(input.startsAt, event.timezone);
   const endsAt = new Date(startsAt.getTime() + input.minutes * 60_000);

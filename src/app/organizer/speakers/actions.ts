@@ -26,6 +26,14 @@ import { speakerInviteMail, taskReminderMail } from './mail';
 
 const REMINDER_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 
+/** Every outcome this page reports comes back as a query string, so the page stays a server component. */
+function back(params: Record<string, string | number>): never {
+  const query = new URLSearchParams(
+    Object.entries(params).map(([key, value]) => [key, String(value)]),
+  );
+  redirect(`/organizer/speakers?${query.toString()}`);
+}
+
 function optional(value: FormDataEntryValue | null): string | null {
   const text = typeof value === 'string' ? value.trim() : '';
   return text === '' ? null : text;
@@ -74,19 +82,22 @@ export async function revokeRoleAction(formData: FormData): Promise<void> {
   // Refuse to let an organizer drop their own organizer role. Doing so is
   // always a mistake and it can lock the last organizer out of the admin
   // screens with no way back in short of a database edit.
-  if (input.userId === actor.id && input.role === 'organizer') return;
+  if (input.userId === actor.id && input.role === 'organizer') back({ error: 'revoke-self' });
 
   // Refuse to strip `speaker` from someone who has submissions. The role is
   // a roster label, not a gate (the portal is actually owned by
   // `submissions.speakerId` and `writableBy`), but removing it from a user
   // with submissions would be an organizer mistake rather than an account
   // cleanup.
-  if (input.role === 'speaker' && (await hasSubmissions(input.userId))) return;
+  if (input.role === 'speaker' && (await hasSubmissions(input.userId))) {
+    back({ error: 'revoke-speaker-submissions' });
+  }
 
   await db
     .delete(userRoles)
     .where(and(eq(userRoles.userId, input.userId), eq(userRoles.role, input.role)));
   revalidatePath('/organizer/speakers');
+  back({ saved: 'role' });
 }
 
 export type ProfileState = {

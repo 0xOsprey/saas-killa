@@ -69,6 +69,8 @@ export default async function OrganizerAwardsPage({
     award?: string;
     confirmWithdraw?: string;
     confirmWithdrawAward?: string;
+    error?: string;
+    saved?: string;
   }>;
 }) {
   const [params, event, everyAward, accepted] = await Promise.all([
@@ -124,6 +126,38 @@ export default async function OrganizerAwardsPage({
         above, so a result can be reviewed, overridden or retracted before a word leaves the
         building.
       </Notice>
+
+      {params.error === 'voting-order' ? (
+        <Notice tone="bad">Community voting has to open before it closes.</Notice>
+      ) : null}
+
+      {params.error === 'nominate-not-found' ? (
+        <Notice tone="bad">That submission could not be found.</Notice>
+      ) : null}
+
+      {params.error === 'nominate-not-accepted' ? (
+        <Notice tone="bad">Only accepted submissions can be nominated for an award.</Notice>
+      ) : null}
+
+      {params.error === 'award-not-found' ? (
+        <Notice tone="bad">That award category could not be found.</Notice>
+      ) : null}
+
+      {params.error === 'award-already-closed' ? (
+        <Notice tone="bad">Voting for that award has already been closed.</Notice>
+      ) : null}
+
+      {params.error === 'award-has-winner' ? (
+        <Notice tone="bad">Clear the winner before reopening voting.</Notice>
+      ) : null}
+
+      {params.error === 'not-nominated' ? (
+        <Notice tone="bad">Only a nominated submission can be declared a winner.</Notice>
+      ) : null}
+
+      {params.saved === 'award' ? (
+        <Notice tone="good">Award category saved.</Notice>
+      ) : null}
 
       {params.award === 'has_ballots' ? (
         <Notice tone="bad">

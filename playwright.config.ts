@@ -3,6 +3,15 @@ import { defineConfig, devices } from '@playwright/test';
 const PORT = 9143;
 const BASE_URL = `http://127.0.0.1:${PORT}`;
 
+// The seeded fixture and the auth spec both expect the bootstrap organizer to
+// be at this address. Pin it so the suite is not hostage to .env.local.
+process.env.BOOTSTRAP_ORGANIZER_EMAIL = process.env.BOOTSTRAP_ORGANIZER_EMAIL ?? 'organizer@example.com';
+
+// Keep the suite away from a live Resend key. Magic links and notifications must
+// be written to .mail/ for tests to read and assert on.
+process.env.RESEND_API_KEY = '';
+process.env.MAIL_NOTIFICATIONS = 'off';
+
 /**
  * The suite runs against a production build on its own port, not the dev
  * server on 9140, so a `pnpm dev` you have open in another terminal does not
@@ -31,7 +40,12 @@ export default defineConfig({
     url: BASE_URL,
     reuseExistingServer: false,
     timeout: 120_000,
-    env: { APP_URL: BASE_URL },
+    env: {
+      APP_URL: BASE_URL,
+      BOOTSTRAP_ORGANIZER_EMAIL: process.env.BOOTSTRAP_ORGANIZER_EMAIL,
+      RESEND_API_KEY: '',
+      MAIL_NOTIFICATIONS: 'off',
+    },
     // Server-side exceptions reach the browser as an opaque digest. Piping the
     // server's own output is the only way a failing run shows the stack that
     // caused it.

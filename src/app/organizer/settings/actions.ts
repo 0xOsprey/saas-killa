@@ -2,6 +2,7 @@
 
 import { eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { db } from '@/db';
 import { events } from '@/db/schema';
@@ -29,6 +30,14 @@ const settingsSchema = z.object({
   posterEmbargoUntil: z.string().nullable(),
   agendaPublished: z.boolean(),
 });
+
+/** Every outcome this page reports comes back as a query string, so the page stays a server component. */
+function back(params: Record<string, string | number>): never {
+  const query = new URLSearchParams(
+    Object.entries(params).map(([key, value]) => [key, String(value)]),
+  );
+  redirect(`/organizer/settings?${query.toString()}`);
+}
 
 function optional(formData: FormData, key: string): string | null {
   const value = formData.get(key);
@@ -58,7 +67,7 @@ export async function saveEventSettings(formData: FormData): Promise<void> {
   const startsOn = wallClockToInstant(input.startsOn, input.renderedTimezone);
   const endsOn = wallClockToInstant(input.endsOn, input.renderedTimezone);
   if (endsOn < startsOn) {
-    throw new Error('The event cannot end before it starts.');
+    back({ error: 'event-order' });
   }
 
   const current = await getEvent();
@@ -81,4 +90,5 @@ export async function saveEventSettings(formData: FormData): Promise<void> {
   // The event name is in the nav and the timezone formats every rendered
   // timestamp, so a settings change is felt on every page rather than this one.
   revalidatePath('/', 'layout');
+  back({ saved: 'settings' });
 }

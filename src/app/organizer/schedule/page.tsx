@@ -251,6 +251,10 @@ export default async function SchedulePage({
         }
       />
 
+      {params.error === 'no-rooms' ? (
+        <Notice tone="bad">Create at least one room before adding a time band.</Notice>
+      ) : null}
+
       <nav
         className="flex flex-wrap gap-1 rounded-lg border border-line bg-white p-1 text-sm"
         data-testid="schedule-views"
