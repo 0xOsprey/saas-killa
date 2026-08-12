@@ -9,8 +9,6 @@ import { env } from './env';
 export const SESSION_COOKIE = 'sb_session';
 
 const MAGIC_LINK_TTL_MS = 15 * 60 * 1000;
-const MAGIC_LINK_WINDOW_MS = 10 * 60 * 1000;
-const MAGIC_LINK_LIMIT = 3;
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 function sha256(value: string): string {
@@ -68,7 +66,7 @@ export class MagicLinkRateLimitError extends Error {
 }
 
 async function recentMagicLinkCount(userId: string): Promise<number> {
-  const cutoff = new Date(Date.now() - MAGIC_LINK_WINDOW_MS);
+  const cutoff = new Date(Date.now() - env().MAGIC_LINK_WINDOW_MS);
   const [row] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(magicLinkTokens)
@@ -85,7 +83,7 @@ async function recentMagicLinkCount(userId: string): Promise<number> {
  * is checked before insert so a token is never written when the limit is hit.
  */
 export async function issueMagicLink(userId: string): Promise<string> {
-  if ((await recentMagicLinkCount(userId)) >= MAGIC_LINK_LIMIT) {
+  if ((await recentMagicLinkCount(userId)) >= env().MAGIC_LINK_LIMIT) {
     throw new MagicLinkRateLimitError();
   }
   const token = randomBytes(32).toString('base64url');

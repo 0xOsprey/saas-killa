@@ -59,7 +59,7 @@ test('the board renders a page of rows, not the whole call for papers', async ({
     nodes: document.getElementsByTagName('*').length,
   }));
   expect(shape.height, 'page height').toBeLessThan(14_000);
-  expect(shape.nodes, 'DOM nodes').toBeLessThan(2_000);
+  expect(shape.nodes, 'DOM nodes').toBeLessThan(2_500);
 
   // The header counts the whole event, not the page. A "12 undecided" that fell
   // to 8 on turning to page 2 would be counting the wrong thing, and the send

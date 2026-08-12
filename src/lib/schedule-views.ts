@@ -22,6 +22,7 @@ export const SCHEDULE_VIEWS = {
   day: 'Day',
   week: 'Week',
   month: 'Month',
+  track: 'Track',
   room: 'Rooms',
   conflicts: 'Conflicts',
 } as const;

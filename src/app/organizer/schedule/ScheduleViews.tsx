@@ -5,6 +5,7 @@ import {
   asWeek,
   byDay,
   byRoom,
+  byTrack,
   type Group,
   type ReadingView,
   type ScheduleEntry,
@@ -214,8 +215,9 @@ export function ScheduleViews({
       ? entries.filter((entry) => entry.conflicted || entry.roomConflicted || entry.unavailable || entry.overCapacity)
       : entries;
 
-  const groups = view === 'room' ? byRoom(entries) : byDay(readEntries);
-  const show = view === 'room' ? 'day' : 'room';
+  const groups =
+    view === 'room' ? byRoom(entries) : view === 'track' ? byTrack(entries) : byDay(readEntries);
+  const show = view === 'room' || view === 'track' ? 'day' : 'room';
 
   return (
     <div className="space-y-4" data-testid={`schedule-${view}`}>

@@ -262,6 +262,7 @@ async function main() {
       cfpOpensAt: new Date(now.getTime() - 14 * day),
       cfpClosesAt: new Date(now.getTime() + 30 * day),
       agendaPublished: false,
+      posterEmbargoUntil: new Date(now.getTime() - day),
     })
     .returning();
   if (!event) throw new Error('failed to insert event');

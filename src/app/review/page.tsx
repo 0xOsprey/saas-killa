@@ -58,12 +58,13 @@ function scaleValues(criterion: RoundCriterion): number[] {
 }
 
 /**
- * Why a grade was not recorded. `submitReview` refuses on four conditions and
+ * Why a grade was not recorded. `submitReview` refuses on five conditions and
  * used to do it with a bare `return`, so the page came back unchanged and the
  * reviewer's criteria and comment were gone with no explanation.
  */
 const GRADE_REFUSALS: Record<string, string> = {
   withdrawn: 'The speaker withdrew that proposal, so the grade was not recorded. There is nothing left to decide about it.',
+  decided: 'This proposal has already been decided, so the grade was not recorded. Only proposals still under review can be graded.',
   own: 'You cannot grade your own proposal, so nothing was recorded.',
   no_round: 'No review round is open, so there was nowhere to file that grade. An organizer opens one from the review rounds screen.',
   recused: 'You have declared a conflict of interest on that proposal, so no grade was recorded. Withdraw the declaration first if you meant to review it.',

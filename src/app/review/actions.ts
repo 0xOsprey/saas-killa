@@ -29,7 +29,7 @@ const schema = z.object({
  * Grade, and the page came back identical with the grade gone. `castCommitteeVote`
  * in the award feature already does this properly, and this is the same shape.
  */
-function refuse(reason: 'withdrawn' | 'own' | 'no_round' | 'recused'): never {
+function refuse(reason: 'withdrawn' | 'decided' | 'own' | 'no_round' | 'recused'): never {
   redirect(`/review?grade=${reason}`);
 }
 
@@ -69,6 +69,7 @@ export async function submitReview(formData: FormData): Promise<void> {
     where: eq(submissions.id, input.submissionId),
   });
   if (!target || target.status === 'withdrawn') refuse('withdrawn');
+  if (target.status !== 'submitted') refuse('decided');
 
   // A reviewer may not grade their own proposal.
   if (target.speakerId === reviewer.id) refuse('own');

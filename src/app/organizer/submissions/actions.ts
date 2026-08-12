@@ -60,6 +60,38 @@ export async function setDecision(formData: FormData): Promise<void> {
     status: formData.get('status'),
   });
 
+  if (input.status === 'accepted') {
+    const existing = await db.query.submissions.findFirst({
+      where: eq(submissions.id, input.submissionId),
+      columns: {
+        contentStatus: true,
+        slidesUrl: true,
+        recordingUrl: true,
+        resourcesNote: true,
+        posterUrl: true,
+      },
+    });
+
+    if (
+      existing &&
+      existing.contentStatus === 'draft' &&
+      !existing.slidesUrl &&
+      !existing.recordingUrl &&
+      !existing.resourcesNote &&
+      !existing.posterUrl
+    ) {
+      // A newly accepted talk with nothing to review is safe to list. Speakers
+      // still move the session off the public agenda when they later add
+      // materials and submit them for review.
+      await db
+        .update(submissions)
+        .set({ status: input.status, contentStatus: 'approved', updatedAt: new Date() })
+        .where(eq(submissions.id, input.submissionId));
+      revalidateDashboard();
+      return;
+    }
+  }
+
   await db
     .update(submissions)
     .set({ status: input.status, updatedAt: new Date() })
