@@ -4,7 +4,7 @@ Conference programme software: public CFP, blind reviewer grading, organizer
 accept/reject, drag-and-drop scheduling, ePosters, agenda publishing, calendar
 invites, public API, and one-way Accelevents push.
 
-Built by **Phillip ([@0x_Osprey](https://x.com/0x_Osprey))**.  
+Built by **Joe ([@0x_Osprey](https://x.com/0x_Osprey))**.  
 Live demo: **https://saas-killa.0xosprey.com/** ·
 Source: **https://github.com/0xOsprey/saas-killa**
 
@@ -89,101 +89,51 @@ withdrawing.
 
 ## Decisions worth knowing
 
-**Auth is magic-link, written in-app.** No password to leak and no auth vendor
-in the dependency graph. Tokens are stored as SHA-256 hashes, expire in 15
-minutes and are single use; the session cookie is `httpOnly` and carries an
-HMAC over the session id. Expired sessions and expired links are deleted by
-`sweepExpiredAuth`, hung off signing in rather than off a cron: signing in is
-what puts rows in both tables, so the cleanup scales with the traffic that
-causes it and an instance nobody uses does none. `SESSION_SECRET` has no default, so a misconfigured
-deploy fails at boot instead of shipping a forgeable cookie. "At boot" is
-`src/instrumentation.ts`, which reads the environment before the server binds
-and exits non-zero when it is wrong. The check used to be lazy, and lazy meant
-the process printed `✓ Ready`, took the port, and then returned 500 to every
-request with the reason only in its own log — a deploy any port-based health
-check calls green.
+**Auth is magic-link, in-app.** Tokens are SHA-256 hashed, expire in 15 minutes
+and are single-use; the session cookie is `httpOnly` and HMAC-signed. Cleanup
+runs on sign-in via `sweepExpiredAuth`. `SESSION_SECRET` has no default and is
+validated in `src/instrumentation.ts` before the server binds, so a
+misconfigured deploy exits at boot instead of returning forgeable cookies.
 
-**Sign-out is POST-only.** As a GET route it was a live bug, not a style point:
-`next/link` prefetches links in the viewport, so the nav's "Sign out" link fired
-the handler seconds after every sign-in and deleted the session the user had
-just opened.
+**Sign-out is POST-only.** `next/link` prefetches GET links, so a GET "Sign out"
+link in the nav deleted freshly opened sessions.
 
-**Blind review is enforced in the query, not the template.** `assignedQueue()`
-and `openSubmissionQueue()` in `src/lib/grading.ts` are the two queries `/review`
-runs, and neither selects a speaker column or joins `users`, so the identity
-cannot leak through a stray render. The end-to-end test asserts the speaker's
-name is absent from the whole reviewer page.
+**Blind review is enforced in SQL.** `assignedQueue()` and `openSubmissionQueue()`
+in `src/lib/grading.ts` never select a speaker column or join `users`; the e2e
+test asserts the speaker's name is absent from the reviewer page.
 
-**Crediting a co-author and admitting one are two different decisions.**
-`writableBy(userId)` in `src/lib/abstracts.ts` is the one predicate that answers
-"may this person write to this submission", composed into the WHERE clause of
-every query that writes, so a forged submission id updates zero rows rather than
-being caught by a check somebody could forget to call. Access itself stays with
-the filer: a co-author may add a name to the author list but never `can_edit`
-alongside it, and because the checkbox is merely hidden from them, the rule is
-enforced in `addAuthorByEmail` and tested by appending the missing field to the
-real form and posting it.
+**Co-authors may add names, not edit.** `writableBy(userId)` in
+`src/lib/abstracts.ts` is the WHERE clause for every write, so a forged
+submission id updates zero rows. The `can_edit` checkbox is hidden from them
+and the rule is tested by posting the form without it.
 
-**Deciding and emailing are separate actions.** An organizer flips statuses and
-changes their mind freely; nothing leaves the building until they press send.
-`decisionEmailedAt` is the idempotency key, written per row right after that
-row's send, so a failure halfway through resumes rather than restarting.
+**Deciding and emailing are separate.** `decisionEmailedAt` is the per-row
+idempotency key; a failed bulk send resumes from the row it left off.
 
-**The decision board narrows in SQL and pages at 25.** Search, decision, track,
-content status and sort are all a `<form method="get">`, so a filtered board is
-an address: linkable, reloadable and reachable with the back button. Every sort
-ends on the submission id, because a sort without a total order lets Postgres
-return tied rows in a different order per query and a tie across a page boundary
-is one row on both pages and another on neither. The counts in the header and on
-the content chips come from a separate whole-event query rather than from the
-rows on screen: "12 undecided" and the send button beside it describe the work
-outstanding, not the page. `?per=all` renders everything for the organizer who
-wants to scan the lot.
+**The decision board narrows in SQL and pages at 25.** Sorts end on `id` for a
+stable total order. Counts come from a whole-event query, so "12 undecided"
+describes the work, not the page. `?per=all` renders the whole board.
 
-**Double-booking is reported, never blocked.** An organizer mid-rearrangement
-routinely passes through an invalid grid, and refusing the drop would make the
-schedule unusable. The warning persists until it is resolved.
+**Double-booking is reported, never blocked.** The organizer may pass through an
+invalid grid while rearranging; the warning persists until resolved.
 
-**Times are stored as `timestamptz` and rendered in the event's timezone.** The
-schedule form posts a bare wall clock with no offset;
-`wallClockToInstant()` reads it as a time in the event's zone rather than the
-server's, which is what makes a London schedule come out right on a UTC host.
-It measures the zone's offset twice, because the first measurement is taken at
-the wall clock read as UTC and that instant can sit on the far side of a DST
-transition from the real one: 03:00 on the March morning New York goes forward
-stored as 08:00Z and read back as 04:00 until the second pass was added.
+**Times are `timestamptz` in the event's timezone.** `wallClockToInstant()` reads
+the wall-clock form in the event zone, not the server's, and double-checks the
+DST offset so a London schedule is right on a UTC host.
 
-**A re-sent invitation updates the entry the speaker already has.** The UID of
-every `.ics` is derived from the submission id and `SEQUENCE` rises with each
-notice, which is the pair RFC 5545 clients use to revise an appointment instead
-of adding a second one an hour after the first. What gets emailed is decided by
-comparing the current placement against the one the speaker was last told about,
-so a talk dragged four times sends one mail and a talk moved out and back sends
-none. The subscription feeds carry the same counter per event, from the same
-column; a break has no submission behind it and stays at 0, which is the one
-revision they cannot signal.
+**A re-sent invitation updates the existing entry.** Each `.ics` UID is the
+submission id and `SEQUENCE` increments, so clients revise rather than
+duplicate. Mail is sent only when placement changed.
 
-**An uploaded file's type comes from its own first bytes.** `src/lib/uploads.ts`
-sniffs magic bytes and never trusts the declared `Content-Type`; the name on disk
-is `<uuid><sniffed ext>`, so no part of a user's filename reaches the filesystem.
-SVG is refused everywhere, being the one image format that runs script. A read
-the viewer is not entitled to is a 404 rather than a 403, because a 403 tells an
-anonymous prober which document ids exist.
+**File types are sniffed from magic bytes.** User filenames never reach disk;
+SVG is refused. Unauthorized reads return 404 to avoid leaking document ids.
 
-**The Accelevents push rehearses against fixtures unless all three variables are
-set.** Missing any one of `ACCELEVENTS_BASE_URL`, `_API_KEY` or `_EVENT_ID` is a
-dry run rather than an error, because the failure worth designing against is a
-half-configured deploy pushing a partial programme into somebody's live event.
-The dry run is not a print statement: it builds every request, checks every
-response, records every remote id, and refuses a speaker with no name the way the
-far end would.
+**The Accelevents push is dry-run by default.** Missing any of the three config
+variables forces a fixture-backed rehearsal, not a half-configured live push.
 
-**The AI evaluator is a reviewer, not a decision-maker.** It holds a `users` row
-with the `reviewer` role and writes ordinary `reviews` rows tagged
-`source: 'ai'`, so its grade averages with human grades on the same 1-5 scale.
-It sees the abstract, format, level and track — never the speaker — and returns
-its rubric breakdown through a tool call rather than parseable prose. Without
-`ANTHROPIC_API_KEY` it is simply off and the organizer screen says so.
+**The AI evaluator is a reviewer, not a decision-maker.** It writes `reviews`
+rows tagged `source: 'ai'` on the same 1-5 scale, sees only abstract/format/level/track,
+and is off when `ANTHROPIC_API_KEY` is unset.
 
 ## Public API
 
