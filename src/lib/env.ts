@@ -39,6 +39,11 @@ const schema = z.object({
   // `secret` requires DEMO_SECRET and shows a password field on /demo.
   DEMO_MODE: z.enum(['off', 'open', 'secret']).default('off'),
   DEMO_SECRET: z.string().min(32).optional(),
+
+  // Sign-up control. `open` lets anyone create an account by logging in or
+  // submitting to the CFP. `closed` blocks new accounts; only existing users
+  // and demo logins can sign in. Keeps a public demo from burning Resend.
+  PUBLIC_SIGNUPS: z.enum(['open', 'closed']).default('open'),
 }).refine(
   (data) => data.DEMO_MODE !== 'secret' || !!data.DEMO_SECRET,
   {

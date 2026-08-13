@@ -219,7 +219,7 @@ the gesture picks up whichever cell arrives at the point.
    pnpm db:seed
    ```
 
-5. **Install a systemd unit** like `saas-killa.service`:
+5. **Install a systemd unit** like `<your-service>.service`:
    ```ini
    [Unit]
    Description=Saas Killa
@@ -265,10 +265,10 @@ The `reset --hard` is intentional: `main` is sometimes force-squashed, and `.env
 For a secret like `RESEND_API_KEY`:
 
 ```bash
-systemctl --user stop saas-killa.service
+systemctl --user stop <your-service>.service
 # edit .env.local
 chmod 600 .env.local
-systemctl --user start saas-killa.service saas-killa-tunnel.service
+systemctl --user start <your-service>.service <your-tunnel>.service
 ```
 
 ### Demo / admin mode

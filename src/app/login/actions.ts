@@ -3,6 +3,13 @@
 import { z } from 'zod';
 import { issueMagicLink, MagicLinkRateLimitError, upsertUserByEmail } from '@/lib/auth';
 import { magicLinkMail, sendSignInMail } from '@/lib/email';
+import {
+  checkMagicLinkIpRateLimit,
+  checkPublicSignups,
+  findUserByEmail,
+  MagicLinkIpRateLimitError,
+  SignupsClosedError,
+} from '@/lib/signups';
 import { getEvent } from '@/lib/queries';
 
 const schema = z.object({
@@ -12,9 +19,10 @@ const schema = z.object({
 export type LoginState = { error?: string; sent?: string };
 
 /**
- * Always reports success for a well-formed address, whether or not the account
- * existed. Reporting "no such user" would turn the login form into an oracle
- * for who has submitted to this conference.
+ * Reports success for a well-formed, allowed address. Existing users can always
+ * request a link; new users are blocked when public sign-ups are closed, and
+ * all requests are gated by an IP rate limit so a public demo cannot burn
+ * Resend.
  */
 export async function requestMagicLink(
   _prev: LoginState,
@@ -25,8 +33,24 @@ export async function requestMagicLink(
     return { error: parsed.error.issues[0]?.message ?? 'Invalid email' };
   }
 
+  try {
+    await checkMagicLinkIpRateLimit();
+  } catch (err) {
+    if (err instanceof MagicLinkIpRateLimitError) return { error: err.message };
+    throw err;
+  }
+
+  try {
+    await checkPublicSignups(parsed.data.email);
+  } catch (err) {
+    if (err instanceof SignupsClosedError) return { error: err.message };
+    throw err;
+  }
+
+  const existing = await findUserByEmail(parsed.data.email);
+  const user = existing ?? (await upsertUserByEmail(parsed.data.email));
+
   const event = await getEvent();
-  const user = await upsertUserByEmail(parsed.data.email);
   try {
     const token = await issueMagicLink(user.id);
     await sendSignInMail(magicLinkMail(user.email, token, event.name));

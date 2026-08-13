@@ -11,6 +11,12 @@ import {
 } from '@/lib/abstracts';
 import { currentUser, grantRole, issueMagicLink, MagicLinkRateLimitError, startSession, upsertUserByEmail } from '@/lib/auth';
 import {
+  checkMagicLinkIpRateLimit,
+  findUserByEmail,
+  MagicLinkIpRateLimitError,
+  publicSignups,
+} from '@/lib/signups';
+import {
   alertOrganizers,
   magicLinkMail,
   sendAndLog,
@@ -138,7 +144,23 @@ export async function submitProposal(_prev: CfpState, formData: FormData): Promi
     return { error: checked.errors[0]!.message };
   }
 
-  const speaker = signedIn ?? (await upsertUserByEmail(input.email, input.name));
+  // If the submitter is not signed in, look for an existing account. New
+  // accounts are blocked when public sign-ups are closed, so a public demo
+  // cannot create users (and burn Resend magic links) through the CFP.
+  let speaker: typeof signedIn | Awaited<ReturnType<typeof findUserByEmail>>;
+  if (signedIn) {
+    speaker = signedIn;
+  } else {
+    const existing = await findUserByEmail(input.email);
+    if (!existing) {
+      if (publicSignups() === 'closed') {
+        return { error: 'Submissions from new accounts are closed. Sign in first or ask an organizer.' };
+      }
+      speaker = await upsertUserByEmail(input.email, input.name);
+    } else {
+      speaker = existing;
+    }
+  }
 
   // Filing a proposal is what makes a user a speaker. `upsertUserByEmail` only
   // grants the role on a newly created account, so a signed-in user whose role
@@ -188,14 +210,18 @@ export async function submitProposal(_prev: CfpState, formData: FormData): Promi
   if (created) await saveAnswers(created.id, checked.answers);
 
   // A first-time submitter has no session. Email them a link so the submission
-  // is not stranded behind an account they never created.
+  // is not stranded behind an account they never created. IP-rate-limited so
+  // the public demo cannot be used to burn Resend.
   if (!signedIn) {
     try {
+      await checkMagicLinkIpRateLimit();
       const token = await issueMagicLink(speaker.id);
       await sendSignInMail(magicLinkMail(speaker.email, token, event.name));
       await startSession(speaker.id);
     } catch (err) {
-      if (err instanceof MagicLinkRateLimitError) return { error: err.message };
+      if (err instanceof MagicLinkRateLimitError || err instanceof MagicLinkIpRateLimitError) {
+        return { error: err.message };
+      }
       throw err;
     }
   }
