@@ -1,18 +1,30 @@
 # Saas Killa
 
-Conference programme software. It runs the whole CFP-to-agenda pipeline:
+Conference programme software: public CFP, blind reviewer grading, organizer
+accept/reject, drag-and-drop scheduling, ePosters, agenda publishing, calendar
+invites, public API, and one-way Accelevents push.
 
-- Public call for papers
-- Blind reviewer grading
-- Optional AI-assisted scoring
-- Organizer accept/reject with batch email
-- Drag-and-drop schedule builder
-- Calendar invites that update in place
-- Speaker file uploads
-- ePoster gallery
-- Public agenda and embeddable widgets
-- Public API (`/api/v1`) for sessions, speakers and event metadata
-- One-way push to Accelevents
+Built by **Phillip ([@0x_Osprey](https://x.com/0x_Osprey))**.  
+Live demo: **https://saas-killa.0xosprey.com/** ·
+Source: **https://github.com/0xOsprey/saas-killa**
+
+## For the judge
+
+The live demo already has a finished conference loaded. Start here:
+
+- **Agenda:** https://saas-killa.0xosprey.com/agenda
+- **Posters:** https://saas-killa.0xosprey.com/posters
+- **Speakers:** https://saas-killa.0xosprey.com/speakers
+- **Awards:** https://saas-killa.0xosprey.com/awards
+
+To try the private organizer, reviewer and speaker flows on the public
+deployment, go to **https://saas-killa.0xosprey.com/demo** and enter the demo
+secret (shared with judges separately). Pick any role to sign in as a fully
+interactive demo user.
+
+To run the same thing locally, set `DEMO_MODE=open` in `.env.local` and visit
+`http://127.0.0.1:9140/demo` for one-click role buttons. Keep `DEMO_MODE=off` on
+any real production instance.
 
 **Stack:** Next.js 15 (App Router, Server Actions) · React 19 · TypeScript ·
 Postgres · Drizzle ORM · Tailwind v4 · Resend · Playwright.
@@ -308,6 +320,15 @@ systemctl --user stop saas-killa.service
 chmod 600 .env.local
 systemctl --user start saas-killa.service saas-killa-tunnel.service
 ```
+
+### Demo / admin mode
+
+Set `DEMO_MODE=secret` and a long `DEMO_SECRET` to show a public `/demo` page
+where judges can sign in as any demo role. Set `DEMO_MODE=open` for local
+one-click role buttons. `DEMO_MODE=off` hides the page entirely.
+
+Signed-in organizers can also use **Configure → Role preview** in the organizer
+portal to switch to a demo account for any role.
 
 ### Health check
 

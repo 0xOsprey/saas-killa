@@ -4,6 +4,7 @@ import { cookies } from 'next/headers';
 import { Inter, Instrument_Serif, JetBrains_Mono } from 'next/font/google';
 import { AppShell } from '@/components/AppShell';
 import { currentUser } from '@/lib/auth';
+import { isDemoUser } from '@/lib/demo';
 import { getEvent } from '@/lib/queries';
 import { cn } from '@/components/ui';
 import './globals.css';
@@ -43,6 +44,8 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
     cookies(),
   ]);
 
+  const isDemo = user ? isDemoUser(user) : false;
+
   const theme = cookieStore.get('theme')?.value === 'light' ? 'light' : 'ai-engineer';
 
   return (
@@ -57,7 +60,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
       data-theme={theme}
     >
       <body className="min-h-[100dvh] antialiased">
-        <AppShell user={user} eventName={event?.name ?? null} theme={theme}>
+        <AppShell user={user} eventName={event?.name ?? null} theme={theme} isDemo={isDemo}>
           {children}
         </AppShell>
       </body>

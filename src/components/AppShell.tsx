@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useLayoutEffect, useMemo, useState } from 'react';
 import { ICONS } from '@/lib/icons';
-import { cn } from '@/components/ui';
+import { cn, Notice } from '@/components/ui';
 import { PUBLIC_LINKS, roleSections } from '@/lib/nav-links';
 import type { CurrentUser } from '@/lib/auth';
 import { Sidebar } from './Sidebar';
@@ -20,11 +20,13 @@ export function AppShell({
   user,
   eventName,
   theme,
+  isDemo,
   children,
 }: {
   user: CurrentUser | null;
   eventName: string | null;
   theme: 'light' | 'ai-engineer';
+  isDemo: boolean;
   children: React.ReactNode;
 }) {
   const pathname = usePathname() ?? '';
@@ -125,6 +127,13 @@ export function AppShell({
             user ? 'flex-1 max-w-6xl' : 'mx-auto max-w-6xl',
           )}
         >
+          {isDemo ? (
+            <div className="mb-4">
+              <Notice tone="accent">
+                <span className="font-medium">Demo account</span> — changes you make are live data.
+              </Notice>
+            </div>
+          ) : null}
           {children}
         </main>
       </div>

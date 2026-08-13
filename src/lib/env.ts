@@ -33,7 +33,19 @@ const schema = z.object({
   ACCELEVENTS_BASE_URL: z.string().url().optional(),
   ACCELEVENTS_API_KEY: z.string().optional(),
   ACCELEVENTS_EVENT_ID: z.string().optional(),
-});
+
+  // Demo / admin mode. `off` hides the demo page and role switcher.
+  // `open` shows one-click role buttons (local/dev only).
+  // `secret` requires DEMO_SECRET and shows a password field on /demo.
+  DEMO_MODE: z.enum(['off', 'open', 'secret']).default('off'),
+  DEMO_SECRET: z.string().min(32).optional(),
+}).refine(
+  (data) => data.DEMO_MODE !== 'secret' || !!data.DEMO_SECRET,
+  {
+    message: 'DEMO_SECRET is required when DEMO_MODE=secret',
+    path: ['DEMO_SECRET'],
+  },
+);
 
 /**
  * An empty assignment means unset. `.env.example` ships every optional variable
