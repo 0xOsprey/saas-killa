@@ -15,13 +15,16 @@ PASSWORD=${SAAS_KILLA_PG_PASSWORD:-saaskilla}
 case "${1:-up}" in
   up)
     if docker ps --format '{{.Names}}' | grep -qx "$NAME"; then
+      docker update --restart unless-stopped "$NAME" >/dev/null
       echo "✓ $NAME already running on 127.0.0.1:$PORT"
       exit 0
     fi
     if docker ps -a --format '{{.Names}}' | grep -qx "$NAME"; then
       docker start "$NAME" >/dev/null
+      docker update --restart unless-stopped "$NAME" >/dev/null
     else
       docker run -d --name "$NAME" \
+        --restart unless-stopped \
         -e POSTGRES_PASSWORD="$PASSWORD" \
         -e POSTGRES_USER=saaskilla \
         -e POSTGRES_DB=saaskilla \
